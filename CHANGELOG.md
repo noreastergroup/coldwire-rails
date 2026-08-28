@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+- Never cache a followed redirect. A signed-out request stored the sign-in page under the
+  original URL, and the `redirected` flag survived the cache, which made a navigation served
+  from cache a network error — an offline cold launch failed instead of showing the page.
+- `cache_identity` config: drops the cache when the signed-in user changes, so signing out
+  or switching accounts does not leave the previous session's pages readable offline.
+- The debug page reports "Signed out" instead of a JSON parse error when the precache
+  manifest request is redirected to a login page.
+
 ## [0.1.0]
 
 Initial extraction from the Mita app.

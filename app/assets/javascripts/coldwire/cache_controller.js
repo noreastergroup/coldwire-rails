@@ -133,6 +133,11 @@ export default class extends Controller {
     }
 
     const response = await fetch(this.packUrlValue, { headers: { Accept: "application/json" } })
+    // A signed-out request follows a redirect to the sign-in page and arrives here as a
+    // perfectly ok 200 of HTML, which would fail as an opaque JSON parse error.
+    if (response.redirected) {
+      throw new Error("Signed out — sign in and try again")
+    }
     if (!response.ok) {
       throw new Error(`Could not load manifest (${response.status})`)
     }

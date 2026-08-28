@@ -17,7 +17,7 @@ gets you a native error screen, not your offline page. Coldwire gets the details
 
 ## Why this is harder than it looks
 
-Four things break a naive Hotwire Native offline cache. Coldwire handles all four.
+Five things break a naive Hotwire Native offline cache. Coldwire handles all five.
 
 **1. `Vary: Accept` silently defeats precaching.** Rails answers HTML with `Vary: Accept`,
 and `cache.match()` honors `Vary` by default. Precaching fetches with `Accept: */*`, but
@@ -35,7 +35,14 @@ So there is no iOS override that can render a `503` body. Coldwire's fallback is
 a matching `<turbo-frame>`, leaving the frame on its loading state forever. Coldwire reads
 the `Turbo-Frame` request header and answers with a matching frame.
 
-**4. Assets must not receive HTML.** A stylesheet or `<img>` handed an HTML offline page is
+**4. A followed redirect poisons the cache.** When a signed-out request hits `/`, Rails
+answers `302 -> /users/sign_in` and `fetch` follows it. The result looks fine — `ok: true`,
+`status: 200` — and **`cache.put()` stores it without complaint**. Now `/` holds the sign-in
+page, and the stored response keeps `redirected: true`. Serving a redirected response for a
+navigation is a network error by spec, so the app fails to cold launch offline instead of
+showing the cached page. Coldwire refuses to store a redirected response at all.
+
+**5. Assets must not receive HTML.** A stylesheet or `<img>` handed an HTML offline page is
 just a broken asset. Coldwire serves the HTML fallback only to requests that want HTML, and
 gives everything else an empty `504`.
 
@@ -98,6 +105,11 @@ Coldwire.configure do |config|
   #     controller.current_user.articles.map { |article| article_path(article) }
   #   }
 
+  # Who the cache belongs to. Evaluated in the view, so `current_user` is available. When
+  # this changes between page loads Coldwire drops the cache — which is what makes signing
+  # out, and switching accounts, safe.
+  config.cache_identity = -> { current_user&.id }
+
   # Only register the worker where you want caching. A Hotwire Native app usually
   # limits it to the native user agent so browser tests stay uncached.
   config.register_if = ->(request) { request.user_agent.to_s.include?("Hotwire Native") }
@@ -154,6 +166,25 @@ your app uses by wrapping the route, or override the template.
 
 ---
 
+## Signed-in and signed-out
+
+Cached pages contain whatever the session that fetched them could see, so authentication
+needs handling on two fronts.
+
+**Set `cache_identity`.** Coldwire records it in `localStorage` and drops the cache whenever
+it changes, so signing out clears the previous user's pages and signing in as someone else
+does not inherit them. Leave it unset and the cache persists across sessions — fine for a
+single-user or fully public app, wrong for anything else.
+
+**Exclude your auth paths.** Add the prefix your login lives under to `excluded_paths`
+(`/users` for stock Devise). Those pages redirect on session state and are exactly the ones
+you never want served stale.
+
+With both in place, a signed-in cold launch offline serves the cached page; a signed-out one
+falls through to the offline view rather than a broken navigation.
+
+---
+
 ## How caching behaves
 
 | Request | Behavior |
@@ -163,6 +194,7 @@ your app uses by wrapping the route, or override the template.
 | `Range` requests (map tiles, media) | Never intercepted — the Cache API can't serve `206`. |
 | Cross-origin | Never intercepted. |
 | Non-GET | Never intercepted. |
+| Redirected response | Never stored — see #4 above. |
 
 Precaching walks each manifest URL, then the same-origin subresources those pages
 reference — stylesheets, scripts, images, `srcset` candidates, and importmap entries. It

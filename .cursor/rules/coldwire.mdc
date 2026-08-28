@@ -27,8 +27,12 @@ Store successful GETs with `put(timestampedRequest(request), response.clone())`;
   stays fresh, falling back to the cached entry when the network fails.
 - **Assets are cache-first.** Recaching every stylesheet on a visit would bury the page in the
   inspector's recent list.
-- `put()` rejects error statuses, 206, and redirected responses — skip those rather than
-  synthesizing a new Response.
+- Guard writes with `isCacheable(request, response)`. `put()` rejects error statuses and 206,
+  but it does **not** reject a followed redirect — that has to be checked explicitly, and the
+  omission is what broke signed-out offline launches. A signed-out `/` follows a 302 to the
+  sign-in page and arrives `ok: true, status: 200, redirected: true`; storing it puts the
+  sign-in body under the `/` key, and serving a redirected response for a navigation is a
+  network error by spec. Skip those rather than synthesizing a new Response.
 
 Precache, force-offline, and the inspector all use this same `match` / `put(clone)` path.
 
@@ -89,6 +93,16 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
 - Host apps override the offline page, offline frame, and debug page by shadowing the template
   paths. Keep those templates free of request context and current-user helpers: they are
   rendered when the worker script is built and embedded as string literals.
+
+## Authentication
+
+- Cached pages hold whatever the fetching session could see. `cache_identity` is compared in
+  `localStorage` on each page load and the cache is dropped when it changes — that is what
+  makes sign-out and account switching safe. Keep the comparison on the page, not in the
+  worker: a worker global does not survive termination.
+- Hosts exclude their own auth paths (`/users` for Devise). Coldwire does not guess them.
+- Anything fetching engine JSON must treat `response.redirected` as "signed out". A followed
+  redirect arrives as a 200 of HTML and would otherwise surface as a JSON parse error.
 
 ## Precache
 

@@ -20,6 +20,12 @@ module Coldwire
     # typically narrows this to the native user agent so browser tests stay uncached.
     attr_writer :register_if
 
+    # Identifies who the cache belongs to — typically the signed-in user's id. Evaluated in
+    # the view, so `current_user` is available. When the value changes between page loads the
+    # cache is dropped, which is what makes signing out (or switching accounts) safe: cached
+    # pages hold whatever the previous session could see.
+    attr_writer :cache_identity
+
     # Returns the list of paths to precache. Evaluated in the controller, so route helpers
     # and the current user are both available.
     attr_accessor :prefetch_urls
@@ -29,11 +35,17 @@ module Coldwire
       @scope = "/"
       @excluded_paths = [ "/up" ]
       @register_if = ->(_request) { true }
+      @cache_identity = -> { nil }
       @prefetch_urls = -> { [] }
     end
 
     def register?(request)
       @register_if.call(request)
+    end
+
+    # `view` is the view context, so a host can write `-> { current_user&.id }`.
+    def cache_identity(view)
+      view.instance_exec(&@cache_identity).to_s
     end
   end
 end

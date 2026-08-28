@@ -70,7 +70,17 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
   CSS and `coldwire-` class names.
 - `ServiceWorkerController` inherits from `ActionController::Base`, **not** the host's
   `ApplicationController`. The worker must be fetchable before sign-in; an authentication
-  filter there breaks registration.
+  filter there breaks registration. It also needs `skip_forgery_protection`: Rails guards
+  JavaScript responses against cross-origin `<script>` embedding, and the browser's worker
+  loader is not an XHR, so that guard rejects legitimate registrations with a 422.
+- The engine **is** namespace-isolated, which points bare route helpers inside it at the
+  engine's own routes. Two places need the host's routes instead, and both are handled
+  explicitly — do not "fix" them by dropping `isolate_namespace`, which removes the
+  `coldwire.*` proxy entirely:
+  - `Coldwire::ApplicationController` re-exposes `Rails.application.routes.url_helpers` as a
+    view helper, so a host layout calling `root_path` still renders.
+  - `prefetch_urls` is `instance_exec`'d against `Rails.application.routes.url_helpers`, so a
+    host writing `site_path(site)` gets their route and not a 404 inside the mount.
 - The worker is served from the mount point, so its default scope is that directory. The
   response sends `Service-Worker-Allowed` and the registration snippet asks for the matching
   scope. Do not assume a root mount.

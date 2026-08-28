@@ -48,17 +48,15 @@ gives everything else an empty `504`.
 gem "coldwire"
 ```
 
-Mount the engine and pin the JavaScript:
+Mount the engine:
 
 ```ruby
 # config/routes.rb
 mount Coldwire::Engine => "/coldwire"
 ```
 
-```ruby
-# config/importmap.rb
-pin "coldwire", to: "coldwire/cache_controller.js"
-```
+Register the Stimulus controller. Coldwire pins `"coldwire"` into your importmap itself, so
+there is nothing to add to `config/importmap.rb`:
 
 ```js
 // app/javascript/controllers/index.js
@@ -87,11 +85,18 @@ scope, so a worker mounted anywhere still controls the whole origin. Narrow it w
 ```ruby
 # config/initializers/coldwire.rb
 Coldwire.configure do |config|
-  # Which pages to precache. Evaluated in the controller, so route helpers and the
-  # current user are both available.
+  # Which pages to precache. Evaluated against your app's URL helpers, so `article_path`
+  # means your route rather than one of Coldwire's.
   config.prefetch_urls = -> {
     Article.published.flat_map { |article| [ article_path(article), card_article_path(article) ] }
   }
+
+  # Give the lambda an argument and it receives the controller, for `current_user` and
+  # anything else request-scoped:
+  #
+  #   config.prefetch_urls = ->(controller) {
+  #     controller.current_user.articles.map { |article| article_path(article) }
+  #   }
 
   # Only register the worker where you want caching. A Hotwire Native app usually
   # limits it to the native user agent so browser tests stay uncached.
@@ -106,6 +111,13 @@ Coldwire.configure do |config|
   config.scope = "/"
 end
 ```
+
+### Rendering inside your layout
+
+The debug page inherits your `ApplicationController`, so it picks up your layout,
+authentication, and helpers. The engine is namespace-isolated, which would normally point
+bare route helpers in that layout at Coldwire's routes — so Coldwire re-exposes your app's
+URL helpers to anything it renders. A layout calling `root_path` keeps working.
 
 ### Overriding the offline views
 

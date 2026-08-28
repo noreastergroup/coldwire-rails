@@ -3,7 +3,7 @@
 //
 // Built on the Cache API: https://developer.mozilla.org/en-US/docs/Web/API/Cache
 //
-// HTML visits recache with cache.put(timestampedRequest(request), response.clone()) even
+// HTML visits recache with cache.put(cacheKey(request), response.clone()) even
 // when a copy already exists, then fall back to cache.match() when offline. Assets stay
 // cache-first. Precaching uses the same put/match path.
 <%
@@ -20,7 +20,8 @@ const OFFLINE_FRAME_CONTENT = <%= raw offline_frame.to_json %>
 // Precaching fetches with `Accept: */*` while Turbo navigations and frame loads send
 // `Accept: text/html, application/xhtml+xml`, so a precached page would never match a real
 // visit. ignoreVary makes matching URL-only, which is what a page cache wants.
-const MATCH_OPTIONS = { ignoreVary: true }
+const IGNORE_SEARCH = <%= raw Coldwire.config.ignore_query_params.to_json %>
+const MATCH_OPTIONS = { ignoreVary: true, ignoreSearch: IGNORE_SEARCH }
 const TIMESTAMP_HEADER = "timestamp"
 
 let forcedOffline = false
@@ -102,7 +103,7 @@ async function handleFetch(request) {
   try {
     const response = await fetch(request)
     if (isCacheable(request, response)) {
-      cache.put(timestampedRequest(request), response.clone())
+      cache.put(cacheKey(request), response.clone())
     }
     return response
   } catch {
@@ -142,13 +143,26 @@ async function describeCached(request, response) {
   }
 }
 
-// Cache does not honor HTTP freshness headers, and WebKit drops Date on
-// match(). Stamp unix seconds on the request key — keys() returns it, and
-// URL matching still finds the entry.
-function timestampedRequest(request, at = Date.now()) {
+// The key an entry is stored under.
+//
+// Cache does not honor HTTP freshness headers, and WebKit drops Date on match(). Stamp unix
+// seconds on the request key — keys() returns it, and URL matching still finds the entry.
+//
+// When ignoring query params, drop the search here too, not just in MATCH_OPTIONS. Matching
+// would find the entry either way, but every distinct query string would still write its own
+// copy — a map that rewrites lat/lng/zoom on each pan would bury the cache in near-duplicates
+// of one page.
+function cacheKey(request, at = Date.now()) {
   const headers = new Headers(request.headers)
   headers.set(TIMESTAMP_HEADER, String(Math.floor(at / 1000)))
-  return new Request(request, { headers })
+
+  // `new Request(request, init)` downgrades a navigation request's mode for us; rebuilding
+  // from a URL string needs the method stated explicitly.
+  if (!IGNORE_SEARCH) return new Request(request, { headers })
+
+  const url = new URL(request.url)
+  url.search = ""
+  return new Request(url.href, { method: "GET", headers })
 }
 
 function unixTimestamp(value) {
@@ -202,7 +216,7 @@ async function fetchAndCache(cache, href) {
     throw new Error(response.redirected ? `Redirected to ${response.url}` : `HTTP ${response.status}`)
   }
 
-  cache.put(timestampedRequest(request), response.clone())
+  cache.put(cacheKey(request), response.clone())
 
   const contentType = response.headers.get("Content-Type") || ""
   if (!contentType.includes("text/html")) return []

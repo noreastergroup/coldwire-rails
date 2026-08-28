@@ -114,6 +114,9 @@ Coldwire.configure do |config|
   # limits it to the native user agent so browser tests stay uncached.
   config.register_if = ->(request) { request.user_agent.to_s.include?("Hotwire Native") }
 
+  # Treat "/map" and "/map?lat=1&zoom=9" as the same cached page. On by default.
+  config.ignore_query_params = true
+
   # Never intercept these path prefixes. Coldwire's own routes are excluded automatically.
   config.excluded_paths = [ "/up", "/cable" ]
 
@@ -195,6 +198,20 @@ falls through to the offline view rather than a broken navigation.
 | Cross-origin | Never intercepted. |
 | Non-GET | Never intercepted. |
 | Redirected response | Never stored — see #4 above. |
+| Query strings | Ignored by default, when matching *and* when storing. See below. |
+
+### Query strings
+
+With `ignore_query_params` on (the default), `/map` and `/map?lat=44.1&zoom=9` are one
+cached page. The query is dropped both in `cache.match()` and in the key an entry is stored
+under — matching alone would still let a map that rewrites `lat`/`lng`/`zoom` on every pan
+write hundreds of near-duplicate entries for the same page.
+
+> **This is blunt, and deliberately so for now.** It also collapses query strings that
+> genuinely select content: `/search?q=otters` and `/search?q=puffins` become one entry, and
+> whichever was cached last is what you get offline. If your app caches pages whose content
+> depends on the query, set `config.ignore_query_params = false` and cache the distinct URLs
+> instead. A finer-grained rule — ignoring only nominated params — is the obvious next step.
 
 Precaching walks each manifest URL, then the same-origin subresources those pages
 reference — stylesheets, scripts, images, `srcset` candidates, and importmap entries. It

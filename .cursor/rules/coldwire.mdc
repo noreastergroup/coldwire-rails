@@ -48,6 +48,10 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
   The timestamp lives on the stored *request key* (`TIMESTAMP_HEADER`, unix seconds) — `keys()`
   returns it and URL matching still finds the entry. Do not reach for a separate side-channel
   store.
+- `ignore_query_params` (default on) sets `ignoreSearch` in `MATCH_OPTIONS` **and** strips the
+  search in `cacheKey()`. Both halves are needed: matching alone still writes one entry per
+  distinct query string, and a map rewriting lat/lng/zoom per pan would bury the cache. Known
+  blunt edge, to revisit — it also collapses `/search?q=` style URLs onto one entry.
 - Size for the inspector is `response.clone().blob().size`.
 - `keys()` + `match(request)` to list; `caches.delete(name)` to clear.
 - Same-origin GET only. Never intercept Range requests (map tiles, media), or anything under

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- `ignore_query_params` (default on): treat `/map` and `/map?lat=1&zoom=9` as one cached
+  page, both when matching and when storing. Blunt for now — it also collapses query
+  strings that select content, like `/search?q=`.
+
 - Never cache a followed redirect. A signed-out request stored the sign-in page under the
   original URL, and the `redirected` flag survived the cache, which made a navigation served
   from cache a network error — an offline cold launch failed instead of showing the page.

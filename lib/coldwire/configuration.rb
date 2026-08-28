@@ -11,6 +11,12 @@ module Coldwire
     # response also sends `Service-Worker-Allowed` to widen it past that directory.
     attr_accessor :scope
 
+    # Treat "/map" and "/map?lat=1&zoom=9" as the same cached page, both when matching and
+    # when storing. Blunt on purpose for now: it also collapses query strings that genuinely
+    # select content, like `/search?q=`, so a cached result set can be served for a different
+    # query. Set false if your app leans on query strings for anything you cache.
+    attr_accessor :ignore_query_params
+
     # Paths the worker must never intercept, as prefix strings. Health checks and anything
     # streaming belong here. The engine's own paths are added automatically.
     attr_accessor :excluded_paths
@@ -34,6 +40,7 @@ module Coldwire
       @cache_name = "coldwire"
       @scope = "/"
       @excluded_paths = [ "/up" ]
+      @ignore_query_params = true
       @register_if = ->(_request) { true }
       @cache_identity = -> { nil }
       @prefetch_urls = -> { [] }

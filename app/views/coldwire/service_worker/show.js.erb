@@ -12,7 +12,10 @@
 %>
 
 const CACHE_NAME = <%= raw Coldwire.config.cache_name.to_json %>
+// Never intercepted: these go straight to the network, and fail outright when it is down.
 const EXCLUDED_PATHS = <%= raw Coldwire.excluded_paths(request.script_name).to_json %>
+// Intercepted but never stored, so they still reach the offline fallback.
+const UNCACHED_PATHS = <%= raw Coldwire.uncached_paths.to_json %>
 const OFFLINE_PAGE = <%= raw offline_page.to_json %>
 const OFFLINE_FRAME_CONTENT = <%= raw offline_frame.to_json %>
 
@@ -77,7 +80,11 @@ function shouldHandle(request) {
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return false
 
-  return !EXCLUDED_PATHS.some((path) => url.pathname === path || url.pathname.startsWith(`${path}/`))
+  return !matchesPath(url, EXCLUDED_PATHS)
+}
+
+function matchesPath(url, paths) {
+  return paths.some((path) => url.pathname === path || url.pathname.startsWith(`${path}/`))
 }
 
 // A followed redirect is the trap that breaks a signed-out cold launch. `cache.put()`
@@ -86,7 +93,9 @@ function shouldHandle(request) {
 // network error by spec, so the app fails to launch offline rather than showing the
 // cached page. Never store one.
 function isCacheable(request, response) {
-  return request.method === "GET" && response.ok && !response.redirected
+  if (request.method !== "GET" || !response.ok || response.redirected) return false
+
+  return !matchesPath(new URL(request.url), UNCACHED_PATHS)
 }
 
 async function handleFetch(request) {
@@ -237,7 +246,7 @@ function urlsFromHtml(html, pageUrl) {
       try {
         const url = new URL(token, base)
         if (url.origin !== self.location.origin) return
-        if (EXCLUDED_PATHS.some((path) => url.pathname === path || url.pathname.startsWith(`${path}/`))) return
+        if (matchesPath(url, EXCLUDED_PATHS) || matchesPath(url, UNCACHED_PATHS)) return
         urls.add(url.href)
       } catch {}
     })

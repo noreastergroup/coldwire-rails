@@ -18,7 +18,17 @@ module Coldwire
     # endpoints. Caching the worker or the prefetch manifest would strand the app on a
     # stale copy of the very thing meant to refresh it.
     def excluded_paths(mount_path)
-      (config.excluded_paths + [ mount_path ]).map { |path| path.to_s.chomp("/") }.uniq
+      normalize(config.excluded_paths + [ mount_path ])
+    end
+
+    def uncached_paths
+      normalize(config.uncached_paths)
+    end
+
+    private
+
+    def normalize(paths)
+      paths.map { |path| path.to_s.chomp("/") }.reject(&:empty?).uniq
     end
   end
 end

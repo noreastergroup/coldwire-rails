@@ -19,7 +19,16 @@ module Coldwire
 
     # Paths the worker must never intercept, as prefix strings. Health checks and anything
     # streaming belong here. The engine's own paths are added automatically.
+    #
+    # Use this sparingly. An unintercepted request goes straight to the network, so offline
+    # it fails outright — in Hotwire Native that means the SDK's own error screen, not your
+    # offline page. If you only want to keep something out of the cache, use `uncached_paths`.
     attr_accessor :excluded_paths
+
+    # Paths the worker intercepts but never stores. Sign-in and sign-up pages belong here:
+    # serving them stale is wrong, but they should still reach the offline fallback rather
+    # than dying as a network error.
+    attr_accessor :uncached_paths
 
     # Decides whether a given request should register the worker at all. Receives the
     # ActionDispatch::Request. Defaults to registering everywhere; a Hotwire Native app
@@ -40,6 +49,7 @@ module Coldwire
       @cache_name = "coldwire"
       @scope = "/"
       @excluded_paths = [ "/up" ]
+      @uncached_paths = []
       @ignore_query_params = true
       @register_if = ->(_request) { true }
       @cache_identity = -> { nil }

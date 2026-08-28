@@ -117,8 +117,13 @@ Coldwire.configure do |config|
   # Treat "/map" and "/map?lat=1&zoom=9" as the same cached page. On by default.
   config.ignore_query_params = true
 
-  # Never intercept these path prefixes. Coldwire's own routes are excluded automatically.
+  # Never intercept these path prefixes — they go straight to the network and fail outright
+  # when it is down. Coldwire's own routes are excluded automatically.
   config.excluded_paths = [ "/up", "/cable" ]
+
+  # Intercepted but never stored. Sign-in pages belong here, not above: they must not be
+  # served stale, but they should still reach the offline fallback.
+  config.uncached_paths = [ "/users" ]
 
   # Bump to invalidate every cached entry at once.
   config.cache_name = "coldwire"
@@ -179,12 +184,22 @@ it changes, so signing out clears the previous user's pages and signing in as so
 does not inherit them. Leave it unset and the cache persists across sessions — fine for a
 single-user or fully public app, wrong for anything else.
 
-**Exclude your auth paths.** Add the prefix your login lives under to `excluded_paths`
-(`/users` for stock Devise). Those pages redirect on session state and are exactly the ones
-you never want served stale.
+**Put your auth paths in `uncached_paths`, not `excluded_paths`.** Sign-in pages redirect on
+session state and must never be served stale — but the two settings fail very differently
+offline. `excluded_paths` means *never intercept*, so the request goes straight to a dead
+network and Hotwire Native shows its own error screen. `uncached_paths` means *intercept but
+never store*, so the request still reaches your offline view.
 
-With both in place, a signed-in cold launch offline serves the cached page; a signed-out one
-falls through to the offline view rather than a broken navigation.
+### Your cold-boot URL must be cacheable
+
+This is the one that will bite you. Whatever URL your app loads at launch has to be
+something the cache can actually hold, and a login path usually is not: signed in, it is a
+`302` to the app root, and a redirect is never cached. A cold launch offline then has
+nothing to serve and falls through to the SDK's error screen — even though the page it would
+have redirected to is sitting in the cache.
+
+Boot into a real page instead. Signed out it still redirects to your login, so nothing about
+the online flow changes.
 
 ---
 

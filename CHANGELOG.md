@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- `uncached_paths`: intercepted but never stored. `excluded_paths` means never intercepted,
+  which offline fails as a network error rather than reaching the offline fallback — the
+  wrong tool for sign-in pages.
+
 - `ignore_query_params` (default on): treat `/map` and `/map?lat=1&zoom=9` as one cached
   page, both when matching and when storing. Blunt for now — it also collapses query
   strings that select content, like `/search?q=`.

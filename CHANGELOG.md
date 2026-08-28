@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- The registration snippet threw before reaching `navigator.serviceWorker.register`,
+  disabling caching entirely. `})()` followed by `(function` on the next line parses as one
+  call expression — ASI does not separate them — so the joined fragments needed terminating
+  semicolons.
+- Drop `Content-Length` when rewriting a cached body for the offline marker. The injected
+  attributes make the body longer, so the stored value understated it and invited the
+  consumer to truncate the page.
+
 - `offline_marker` (default on): HTML served from cache because the network was unavailable
   is stamped with `data-coldwire-offline` and `data-coldwire-cached-at` on `<html>`, plus a
   matching head `<meta>` so the marker survives Turbo visits. Lets a page say it is stale

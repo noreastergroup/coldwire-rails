@@ -14,6 +14,9 @@ module Coldwire
     def coldwire_service_worker_tag
       return unless Coldwire.config.register?(request)
 
+      # Each fragment is a self-terminated statement. `})()` followed by `(function` on the
+      # next line is a single call expression, not two statements — ASI does not save you —
+      # so a missing semicolon here throws and takes the registration down with it.
       javascript_tag(nonce: true) do
         [ coldwire_identity_script, coldwire_offline_marker_script, coldwire_register_script ]
           .compact
@@ -37,7 +40,7 @@ module Coldwire
           } catch (error) {
             console.warn("[coldwire] could not reconcile cache identity", error)
           }
-        })()
+        })();
       JS
     end
 
@@ -68,7 +71,7 @@ module Coldwire
           }
 
           document.addEventListener("turbo:load", sync)
-        })()
+        })();
       JS
     end
 

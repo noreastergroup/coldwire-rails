@@ -147,10 +147,16 @@ async function markOffline(cache, request, cached) {
     .replace(/<html\b([^>]*)>/i, `<html$1 ${OFFLINE_ATTRIBUTE}${stamp}>`)
     .replace(/<head\b([^>]*)>/i, `<head$1><meta name="coldwire-offline" content="${escapeHtml(cachedAt || "")}">`)
 
+  // Injecting made the body longer, so the stored Content-Length now understates it —
+  // carrying it over invites the consumer to truncate the page. Drop it and let the
+  // response report its own length.
+  const headers = new Headers(cached.headers)
+  headers.delete("Content-Length")
+
   return new Response(marked, {
     status: cached.status,
     statusText: cached.statusText,
-    headers: cached.headers
+    headers
   })
 }
 

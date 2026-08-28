@@ -1,0 +1,91 @@
+---
+description: Coldwire — offline page caching for Hotwire Native. Stay close to the Cache API.
+globs:
+  - app/**
+  - lib/**
+  - config/**
+  - test/**
+alwaysApply: false
+---
+
+# Coldwire
+
+A mountable Rails engine serving a Cache API service worker for Hotwire Native apps.
+Tagline: *When your Hotwire wires go cold.*
+
+Keep the implementation small and aligned with these two sources:
+
+- Cache API: [https://developer.mozilla.org/en-US/docs/Web/API/Cache](https://developer.mozilla.org/en-US/docs/Web/API/Cache)
+- Joe Masilotti: [https://newsletter.masilotti.com/p/offline-mode-for-hotwire-native-apps](https://newsletter.masilotti.com/p/offline-mode-for-hotwire-native-apps)
+
+## Fetch handler
+
+Store successful GETs with `put(timestampedRequest(request), response.clone())`; read with
+`match(request, MATCH_OPTIONS)`.
+
+- **HTML is network-first.** Pages recache on every view so the timestamp moves and the copy
+  stays fresh, falling back to the cached entry when the network fails.
+- **Assets are cache-first.** Recaching every stylesheet on a visit would bury the page in the
+  inspector's recent list.
+- `put()` rejects error statuses, 206, and redirected responses — skip those rather than
+  synthesizing a new Response.
+
+Precache, force-offline, and the inspector all use this same `match` / `put(clone)` path.
+
+## Cache API constraints
+
+- Read with `match(request, { ignoreVary: true })`. Rails answers HTML with `Vary: Accept`, and
+  `match()` honors Vary by default; precaching fetches with `Accept: */*` while Turbo Drive and
+  Turbo Frame requests send `Accept: text/html, application/xhtml+xml`. Without `ignoreVary` a
+  precached page only ever matches another precache, so offline falls through to the offline
+  page while on-demand caching still appears to work.
+- Items do not update or expire unless the script does it. The Cache API does not honor HTTP
+  freshness headers (`Date`, `Expires`, `Cache-Control`), and WebKit drops `Date` on `match()`.
+  The timestamp lives on the stored *request key* (`TIMESTAMP_HEADER`, unix seconds) — `keys()`
+  returns it and URL matching still finds the entry. Do not reach for a separate side-channel
+  store.
+- Size for the inspector is `response.clone().blob().size`.
+- `keys()` + `match(request)` to list; `caches.delete(name)` to clear.
+- Same-origin GET only. Never intercept Range requests (map tiles, media), or anything under
+  `Coldwire.excluded_paths`.
+
+## Offline fallback
+
+- Serve it with **status 200**, not 503. Hotwire Native treats a non-2xx visit as a failed
+  request and shows its own native error screen. Its adapter passes only location, identifier,
+  and status code to the native side — the body never crosses over, so no iOS-side override can
+  rescue an error status.
+- Keep `<meta name="turbo-cache-control" content="no-cache">` in the page template so a 200
+  offline page is not snapshotted and restored once back online.
+- When the request carries a `Turbo-Frame` header, answer with a matching `<turbo-frame id>`.
+  A frame discards a response with no matching frame and sits on its loading state forever.
+  Escape the id; it comes from a request header.
+- Only return HTML when the request wants HTML (`mode === "navigate"`, `destination ===
+  "document"`, or an `Accept` containing `text/html`). Everything else gets an empty 504 — an
+  HTML body just produces a broken asset.
+
+## Engine boundaries
+
+- Nothing in the gem may assume Tailwind or any host CSS framework. The debug page ships plain
+  CSS and `coldwire-` class names.
+- `ServiceWorkerController` inherits from `ActionController::Base`, **not** the host's
+  `ApplicationController`. The worker must be fetchable before sign-in; an authentication
+  filter there breaks registration.
+- The worker is served from the mount point, so its default scope is that directory. The
+  response sends `Service-Worker-Allowed` and the registration snippet asks for the matching
+  scope. Do not assume a root mount.
+- Coldwire's own paths are always excluded from interception — caching the worker or the
+  manifest would strand the app on a stale copy of the thing meant to refresh it.
+- Host apps override the offline page, offline frame, and debug page by shadowing the template
+  paths. Keep those templates free of request context and current-user helpers: they are
+  rendered when the worker script is built and embedded as string literals.
+
+## Precache
+
+- Follow subresources only — stylesheets, scripts, images, `srcset`, importmap entries. Never
+  follow `<a href>` or this becomes a site crawler.
+- Progress streams over the same `MessagePort` as the final result, distinguished by
+  `type: "progress"`. The page's timeout re-arms on each tick, so it bounds silence rather than
+  total work.
+- The manifest (`prefetch_urls`) is the host app's business. Coldwire never guesses it and does
+  not render the list in the UI.

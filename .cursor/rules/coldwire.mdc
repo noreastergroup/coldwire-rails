@@ -113,6 +113,20 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
 - Anything fetching engine JSON must treat `response.redirected` as "signed out". A followed
   redirect arrives as a 200 of HTML and would otherwise surface as a JSON parse error.
 
+## Offline marker
+
+- `offline_marker` (default on) stamps HTML served from cache *because the network failed* —
+  both fallback paths in `handleFetch`, never a plain cache-first asset hit. A page served
+  fresh must carry no marker, or "am I stale?" stops meaning anything.
+- Stamp **both** `<html>` attributes and a head `<meta>`. The attributes cover the first paint
+  of a cold boot so a banner does not flash in; the meta covers Turbo visits, which swap the
+  body and merge the head but never copy `<html>` attributes. The helper mirrors meta → html
+  on `turbo:load`.
+- The timestamp lives on the stored request key, so recover it with
+  `cache.keys(request, MATCH_OPTIONS)` — not from the response, which has no usable Date.
+- Rewriting the body costs a `text()` read; keep it on the offline path only, and bail early
+  for non-HTML and for bodies with no `<html>` tag (frame responses).
+
 ## Precache
 
 - Follow subresources only — stylesheets, scripts, images, `srcset`, importmap entries. Never

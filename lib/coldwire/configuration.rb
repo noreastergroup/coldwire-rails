@@ -11,6 +11,12 @@ module Coldwire
     # response also sends `Service-Worker-Allowed` to widen it past that directory.
     attr_accessor :scope
 
+    # Mark HTML served from cache because the network was unavailable, so the page can say
+    # so. Adds `data-coldwire-offline` and `data-coldwire-cached-at` (unix seconds) to <html>,
+    # plus a matching <meta> that survives Turbo's head merge. Costs a body rewrite, but only
+    # on the offline path.
+    attr_accessor :offline_marker
+
     # Treat "/map" and "/map?lat=1&zoom=9" as the same cached page, both when matching and
     # when storing. Blunt on purpose for now: it also collapses query strings that genuinely
     # select content, like `/search?q=`, so a cached result set can be served for a different
@@ -50,6 +56,7 @@ module Coldwire
       @scope = "/"
       @excluded_paths = [ "/up" ]
       @uncached_paths = []
+      @offline_marker = true
       @ignore_query_params = true
       @register_if = ->(_request) { true }
       @cache_identity = -> { nil }

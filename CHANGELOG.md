@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- `offline_marker` (default on): HTML served from cache because the network was unavailable
+  is stamped with `data-coldwire-offline` and `data-coldwire-cached-at` on `<html>`, plus a
+  matching head `<meta>` so the marker survives Turbo visits. Lets a page say it is stale
+  and how stale.
+
 - `uncached_paths`: intercepted but never stored. `excluded_paths` means never intercepted,
   which offline fails as a network error rather than reaching the offline fallback — the
   wrong tool for sign-in pages.

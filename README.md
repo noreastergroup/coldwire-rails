@@ -114,6 +114,9 @@ Coldwire.configure do |config|
   # limits it to the native user agent so browser tests stay uncached.
   config.register_if = ->(request) { request.user_agent.to_s.include?("Hotwire Native") }
 
+  # Mark HTML served from cache so the page can say it is stale. On by default.
+  config.offline_marker = true
+
   # Treat "/map" and "/map?lat=1&zoom=9" as the same cached page. On by default.
   config.ignore_query_params = true
 
@@ -203,6 +206,48 @@ the online flow changes.
 
 ---
 
+## Telling the page it is offline
+
+With `offline_marker` on (the default), any HTML the worker serves from cache *because the
+network was unavailable* is stamped before it reaches the page:
+
+```html
+<html data-coldwire-offline data-coldwire-cached-at="1756400000">
+  <head><meta name="coldwire-offline" content="1756400000">
+```
+
+`data-coldwire-cached-at` is unix seconds — when that copy was stored. A page served fresh
+carries none of this, so the marker is a reliable "you are looking at cached content".
+
+Two markers rather than one, because they are read at different moments. The `<html>`
+attributes are there for the first paint of a cold boot, before any JS runs, so a banner
+does not flash in. The `<meta>` is for Turbo visits: Turbo swaps the body and merges the
+head but **never copies `<html>` attributes**, so on its own the attribute would still
+describe the previous page. `coldwire_service_worker_tag` mirrors the meta onto `<html>` on
+each `turbo:load`.
+
+### Styling against it
+
+Any CSS can key off the attribute. With Tailwind v4, two custom variants give you
+`offline:` and `online:`:
+
+```css
+@custom-variant offline (html[data-coldwire-offline] &);
+@custom-variant online (html:not([data-coldwire-offline]) &);
+```
+
+```erb
+<div class="hidden offline:block">
+  You're offline. This information may be out of date.
+</div>
+```
+
+Rendering the age needs the client, since only it knows the timestamp — read
+`document.documentElement.dataset.coldwireCachedAt` and format it with
+`Intl.RelativeTimeFormat`.
+
+---
+
 ## How caching behaves
 
 | Request | Behavior |
@@ -214,6 +259,7 @@ the online flow changes.
 | Non-GET | Never intercepted. |
 | Redirected response | Never stored — see #4 above. |
 | Query strings | Ignored by default, when matching *and* when storing. See below. |
+| HTML served from cache offline | Stamped with `data-coldwire-offline`. See above. |
 
 ### Query strings
 

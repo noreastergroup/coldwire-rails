@@ -26,6 +26,9 @@ const OFFLINE_FRAME_CONTENT = <%= raw offline_frame.to_json %>
 const IGNORE_SEARCH = <%= raw Coldwire.config.ignore_query_params.to_json %>
 const MATCH_OPTIONS = { ignoreVary: true, ignoreSearch: IGNORE_SEARCH }
 const TIMESTAMP_HEADER = "timestamp"
+const OFFLINE_MARKER = <%= raw Coldwire.config.offline_marker.to_json %>
+const OFFLINE_ATTRIBUTE = "data-coldwire-offline"
+const CACHED_AT_ATTRIBUTE = "data-coldwire-cached-at"
 
 let forcedOffline = false
 
@@ -102,7 +105,7 @@ async function handleFetch(request) {
   const cache = await caches.open(CACHE_NAME)
   const cached = await cache.match(request, MATCH_OPTIONS)
 
-  if (forcedOffline) return cached || offlineResponse(request)
+  if (forcedOffline) return (await markOffline(cache, request, cached)) || offlineResponse(request)
 
   // Pages recache on every view so the timestamp moves and the copy stays fresh.
   // Assets stay cache-first — recaching every stylesheet on a visit would bury
@@ -116,8 +119,39 @@ async function handleFetch(request) {
     }
     return response
   } catch {
-    return cached || offlineResponse(request)
+    return (await markOffline(cache, request, cached)) || offlineResponse(request)
   }
+}
+
+// Tell the page it is looking at cached content, and when that content was stored.
+//
+// Two markers, because they are read at different moments. The <html> attributes are there
+// for the first paint of a cold boot, before any JS runs, so a banner does not flash in.
+// The <meta> is for Turbo visits: Turbo swaps the body and merges the head but never copies
+// <html> attributes, so without it the marker would go stale the moment you navigate.
+async function markOffline(cache, request, cached) {
+  if (!OFFLINE_MARKER || !cached || !wantsHtml(request)) return cached
+
+  const type = cached.headers.get("Content-Type") || ""
+  if (!type.includes("text/html")) return cached
+
+  const html = await cached.clone().text()
+  if (!/<html\b/i.test(html)) return cached
+
+  // The timestamp rides on the stored key, so ask the cache for the key that matched.
+  const [ key ] = await cache.keys(request, MATCH_OPTIONS)
+  const cachedAt = key ? key.headers.get(TIMESTAMP_HEADER) : null
+  const stamp = cachedAt ? ` ${CACHED_AT_ATTRIBUTE}="${escapeHtml(cachedAt)}"` : ""
+
+  const marked = html
+    .replace(/<html\b([^>]*)>/i, `<html$1 ${OFFLINE_ATTRIBUTE}${stamp}>`)
+    .replace(/<head\b([^>]*)>/i, `<head$1><meta name="coldwire-offline" content="${escapeHtml(cachedAt || "")}">`)
+
+  return new Response(marked, {
+    status: cached.status,
+    statusText: cached.statusText,
+    headers: cached.headers
+  })
 }
 
 async function clearCaches() {

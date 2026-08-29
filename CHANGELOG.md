@@ -5,6 +5,8 @@
 - `cache_allowlist` and `cache_blocklist` govern automatic caching, and take strings
   (segment-prefix) or Regexps. The precache manifest ignores both: listing a URL there is an
   explicit instruction. Replaces `uncached_paths`, which also blocked precaching.
+  A list entry of `"/"` now survives instead of being chomped to an empty string and
+  silently dropped, so the root path can be listed.
   Patterns are validated on assignment — `\A`/`\z`/`\Z` and the `x`/`m` flags are rejected
   rather than silently never matching once JavaScript evaluates them.
 

@@ -30,7 +30,11 @@ module Coldwire
           { type: "regexp", source: pattern.source,
             flags: pattern.options.anybits?(Regexp::IGNORECASE) ? "i" : "" }
         else
-          path = pattern.to_s.chomp("/")
+          # Trim a trailing slash so "/sites/" and "/sites" behave alike, but not from "/"
+          # itself — chomping that leaves an empty string and the rule vanishes, which is a
+          # silent way to lose the root path.
+          path = pattern.to_s
+          path = path.chomp("/") unless path == "/"
           { type: "path", value: path } unless path.empty?
         end
       end

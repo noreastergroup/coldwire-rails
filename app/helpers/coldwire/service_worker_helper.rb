@@ -80,35 +80,65 @@ module Coldwire
     # page load is the only moment anything can be kicked off — but the work itself runs in
     # the worker, which keeps going after this page is gone.
     #
-    # The throttle stamp lives in localStorage rather than the worker: a worker global does
-    # not survive the browser shutting it down, and a stamp that resets would sync on every
-    # single page load. It is written *before* the message so a slow sync cannot be triggered
-    # again by the next navigation.
+    # The stamp is written only when the worker reports the manifest fully in sync, and by
+    # whichever page is open at that moment rather than the one that started it. So a sync cut
+    # short — worker shut down, app backgrounded, signal lost — leaves no stamp, and the next
+    # page load picks up where it left off: the worker recomputes what is missing from what is
+    # actually in the cache, so resuming needs no bookmark.
+    #
+    # localStorage rather than the worker, because a worker global does not survive being
+    # shut down, which is precisely the case this has to withstand.
     def coldwire_auto_sync_script
       return unless Coldwire.config.auto_sync
 
       <<~JS
         (function () {
-          var key = "coldwire-synced-at"
+          var stampKey = "coldwire-synced-at"
+          var attemptsKey = "coldwire-sync-attempts"
           var interval = #{(Coldwire.config.sync_interval.to_i * 1000).to_json}
+          var maxAttempts = #{Coldwire.config.sync_max_attempts.to_i.to_json}
+
+          function read(key) {
+            try { return Number(window.localStorage.getItem(key)) } catch (error) { return NaN }
+          }
+
+          function write(key, value) {
+            try { window.localStorage.setItem(key, String(value)) } catch (error) {}
+          }
 
           function due() {
-            try {
-              var last = Number(window.localStorage.getItem(key))
-              return !Number.isFinite(last) || last <= 0 || (Date.now() - last) > interval
-            } catch (error) {
-              return false
-            }
+            var last = read(stampKey)
+            return !Number.isFinite(last) || last <= 0 || (Date.now() - last) > interval
+          }
+
+          // Only a finished sync sets the clock running again.
+          function settle() {
+            write(stampKey, Date.now())
+            write(attemptsKey, 0)
+          }
+
+          if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.addEventListener("message", function (event) {
+              if (event.data && event.data.type === "coldwire:synced") settle()
+            })
           }
 
           function sync() {
             if (!navigator.onLine || !due()) return
             if (!("serviceWorker" in navigator)) return
 
+            var attempts = read(attemptsKey)
+            attempts = Number.isFinite(attempts) && attempts > 0 ? attempts : 0
+
+            // A manifest that can never finish would otherwise fetch on every navigation for
+            // the rest of the session. Give up and wait for the next interval instead.
+            if (attempts >= maxAttempts) return settle()
+            write(attemptsKey, attempts + 1)
+
             navigator.serviceWorker.ready.then(function (registration) {
-              if (!registration.active) return
-              try { window.localStorage.setItem(key, String(Date.now())) } catch (error) {}
-              registration.active.postMessage({ type: "sync" })
+              // The worker ignores this if a sync is already running, so navigating during a
+              // long sync nudges it rather than starting a second one.
+              if (registration.active) registration.active.postMessage({ type: "sync" })
             })
           }
 

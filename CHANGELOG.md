@@ -5,7 +5,9 @@
 - `auto_sync`: the worker keeps the precache manifest current on its own. Fetches newly
   listed URLs, refetches copies older than `max_age`, retires URLs the manifest dropped, and
   stops at `sync_batch_limit` per run. Triggered on page load and throttled, because WebKit
-  has no Background Sync to schedule against. Retiring only touches entries the manifest
+  has no Background Sync to schedule against. An interrupted sync resumes on the next page
+  load — the clock only restarts once the manifest is fully in sync, and each pass recomputes
+  what is missing from the cache rather than tracking progress. Retiring only touches entries the manifest
   owns, so assets and casually-browsed pages are left alone.
 
 - `cache_allowlist` and `cache_blocklist` govern automatic caching, and take strings

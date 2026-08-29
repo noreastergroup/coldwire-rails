@@ -146,6 +146,7 @@ Coldwire.configure do |config|
   config.sync_interval = 6.hours
   config.max_age = 7.days
   config.sync_batch_limit = 25
+  config.sync_max_attempts = 25
 
   # Bump to invalidate every cached entry at once.
   config.cache_name = "coldwire"
@@ -318,6 +319,7 @@ config.auto_sync = true
 config.sync_interval = 6.hours    # leave this long between syncs
 config.max_age = 7.days           # refetch a page once its copy is older than this
 config.sync_batch_limit = 25      # most pages one sync will fetch; 0 for no limit
+config.sync_max_attempts = 25     # give up on an unfinishable sync after this many loads
 ```
 
 **There is no true background scheduling to use.** WebKit ships neither Background Sync,
@@ -336,6 +338,32 @@ Each sync:
 | **Skips what is fine** | anything cached and younger than `max_age` costs nothing |
 | **Retires what left the manifest** | an unpublished record is dropped from the cache |
 | **Stops at the batch limit** | the rest is picked up by the next sync |
+
+### Interrupted syncs resume
+
+A sync outlives the page that started it, but not necessarily the browser's patience — the
+worker can be shut down mid-run, the app backgrounded, the signal lost. So the clock is only
+restarted when the worker reports the manifest **fully** in sync. Anything short of that
+leaves no stamp, and the next page load carries on.
+
+Resuming needs no bookmark. Each pass recomputes what is missing from what is actually in the
+cache, so an interruption costs only the requests that were in flight:
+
+```
+page 1   84 pending   fetched 25             59 remaining
+page 2   59 pending   fetched 7, cut short   (worker shut down)
+page 3   52 pending   fetched 25             27 remaining     <- picked up the 7
+page 4   27 pending   fetched 25              2 remaining
+page 5    2 pending   fetched 2               done -> stamped
+```
+
+Completion is announced to **every open page**, not just the one that asked, because by then
+the user is usually somewhere else and that page can no longer record anything. Navigating
+during a sync nudges the worker rather than starting a second one.
+
+If a manifest can never finish — it lists a URL that always fails — `sync_max_attempts` stops
+it after that many page loads and waits for the next interval, rather than fetching on every
+navigation for the rest of the session.
 
 Retiring only touches entries the manifest owns — they are marked when stored. Assets, and
 pages you cached by simply visiting them, are never retired by a sync, because the manifest

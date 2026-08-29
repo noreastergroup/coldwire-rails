@@ -299,8 +299,20 @@ async function runSync() {
 
   const batch = SYNC_BATCH_LIMIT > 0 ? pending.slice(0, SYNC_BATCH_LIMIT) : pending
   const result = await prefetchUrls(batch)
+  const remaining = pending.length - batch.length
+  const complete = remaining === 0
 
-  return { ...result, retired, synced: batch.length, remaining: pending.length - batch.length }
+  // Tell every open page, not just the one that asked. A sync outlives the page that
+  // triggered it, so by the time it lands the user is usually somewhere else — and the page
+  // that started it can no longer record that it finished.
+  if (complete) await notifyClients({ type: "coldwire:synced" })
+
+  return { ...result, retired, synced: batch.length, remaining, complete }
+}
+
+async function notifyClients(message) {
+  const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" })
+  clients.forEach((client) => client.postMessage(message))
 }
 
 async function fetchManifest() {

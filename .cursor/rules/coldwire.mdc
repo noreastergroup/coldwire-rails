@@ -160,10 +160,16 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
 - There is no background scheduling primitive to build on: WebKit has no Background Sync,
   Periodic Background Sync, or Background Fetch. A page load hands work to the worker and the
   worker runs it independently. Do not reach for `periodicsync` — it will not fire here.
-- The throttle stamp lives in `localStorage` on the page, not in the worker. A worker global
-  does not survive termination, and a stamp that resets means syncing on every page load.
-  Write the stamp *before* posting the message, or the next navigation retriggers a sync that
-  is still running.
+- The throttle stamp lives in `localStorage` on the page, not in the worker: a worker global
+  does not survive termination, which is exactly the case this has to withstand.
+- **Stamp only on completion.** A sync cut short must leave no stamp so the next page load
+  carries on; stamping when the sync *starts* would strand an interrupted run until the whole
+  interval elapsed. Resuming needs no bookmark — each pass recomputes what is missing from
+  what is in the cache, so an interruption costs only the in-flight requests.
+- Completion is broadcast to every client via `clients.matchAll`, not returned to the caller.
+  The page that triggered a sync is usually gone by the time it lands and cannot record it.
+- `sync_max_attempts` is the circuit breaker for a manifest that can never finish; without it
+  an unfetchable URL means a sync attempt on every navigation, forever.
 - One sync at a time (`syncing` promise). The page triggers on `turbo:load` and on `online`.
 - A sync fetches manifest URLs that are missing or older than `max_age`, skips the rest, and
   stops at `sync_batch_limit` so a first run on cellular does not pull everything.

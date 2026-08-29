@@ -1,6 +1,16 @@
 <%# Inner content of the offline fallback for a Turbo Frame request. The worker wraps this
-    in a <turbo-frame> carrying the requested id. Override by creating this same path. %>
+    in a <turbo-frame> carrying the requested id. Override by creating this same path.
+
+    `coldwire:retry-url` is substituted with the URL this frame was requesting. Use it rather
+    than an empty href: inside a frame that would resolve to the *page* URL and load the whole
+    document into the card. A link inside a frame targets that frame, so this retries just
+    this card. %>
 <div style="font-family: system-ui, sans-serif; padding: 1rem; color: #4b5563;">
   <strong style="display: block; color: #1f2937;">Not available offline</strong>
   <span style="font-size: 0.875rem;">Reconnect to see this.</span>
+  <a href="coldwire:retry-url"
+     style="display: inline-block; margin-top: 0.5rem; font-size: 0.875rem;
+            font-weight: 600; color: #1f2937;">
+    Try again
+  </a>
 </div>

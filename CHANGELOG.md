@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Offline page and frame each offer a "Try again" link. The page retries the URL it was
+  served for; the frame retries just that frame via the `coldwire:retry-url` token.
+- Plainer copy on both fallbacks — no more talk of the cache.
+- The offline page paints its own background and adapts to dark mode. It had none, so a
+  dark-mode device rendered dark text on the UA's dark default.
+
 - `offline_entry_point`: the offline page now boots Turbo through the host's importmap.
   Hotwire Native rejects any page where `window.Turbo` never appears, so the previous
   plain-HTML fallback could never render in the app — it reported "Turbo is not present"

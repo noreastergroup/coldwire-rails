@@ -11,6 +11,35 @@
     <meta name="turbo-cache-control" content="no-cache">
     <title>Offline</title>
 
+    <%# This page paints its own background. Without one the UA paints the dark-mode default
+        and the dark body text below is near-illegible on it. %>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0;
+        padding: 2rem;
+        font-family: system-ui, -apple-system, sans-serif;
+        background: #ffffff;
+        color: #1f2937;
+      }
+      h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
+      p { margin: 0; }
+      .coldwire-retry {
+        display: inline-block;
+        margin-top: 1.5rem;
+        border-radius: 0.5rem;
+        background: #1f2937;
+        color: #ffffff;
+        padding: 0.625rem 1.25rem;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      @media (prefers-color-scheme: dark) {
+        body { background: #111827; color: #e5e7eb; }
+        .coldwire-retry { background: #e5e7eb; color: #111827; }
+      }
+    </style>
+
     <%# Hotwire Native reports "Turbo is not present" and shows its own error screen for any
         page where window.Turbo never appears — a fallback without this is not renderable in
         the app at all. Just Turbo, not the whole app entry point: every module in that graph
@@ -20,8 +49,14 @@
       <%= javascript_import_module_tag Coldwire.config.offline_entry_point %>
     <% end %>
   </head>
-  <body style="font-family: system-ui, sans-serif; padding: 2rem; color: #1f2937;">
-    <h1 style="font-size: 1.5rem;">You're offline</h1>
+  <body>
+    <h1>You're offline</h1>
     <p>This page isn't available offline. Reconnect and try again.</p>
+
+    <%# An empty href resolves to whatever URL this page was served for, which is the one
+        thing this template cannot know — it is baked when the worker script is built.
+        data-turbo="false" forces a real navigation: a Turbo visit to the identical URL can
+        be treated as same-page and do nothing at all. %>
+    <a class="coldwire-retry" href="" data-turbo="false">Try again</a>
   </body>
 </html>

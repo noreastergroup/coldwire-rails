@@ -75,6 +75,12 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
   app entry point: a module graph fails to evaluate if any one file is uncached, and then
   Turbo never lands. The fallback **frame** needs none of this — it is a fragment going into a
   page that already has Turbo.
+- Both fallbacks carry a retry link, and neither can hardcode a URL — the templates are baked
+  when the worker is built. The page uses `href=""` (resolves to the served URL) with
+  `data-turbo="false"`, because a Turbo visit to the identical URL can be treated as same-page
+  and do nothing. The frame uses the `coldwire:retry-url` token, substituted with
+  `request.url` and escaped; an empty href inside a frame resolves to the *page* and would
+  load the whole document into the card.
 - Only return HTML when the request wants HTML (`mode === "navigate"`, `destination ===
   "document"`, or an `Accept` containing `text/html`). Everything else gets an empty 504 — an
   HTML body just produces a broken asset.

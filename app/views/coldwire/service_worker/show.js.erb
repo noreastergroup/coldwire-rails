@@ -18,6 +18,7 @@ const EXCLUDED_PATHS = <%= raw Coldwire.excluded_paths(request.script_name).to_j
 const UNCACHED_PATHS = <%= raw Coldwire.uncached_paths.to_json %>
 const OFFLINE_PAGE = <%= raw offline_page.to_json %>
 const OFFLINE_FRAME_CONTENT = <%= raw offline_frame.to_json %>
+const RETRY_URL_TOKEN = "coldwire:retry-url"
 
 // Rails answers HTML with `Vary: Accept`, and cache.match() honors Vary by default.
 // Precaching fetches with `Accept: */*` while Turbo navigations and frame loads send
@@ -325,7 +326,7 @@ function offlineResponse(request) {
   // discarded and the frame would sit on its loading state forever.
   const frame = request.headers.get("Turbo-Frame")
 
-  return new Response(frame ? offlineFrame(frame) : OFFLINE_PAGE, {
+  return new Response(frame ? offlineFrame(frame, request.url) : OFFLINE_PAGE, {
     // 200 on purpose. Hotwire Native treats a non-2xx visit as a failed request and shows
     // its own native error screen, so an error-status body is never rendered.
     status: 200,
@@ -336,8 +337,14 @@ function offlineResponse(request) {
   })
 }
 
-function offlineFrame(id) {
-  return `<turbo-frame id="${escapeHtml(id)}">${OFFLINE_FRAME_CONTENT}</turbo-frame>`
+// The frame template is baked when the worker is built, so it cannot know which URL it will
+// stand in for. Substitute it here: a retry link inside a frame has to point at the frame's
+// own URL, since an empty href would resolve to the page and load the whole document into
+// the card.
+function offlineFrame(id, url) {
+  const content = OFFLINE_FRAME_CONTENT.split(RETRY_URL_TOKEN).join(escapeHtml(url))
+
+  return `<turbo-frame id="${escapeHtml(id)}">${content}</turbo-frame>`
 }
 
 function escapeHtml(value) {

@@ -178,6 +178,16 @@ Two things to keep if you override the page template:
 The frame template needs neither: a frame response is a fragment inserted into a page that
 already has Turbo running.
 
+Both templates ship a **Try again** link, and each retries differently because a template
+baked at worker-build time cannot know the URL it will stand in for:
+
+- **The page** uses `href=""`, which resolves to whatever URL it was served for, plus
+  `data-turbo="false"` — a Turbo visit to the identical URL can be treated as same-page and
+  do nothing at all.
+- **The frame** uses `href="coldwire:retry-url"`, which the worker substitutes with the
+  frame's own URL. An empty href here would resolve to the *page* and load the whole document
+  into the card. A link inside a frame targets that frame, so this reloads just the card.
+
 ---
 
 ## The debug page

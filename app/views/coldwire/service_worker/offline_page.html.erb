@@ -1,4 +1,7 @@
-<%# Full-page offline fallback. Override by creating this same path in your own app. %>
+<%# Full-page offline fallback. Override by creating this same path in your own app.
+
+    Rendered when the worker script is built and embedded in it as a string, so this runs
+    without a real request: no current_user, no request-scoped helpers. %>
 <!DOCTYPE html>
 <html>
   <head>
@@ -7,6 +10,15 @@
     <%# Served with a 200, so keep Turbo from snapshotting it and restoring it once back online. %>
     <meta name="turbo-cache-control" content="no-cache">
     <title>Offline</title>
+
+    <%# Hotwire Native reports "Turbo is not present" and shows its own error screen for any
+        page where window.Turbo never appears — a fallback without this is not renderable in
+        the app at all. Just Turbo, not the whole app entry point: every module in that graph
+        would have to be cached for it to evaluate. %>
+    <% if Coldwire.config.offline_entry_point.present? && respond_to?(:javascript_inline_importmap_tag) %>
+      <%= javascript_inline_importmap_tag %>
+      <%= javascript_import_module_tag Coldwire.config.offline_entry_point %>
+    <% end %>
   </head>
   <body style="font-family: system-ui, sans-serif; padding: 2rem; color: #1f2937;">
     <h1 style="font-size: 1.5rem;">You're offline</h1>

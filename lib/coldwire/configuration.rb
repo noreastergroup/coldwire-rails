@@ -11,6 +11,18 @@ module Coldwire
     # response also sends `Service-Worker-Allowed` to widen it past that directory.
     attr_accessor :scope
 
+    # The importmap module the offline page loads.
+    #
+    # Hotwire Native rejects any page where `window.Turbo` never appears — its adapter waits,
+    # times out, and reports "Turbo is not present". So the fallback cannot be plain HTML; it
+    # has to boot Turbo like a real page. Importing the whole app entry point would work but
+    # is fragile offline: if any module in that graph is uncached the graph fails to evaluate
+    # and Turbo never lands. Importing Turbo alone keeps the dependency to one file.
+    #
+    # Set to nil if you are not on importmap-rails, and override the offline page template to
+    # load Turbo whatever way your bundler does.
+    attr_accessor :offline_entry_point
+
     # Mark HTML served from cache because the network was unavailable, so the page can say
     # so. Adds `data-coldwire-offline` and `data-coldwire-cached-at` (unix seconds) to <html>,
     # plus a matching <meta> that survives Turbo's head merge. Costs a body rewrite, but only
@@ -57,6 +69,7 @@ module Coldwire
       @excluded_paths = [ "/up" ]
       @uncached_paths = []
       @offline_marker = true
+      @offline_entry_point = "@hotwired/turbo-rails"
       @ignore_query_params = true
       @register_if = ->(_request) { true }
       @cache_identity = -> { nil }

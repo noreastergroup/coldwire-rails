@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- `offline_entry_point`: the offline page now boots Turbo through the host's importmap.
+  Hotwire Native rejects any page where `window.Turbo` never appears, so the previous
+  plain-HTML fallback could never render in the app — it reported "Turbo is not present"
+  and showed the SDK's error screen instead.
+
 ### Fixed
 
 - The registration snippet threw before reaching `navigator.serviceWorker.register`,

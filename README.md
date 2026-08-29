@@ -17,7 +17,7 @@ gets you a native error screen, not your offline page. Coldwire gets the details
 
 ## Why this is harder than it looks
 
-Five things break a naive Hotwire Native offline cache. Coldwire handles all five.
+Six things break a naive Hotwire Native offline cache. Coldwire handles all six.
 
 **1. `Vary: Accept` silently defeats precaching.** Rails answers HTML with `Vary: Accept`,
 and `cache.match()` honors `Vary` by default. Precaching fetches with `Accept: */*`, but
@@ -42,7 +42,13 @@ page, and the stored response keeps `redirected: true`. Serving a redirected res
 navigation is a network error by spec, so the app fails to cold launch offline instead of
 showing the cached page. Coldwire refuses to store a redirected response at all.
 
-**5. Assets must not receive HTML.** A stylesheet or `<img>` handed an HTML offline page is
+**5. The offline page itself must boot Turbo.** Hotwire Native's adapter waits for
+`window.Turbo` and, if it never appears, reports *"The page could not be loaded because Turbo
+is not present"* — its own error screen again, no matter how good your fallback HTML is. A
+plain-HTML offline page is not renderable in the app at all. Coldwire's fallback loads Turbo
+through your importmap.
+
+**6. Assets must not receive HTML.** A stylesheet or `<img>` handed an HTML offline page is
 just a broken asset. Coldwire serves the HTML fallback only to requests that want HTML, and
 gives everything else an empty `504`.
 
@@ -114,6 +120,11 @@ Coldwire.configure do |config|
   # limits it to the native user agent so browser tests stay uncached.
   config.register_if = ->(request) { request.user_agent.to_s.include?("Hotwire Native") }
 
+  # The importmap module the offline page loads. Hotwire Native rejects any page without
+  # window.Turbo, so the fallback has to boot Turbo like a real page. Set to nil if you are
+  # not on importmap-rails, and load Turbo your own way in the template.
+  config.offline_entry_point = "@hotwired/turbo-rails"
+
   # Mark HTML served from cache so the page can say it is stale. On by default.
   config.offline_marker = true
 
@@ -153,9 +164,19 @@ Create either file in your own app to replace Coldwire's:
 | `app/views/coldwire/caches/show.html.erb` | The debug page |
 
 Both offline templates are rendered at worker-build time and embedded in the script, so they
-are plain markup — no request context, no helpers that need a current user. Keep the
-`<meta name="turbo-cache-control" content="no-cache">` in the page template: without it, Turbo
-snapshots the offline page and can restore it after you're back online.
+are plain markup — no request context, no helpers that need a current user.
+
+Two things to keep if you override the page template:
+
+- **The Turbo import.** Hotwire Native shows its own error screen for any page where
+  `window.Turbo` never appears. Import Turbo alone rather than your app entry point — offline,
+  every module in that graph would have to be cached for it to evaluate, and one miss means
+  no Turbo.
+- **`<meta name="turbo-cache-control" content="no-cache">`.** Without it Turbo snapshots the
+  offline page and can restore it after you are back online.
+
+The frame template needs neither: a frame response is a fragment inserted into a page that
+already has Turbo running.
 
 ---
 

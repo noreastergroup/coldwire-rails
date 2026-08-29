@@ -68,6 +68,13 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
 - When the request carries a `Turbo-Frame` header, answer with a matching `<turbo-frame id>`.
   A frame discards a response with no matching frame and sits on its loading state forever.
   Escape the id; it comes from a request header.
+- The fallback **page** must boot Turbo, or Hotwire Native reports `.load(.notPresent)` —
+  "The page could not be loaded because Turbo is not present" — and shows its own screen. Its
+  adapter (`turbo.js`) waits for `window.Turbo` and calls `pageLoadFailed()` on timeout. Plain
+  HTML is not renderable in the app. Import Turbo **alone** (`offline_entry_point`), never the
+  app entry point: a module graph fails to evaluate if any one file is uncached, and then
+  Turbo never lands. The fallback **frame** needs none of this — it is a fragment going into a
+  page that already has Turbo.
 - Only return HTML when the request wants HTML (`mode === "navigate"`, `destination ===
   "document"`, or an `Accept` containing `text/html`). Everything else gets an empty 504 — an
   HTML body just produces a broken asset.

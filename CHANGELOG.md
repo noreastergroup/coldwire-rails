@@ -5,6 +5,8 @@
 - Offline page and frame each offer a "Try again" link. The page retries the URL it was
   served for; the frame retries just that frame via the `coldwire:retry-url` token.
 - Plainer copy on both fallbacks — no more talk of the cache.
+- The offline page respects safe-area insets on all four sides, with `viewport-fit=cover`
+  so they resolve at all. Hotwire Native apps often run the web view edge to edge.
 - The offline page paints its own background and adapts to dark mode. It had none, so a
   dark-mode device rendered dark text on the UA's dark default.
 

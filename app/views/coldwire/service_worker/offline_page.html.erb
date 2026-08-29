@@ -6,7 +6,10 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <%# viewport-fit=cover is what makes env(safe-area-inset-*) resolve to anything. Without
+        it the layout viewport already sits inside the safe area and every inset reads 0, so
+        the padding below would silently do nothing. %>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <%# Served with a 200, so keep Turbo from snapshotting it and restoring it once back online. %>
     <meta name="turbo-cache-control" content="no-cache">
     <title>Offline</title>
@@ -17,10 +20,19 @@
       :root { color-scheme: light dark; }
       body {
         margin: 0;
-        padding: 2rem;
         font-family: system-ui, -apple-system, sans-serif;
         background: #ffffff;
         color: #1f2937;
+
+        /* Hotwire Native apps often run the web view edge to edge, pinning it to the top
+           anchor rather than the safe area, so keep the content clear of the notch and the
+           home indicator. Additive, so there is 2rem of breathing room measured from the
+           safe edge rather than from the screen edge. */
+        padding:
+          calc(2rem + env(safe-area-inset-top, 0px))
+          calc(2rem + env(safe-area-inset-right, 0px))
+          calc(2rem + env(safe-area-inset-bottom, 0px))
+          calc(2rem + env(safe-area-inset-left, 0px));
       }
       h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
       p { margin: 0; }

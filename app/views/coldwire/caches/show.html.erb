@@ -44,7 +44,9 @@
 
 <div class="coldwire"
      data-controller="coldwire-cache"
-     data-coldwire-cache-pack-url-value="<%= coldwire.pack_path %>">
+     data-coldwire-cache-pack-url-value="<%= coldwire.pack_path %>"
+     data-coldwire-cache-auto-sync-value="<%= Coldwire.config.auto_sync %>"
+     data-coldwire-cache-sync-interval-value="<%= Coldwire.config.sync_interval.to_i %>">
   <h1>Coldwire</h1>
   <p class="coldwire-tagline">When your Hotwire wires go cold.</p>
 
@@ -90,6 +92,38 @@
         </span>
       </span>
     </label>
+  </div>
+
+  <div class="coldwire-card">
+    <h2>Automatic sync</h2>
+    <p style="margin: 0.25rem 0 0; font-size: 0.875rem; color: #6b7280;">
+      Brings the cache in line with the manifest in the background: fetches what is missing,
+      refetches what is old, drops what the manifest no longer lists.
+    </p>
+
+    <dl style="margin: 0.75rem 0 0;">
+      <div class="coldwire-row">
+        <dt>Enabled</dt>
+        <dd data-coldwire-cache-target="autoSync" style="margin: 0;">Checking…</dd>
+      </div>
+      <div class="coldwire-row">
+        <dt>Last full sync</dt>
+        <dd data-coldwire-cache-target="syncedAt" style="margin: 0;">Checking…</dd>
+      </div>
+      <div class="coldwire-row">
+        <dt>Activity</dt>
+        <dd data-coldwire-cache-target="syncStatus" style="margin: 0;">Idle</dd>
+      </div>
+    </dl>
+
+    <div class="coldwire-actions">
+      <button type="button"
+              class="coldwire-button"
+              data-coldwire-cache-target="syncButton"
+              data-action="click->coldwire-cache#syncNow">
+        Sync now
+      </button>
+    </div>
   </div>
 
   <div class="coldwire-card">

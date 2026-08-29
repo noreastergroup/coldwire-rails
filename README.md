@@ -203,6 +203,10 @@ baked at worker-build time cannot know the URL it will stand in for:
 
 Mounted at the engine root — `/coldwire` with the mount above. It gives you:
 
+- **Automatic sync** — whether it is on, when the last full sync finished, and what a sync
+  is doing right now. It listens for the worker's broadcasts, so it shows syncs it did not
+  start — including one already running when you opened the page. **Sync now** forces one
+  regardless of the interval.
 - **Cache inspector** — every cached URL with size and how long ago it was stored
 - **Precache** — runs the manifest with a live progress bar (`Pages 47 of 84`, then assets)
 - **Clear cache**

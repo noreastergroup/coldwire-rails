@@ -119,7 +119,11 @@ module Coldwire
 
           if ("serviceWorker" in navigator) {
             navigator.serviceWorker.addEventListener("message", function (event) {
-              if (event.data && event.data.type === "coldwire:synced") settle()
+              var data = event.data
+              if (!data || data.type !== "coldwire:sync") return
+              // Only a run that got through the whole manifest restarts the clock. A batch
+              // that stopped at the limit, or failed, leaves the next page load to carry on.
+              if (data.state === "finished" && data.complete) settle()
             })
           }
 

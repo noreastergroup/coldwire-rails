@@ -28,6 +28,9 @@ const SYNC_BATCH_LIMIT = <%= raw Coldwire.config.sync_batch_limit.to_i.to_json %
 // Marks entries the manifest owns, so a sync can retire the ones it dropped without
 // touching assets or pages picked up by ordinary browsing.
 const MANAGED_HEADER = "coldwire-managed"
+// One message type for the whole sync, carrying `state`. Two types would mean the page
+// stamping the clock and the page drawing progress could drift apart.
+const SYNC_MESSAGE = "coldwire:sync"
 
 // Rails answers HTML with `Vary: Accept`, and cache.match() honors Vary by default.
 // Precaching fetches with `Accept: */*` while Turbo navigations and frame loads send
@@ -277,7 +280,10 @@ async function runSync() {
   try {
     manifest = await fetchManifest()
   } catch (error) {
-    return { ok: false, error: error.message }
+    const failure = { ok: false, error: error.message, complete: false }
+    await notifyClients({ type: SYNC_MESSAGE, state: "finished", ...failure })
+
+    return failure
   }
 
   const wanted = new Set(manifest.map((value) => cacheUrl(new URL(value, self.location.origin).href)))
@@ -298,16 +304,23 @@ async function runSync() {
   }
 
   const batch = SYNC_BATCH_LIMIT > 0 ? pending.slice(0, SYNC_BATCH_LIMIT) : pending
-  const result = await prefetchUrls(batch)
+
+  // Every open page hears about this, not just the one that asked. A sync outlives the page
+  // that triggered it, so by the time it lands the user is usually somewhere else — and the
+  // page that started it can no longer record that it finished, or show it happening.
+  notifyClients({ type: SYNC_MESSAGE, state: "started", pending: pending.length, batch: batch.length, retired })
+
+  const result = await prefetchUrls(batch, (progress) => {
+    notifyClients({ type: SYNC_MESSAGE, state: "progress", ...progress })
+  })
+
   const remaining = pending.length - batch.length
   const complete = remaining === 0
+  const finished = { ...result, retired, synced: batch.length, remaining, complete }
 
-  // Tell every open page, not just the one that asked. A sync outlives the page that
-  // triggered it, so by the time it lands the user is usually somewhere else — and the page
-  // that started it can no longer record that it finished.
-  if (complete) await notifyClients({ type: "coldwire:synced" })
+  await notifyClients({ type: SYNC_MESSAGE, state: "finished", ...finished })
 
-  return { ...result, retired, synced: batch.length, remaining, complete }
+  return finished
 }
 
 async function notifyClients(message) {

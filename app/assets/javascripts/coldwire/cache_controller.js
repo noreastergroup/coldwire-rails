@@ -1,11 +1,13 @@
 import { Controller } from "@hotwired/stimulus"
 
 const FORCED_KEY = "coldwire-forced"
+const SYNCED_AT_KEY = "coldwire-synced-at"
+const SYNC_MESSAGE = "coldwire:sync"
 const TIMESTAMP_HEADER = "timestamp"
 
 // Drives the Coldwire debug page: inspect the cache, precache the manifest, force offline.
 export default class extends Controller {
-  static values = { packUrl: String }
+  static values = { packUrl: String, autoSync: Boolean, syncInterval: Number }
   static targets = [
     "status",
     "connection",
@@ -20,13 +22,24 @@ export default class extends Controller {
     "progressBar",
     "progressLabel",
     "clearButton",
-    "refreshButton"
+    "refreshButton",
+    "autoSync",
+    "syncedAt",
+    "syncStatus",
+    "syncButton"
   ]
 
   connect() {
     this.onOnline = () => this.renderConnection()
     window.addEventListener("online", this.onOnline)
     window.addEventListener("offline", this.onOnline)
+
+    // The worker broadcasts sync state to every open page, so this hears about syncs it did
+    // not start — including one already running when this page opened.
+    this.onWorkerMessage = (event) => this.handleSyncMessage(event)
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", this.onWorkerMessage)
+    }
 
     this.restoreForced()
     this.refresh()
@@ -35,12 +48,107 @@ export default class extends Controller {
   disconnect() {
     window.removeEventListener("online", this.onOnline)
     window.removeEventListener("offline", this.onOnline)
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.removeEventListener("message", this.onWorkerMessage)
+    }
+  }
+
+  // MARK: automatic sync
+
+  handleSyncMessage(event) {
+    const data = event.data
+    if (!data || data.type !== SYNC_MESSAGE) return
+
+    if (data.state === "started") {
+      const retired = data.retired ? `, retired ${data.retired}` : ""
+      this.setSyncStatus(`Syncing ${data.batch} of ${data.pending} outstanding${retired}…`)
+    } else if (data.state === "progress") {
+      const noun = data.phase === "assets" ? "Assets" : "Pages"
+      this.setSyncStatus(data.total ? `${noun} ${data.done} of ${data.total}` : `${noun}: none`)
+    } else if (data.state === "finished") {
+      this.setSyncStatus(this.describeFinishedSync(data))
+      this.renderSyncedAt()
+      this.renderCache()
+    }
+  }
+
+  describeFinishedSync(data) {
+    if (data.error) return `Sync failed: ${data.error}`
+
+    const parts = [ `Cached ${data.cached}` ]
+    if (data.retired) parts.push(`retired ${data.retired}`)
+    if (data.failed?.length) parts.push(`${data.failed.length} failed`)
+    // An incomplete run is normal, not an error: the batch limit stops it and the next page
+    // load carries on.
+    if (!data.complete) parts.push(`${data.remaining} still to go`)
+
+    return `${parts.join(", ")}.`
+  }
+
+  // Forces a sync regardless of how recently one ran — the interval is a page-side throttle,
+  // and the worker does whatever it is asked.
+  async syncNow(event) {
+    event?.preventDefault()
+    this.setSyncStatus("Starting…")
+
+    try {
+      await this.sendToWorker("sync", {}, 10 * 60 * 1000)
+    } catch (error) {
+      this.setSyncStatus(error.message || "Sync failed")
+    }
+  }
+
+  setSyncStatus(text) {
+    if (this.hasSyncStatusTarget) this.syncStatusTarget.textContent = text
+  }
+
+  renderAutoSync() {
+    if (!this.hasAutoSyncTarget) return
+
+    if (!this.autoSyncValue) {
+      this.autoSyncTarget.textContent = "Off"
+      return
+    }
+
+    const every = this.syncIntervalValue > 0
+      ? ` · every ${this.formatDuration(this.syncIntervalValue)}`
+      : ""
+    this.autoSyncTarget.textContent = `On${every}`
+  }
+
+  renderSyncedAt() {
+    if (!this.hasSyncedAtTarget) return
+
+    let stamp = null
+    try {
+      stamp = Number(window.localStorage.getItem(SYNCED_AT_KEY))
+    } catch {
+      // Private mode and the like. The line just stays unknown.
+    }
+
+    if (!Number.isFinite(stamp) || stamp <= 0) {
+      this.syncedAtTarget.textContent = "Never"
+      return
+    }
+
+    const date = new Date(stamp)
+    this.syncedAtTarget.textContent = this.formatCachedAt(Math.floor(stamp / 1000))
+    this.syncedAtTarget.title = date.toLocaleString()
+  }
+
+  formatDuration(seconds) {
+    if (seconds < 60) return `${seconds}s`
+    if (seconds < 3600) return `${Math.round(seconds / 60)} min`
+    if (seconds < 86400) return `${Math.round(seconds / 3600)} h`
+    return `${Math.round(seconds / 86400)} d`
   }
 
   async refresh(event) {
     event?.preventDefault()
     this.renderConnection()
     this.renderWorker()
+    this.renderAutoSync()
+    this.renderSyncedAt()
     await this.syncForcedToWorker()
     await this.renderCache()
   }

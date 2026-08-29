@@ -166,8 +166,12 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
   carries on; stamping when the sync *starts* would strand an interrupted run until the whole
   interval elapsed. Resuming needs no bookmark — each pass recomputes what is missing from
   what is in the cache, so an interruption costs only the in-flight requests.
-- Completion is broadcast to every client via `clients.matchAll`, not returned to the caller.
-  The page that triggered a sync is usually gone by the time it lands and cannot record it.
+- Progress and completion are broadcast to every client via `clients.matchAll`, not returned
+  to the caller. The page that triggered a sync is usually gone by the time it lands, and can
+  neither record it nor draw it. One message type (`coldwire:sync`) carrying `state`, so the
+  page stamping the clock and the page drawing progress cannot drift apart.
+- Only `state: "finished"` with `complete: true` restarts the clock. A batch that stopped at
+  the limit is finished but not complete.
 - `sync_max_attempts` is the circuit breaker for a manifest that can never finish; without it
   an unfetchable URL means a sync attempt on every navigation, forever.
 - One sync at a time (`syncing` promise). The page triggers on `turbo:load` and on `online`.

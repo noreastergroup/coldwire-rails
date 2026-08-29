@@ -18,7 +18,8 @@ module Coldwire
       # next line is a single call expression, not two statements — ASI does not save you —
       # so a missing semicolon here throws and takes the registration down with it.
       javascript_tag(nonce: true) do
-        [ coldwire_identity_script, coldwire_offline_marker_script, coldwire_register_script ]
+        [ coldwire_identity_script, coldwire_offline_marker_script,
+          coldwire_auto_sync_script, coldwire_register_script ]
           .compact
           .join("\n")
           .html_safe
@@ -71,6 +72,49 @@ module Coldwire
           }
 
           document.addEventListener("turbo:load", sync)
+        })();
+      JS
+    end
+
+    # Hands the manifest to the worker and steps back. WebKit has no Background Sync, so a
+    # page load is the only moment anything can be kicked off — but the work itself runs in
+    # the worker, which keeps going after this page is gone.
+    #
+    # The throttle stamp lives in localStorage rather than the worker: a worker global does
+    # not survive the browser shutting it down, and a stamp that resets would sync on every
+    # single page load. It is written *before* the message so a slow sync cannot be triggered
+    # again by the next navigation.
+    def coldwire_auto_sync_script
+      return unless Coldwire.config.auto_sync
+
+      <<~JS
+        (function () {
+          var key = "coldwire-synced-at"
+          var interval = #{(Coldwire.config.sync_interval.to_i * 1000).to_json}
+
+          function due() {
+            try {
+              var last = Number(window.localStorage.getItem(key))
+              return !Number.isFinite(last) || last <= 0 || (Date.now() - last) > interval
+            } catch (error) {
+              return false
+            }
+          }
+
+          function sync() {
+            if (!navigator.onLine || !due()) return
+            if (!("serviceWorker" in navigator)) return
+
+            navigator.serviceWorker.ready.then(function (registration) {
+              if (!registration.active) return
+              try { window.localStorage.setItem(key, String(Date.now())) } catch (error) {}
+              registration.active.postMessage({ type: "sync" })
+            })
+          }
+
+          document.addEventListener("turbo:load", sync)
+          window.addEventListener("online", sync)
+          sync()
         })();
       JS
     end

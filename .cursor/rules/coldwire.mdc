@@ -155,6 +155,24 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
   identity escapes, so `\A` becomes a literal "A" and the rule silently never matches — and
   reject the `x` and `m` flags, which mean different things in JS.
 
+## Manifest sync
+
+- There is no background scheduling primitive to build on: WebKit has no Background Sync,
+  Periodic Background Sync, or Background Fetch. A page load hands work to the worker and the
+  worker runs it independently. Do not reach for `periodicsync` — it will not fire here.
+- The throttle stamp lives in `localStorage` on the page, not in the worker. A worker global
+  does not survive termination, and a stamp that resets means syncing on every page load.
+  Write the stamp *before* posting the message, or the next navigation retriggers a sync that
+  is still running.
+- One sync at a time (`syncing` promise). The page triggers on `turbo:load` and on `online`.
+- A sync fetches manifest URLs that are missing or older than `max_age`, skips the rest, and
+  stops at `sync_batch_limit` so a first run on cellular does not pull everything.
+- Retiring is limited to entries carrying `MANAGED_HEADER`, set only on manifest URLs
+  themselves — never on the assets they reference, which are shared and would thrash. Assets
+  and casually-browsed pages must survive a sync untouched.
+- Compare URLs through `cacheUrl()` when deciding what is unlisted, or every entry looks
+  unlisted as soon as a query string is involved.
+
 ## Precache
 
 - Follow subresources only — stylesheets, scripts, images, `srcset`, importmap entries. Never

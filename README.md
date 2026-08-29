@@ -141,6 +141,12 @@ Coldwire.configure do |config|
   config.cache_allowlist = []
   config.cache_blocklist = [ "/users", %r{^/admin(/|$)} ]
 
+  # Keep the manifest current on its own, instead of only when the button is pressed.
+  config.auto_sync = true
+  config.sync_interval = 6.hours
+  config.max_age = 7.days
+  config.sync_batch_limit = 25
+
   # Bump to invalidate every cached entry at once.
   config.cache_name = "coldwire"
 
@@ -301,6 +307,41 @@ Both take **strings or Regexps**:
 
 An **empty allowlist means everything is allowed** — that's the default. A non-empty one
 means *only* these. The **blocklist always wins**.
+
+### Keeping the manifest current
+
+By default the manifest is only fetched when something asks for it — the button on the debug
+page. Turn on `auto_sync` and Coldwire keeps it current on its own:
+
+```ruby
+config.auto_sync = true
+config.sync_interval = 6.hours    # leave this long between syncs
+config.max_age = 7.days           # refetch a page once its copy is older than this
+config.sync_batch_limit = 25      # most pages one sync will fetch; 0 for no limit
+```
+
+**There is no true background scheduling to use.** WebKit ships neither Background Sync,
+Periodic Background Sync, nor Background Fetch, so nothing can wake a worker in a Hotwire
+Native web view. What a page load *can* do is hand work to the worker, which then runs
+independently of the page that started it. So sync is triggered on load and throttled — the
+stamp lives in `localStorage`, because a worker global does not survive the browser shutting
+the worker down.
+
+Each sync:
+
+| | |
+|---|---|
+| **Fetches what is missing** | a newly published record shows up in the manifest and has no cached copy |
+| **Refetches what is old** | a cached copy older than `max_age` |
+| **Skips what is fine** | anything cached and younger than `max_age` costs nothing |
+| **Retires what left the manifest** | an unpublished record is dropped from the cache |
+| **Stops at the batch limit** | the rest is picked up by the next sync |
+
+Retiring only touches entries the manifest owns — they are marked when stored. Assets, and
+pages you cached by simply visiting them, are never retired by a sync, because the manifest
+page that happened to reference an asset is not its owner.
+
+A sync also skips itself when `navigator.onLine` is false, and only one runs at a time.
 
 ### The precache manifest ignores both
 

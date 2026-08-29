@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- `auto_sync`: the worker keeps the precache manifest current on its own. Fetches newly
+  listed URLs, refetches copies older than `max_age`, retires URLs the manifest dropped, and
+  stops at `sync_batch_limit` per run. Triggered on page load and throttled, because WebKit
+  has no Background Sync to schedule against. Retiring only touches entries the manifest
+  owns, so assets and casually-browsed pages are left alone.
+
 - `cache_allowlist` and `cache_blocklist` govern automatic caching, and take strings
   (segment-prefix) or Regexps. The precache manifest ignores both: listing a URL there is an
   explicit instruction. Replaces `uncached_paths`, which also blocked precaching.

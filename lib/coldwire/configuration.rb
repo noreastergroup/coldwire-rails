@@ -77,6 +77,27 @@ module Coldwire
     # pages hold whatever the previous session could see.
     attr_writer :cache_identity
 
+    # Keep the precache manifest current on its own, rather than only when someone presses
+    # the button.
+    #
+    # WebKit has no Background Sync, Periodic Background Sync, or Background Fetch, so there
+    # is no true "wake up later" primitive in a Hotwire Native web view. What there is: a page
+    # load can hand work to the service worker, which then runs independently of that page.
+    # So sync is triggered on page load and throttled, rather than scheduled.
+    attr_accessor :auto_sync
+
+    # How long to leave between syncs. Checked against a localStorage stamp on the page,
+    # because a worker global does not survive the worker being shut down.
+    attr_accessor :sync_interval
+
+    # Refetch a manifest page once its cached copy is older than this. Set nil to only ever
+    # fetch pages that are missing.
+    attr_accessor :max_age
+
+    # Most pages one sync will fetch, so a first run on a cellular connection does not pull
+    # the whole manifest at once. The rest are picked up by later syncs. 0 means no limit.
+    attr_accessor :sync_batch_limit
+
     # Returns the list of paths to precache. Evaluated in the controller, so route helpers
     # and the current user are both available.
     attr_accessor :prefetch_urls
@@ -93,6 +114,10 @@ module Coldwire
       @register_if = ->(_request) { true }
       @cache_identity = -> { nil }
       @prefetch_urls = -> { [] }
+      @auto_sync = false
+      @sync_interval = 6 * 60 * 60
+      @max_age = 7 * 24 * 60 * 60
+      @sync_batch_limit = 25
     end
 
     def register?(request)

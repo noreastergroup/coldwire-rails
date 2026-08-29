@@ -117,7 +117,7 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
   `localStorage` on each page load and the cache is dropped when it changes — that is what
   makes sign-out and account switching safe. Keep the comparison on the page, not in the
   worker: a worker global does not survive termination.
-- Auth paths go in `uncached_paths` (intercepted, never stored), **not** `excluded_paths`
+- Auth paths go in `cache_blocklist` (intercepted, never auto-stored), **not** `excluded_paths`
   (never intercepted). An unintercepted request offline dies as a network error and Hotwire
   Native shows its own screen; the point of intercepting is to reach our offline page.
 - The host's cold-boot URL has to be cacheable. A login path is not: signed in it is a 302,
@@ -139,6 +139,21 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
   `cache.keys(request, MATCH_OPTIONS)` — not from the response, which has no usable Date.
 - Rewriting the body costs a `text()` read; keep it on the offline path only, and bail early
   for non-HTML and for bodies with no `<html>` tag (frame responses).
+
+## Allowlist and blocklist
+
+- `cache_allowlist` / `cache_blocklist` gate **automatic caching only**. `isCacheable` holds the
+  universal rules (GET, ok, not redirected) and is used by both paths; `isAutoCacheable` holds
+  the lists and is called only from `handleFetch`. Do not fold them together — `fetchAndCache`
+  must stay list-free so the manifest can store anything.
+- Empty allowlist means everything is allowed. The blocklist wins over the allowlist.
+- Entries are strings (segment-prefix match) or Regexps (tested against the pathname).
+  Serialized as `{type, source, flags}` so a Regexp survives JSON, then rebuilt by
+  `compileRules`. Only the `i` flag crosses over.
+- Validate on assignment, not at render: a bad pattern should fail at boot rather than 500 the
+  worker and quietly take caching down. Reject `\A`/`\z`/`\Z` — JavaScript reads them as
+  identity escapes, so `\A` becomes a literal "A" and the rule silently never matches — and
+  reject the `x` and `m` flags, which mean different things in JS.
 
 ## Precache
 

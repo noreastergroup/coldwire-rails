@@ -135,9 +135,11 @@ Coldwire.configure do |config|
   # when it is down. Coldwire's own routes are excluded automatically.
   config.excluded_paths = [ "/up", "/cable" ]
 
-  # Intercepted but never stored. Sign-in pages belong here, not above: they must not be
-  # served stale, but they should still reach the offline fallback.
-  config.uncached_paths = [ "/users" ]
+  # What automatic caching may and may not store. Strings match a path segment prefix,
+  # Regexps are tested against the path. An empty allowlist allows everything; the
+  # blocklist always wins. Neither applies to the precache manifest.
+  config.cache_allowlist = []
+  config.cache_blocklist = [ "/users", %r{^/admin(/|$)} ]
 
   # Bump to invalidate every cached entry at once.
   config.cache_name = "coldwire"
@@ -218,11 +220,11 @@ it changes, so signing out clears the previous user's pages and signing in as so
 does not inherit them. Leave it unset and the cache persists across sessions — fine for a
 single-user or fully public app, wrong for anything else.
 
-**Put your auth paths in `uncached_paths`, not `excluded_paths`.** Sign-in pages redirect on
+**Put your auth paths in `cache_blocklist`, not `excluded_paths`.** Sign-in pages redirect on
 session state and must never be served stale — but the two settings fail very differently
 offline. `excluded_paths` means *never intercept*, so the request goes straight to a dead
-network and Hotwire Native shows its own error screen. `uncached_paths` means *intercept but
-never store*, so the request still reaches your offline view.
+network and Hotwire Native shows its own error screen. `cache_blocklist` means *intercept but
+never store automatically*, so the request still reaches your offline view.
 
 ### Your cold-boot URL must be cacheable
 
@@ -279,6 +281,40 @@ Rendering the age needs the client, since only it knows the timestamp — read
 
 ---
 
+## Choosing what gets cached
+
+Automatic caching — anything the worker sees you visit — is governed by two lists:
+
+```ruby
+config.cache_allowlist = [ "/sites", %r{^/stories} ]
+config.cache_blocklist = [ "/users", %r{^/admin(/|$)} ]
+```
+
+Both take **strings or Regexps**:
+
+- A **string** matches the path as a segment prefix. `"/users"` covers `/users` and
+  `/users/sign_in`, but not `/username`.
+- A **Regexp** is tested against the path. It is evaluated by JavaScript's `RegExp`, so write
+  JS-compatible syntax: `^` and `$`, not `\A` and `\z`. Coldwire raises at boot if you use
+  `\A`/`\z`/`\Z` or the `x`/`m` flags, rather than letting a rule silently never match.
+  The `i` flag works.
+
+An **empty allowlist means everything is allowed** — that's the default. A non-empty one
+means *only* these. The **blocklist always wins**.
+
+### The precache manifest ignores both
+
+`prefetch_urls` stores whatever you list, blocklist or not. Putting a URL in the manifest is
+an explicit instruction, and quietly declining it would make the manifest unpredictable — you
+would precache 84 pages and silently get 60. The same goes for the subresources a manifest
+page references.
+
+So the lists answer "what should we pick up as the user wanders around", not "what is allowed
+in the cache at all". `excluded_paths` is still the setting for the latter, and it is stronger
+than either: those URLs are never intercepted, so they also never reach the offline fallback.
+
+---
+
 ## How caching behaves
 
 | Request | Behavior |
@@ -289,6 +325,7 @@ Rendering the age needs the client, since only it knows the timestamp — read
 | Cross-origin | Never intercepted. |
 | Non-GET | Never intercepted. |
 | Redirected response | Never stored — see #4 above. |
+| Blocklisted / not allowlisted | Not stored automatically; still cacheable via the manifest. |
 | Query strings | Ignored by default, when matching *and* when storing. See below. |
 | HTML served from cache offline | Stamped with `data-coldwire-offline`. See above. |
 

@@ -21,8 +21,19 @@ module Coldwire
       normalize(config.excluded_paths + [ mount_path ])
     end
 
-    def uncached_paths
-      normalize(config.uncached_paths)
+    # Serializes a mixed list of strings and Regexps into something the worker can rebuild.
+    # Ruby's `i` is the only flag with a safe JavaScript equivalent; the others are rejected
+    # when the list is assigned.
+    def cache_rules(patterns)
+      Array(patterns).filter_map do |pattern|
+        if pattern.is_a?(Regexp)
+          { type: "regexp", source: pattern.source,
+            flags: pattern.options.anybits?(Regexp::IGNORECASE) ? "i" : "" }
+        else
+          path = pattern.to_s.chomp("/")
+          { type: "path", value: path } unless path.empty?
+        end
+      end
     end
 
     private

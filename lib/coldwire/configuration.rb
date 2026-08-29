@@ -40,13 +40,31 @@ module Coldwire
     #
     # Use this sparingly. An unintercepted request goes straight to the network, so offline
     # it fails outright — in Hotwire Native that means the SDK's own error screen, not your
-    # offline page. If you only want to keep something out of the cache, use `uncached_paths`.
+    # offline page. If you only want to keep something out of the cache, use `cache_blocklist`.
     attr_accessor :excluded_paths
 
-    # Paths the worker intercepts but never stores. Sign-in and sign-up pages belong here:
-    # serving them stale is wrong, but they should still reach the offline fallback rather
-    # than dying as a network error.
-    attr_accessor :uncached_paths
+    # Which URLs automatic caching is allowed to store, and which it must not.
+    #
+    # Both accept strings and Regexps. A string matches the path as a segment prefix, so
+    # "/users" covers "/users" and "/users/sign_in" but not "/username". A Regexp is tested
+    # against the path, and is evaluated by JavaScript's RegExp — write JS-compatible syntax
+    # (`^`/`$`, not `\A`/`\z`).
+    #
+    # An empty allowlist means "everything is allowed"; a non-empty one means "only these".
+    # The blocklist always wins.
+    #
+    # **These govern automatic caching only.** Anything in the precache manifest is stored
+    # regardless: listing a URL there is an explicit instruction, and quietly declining it
+    # would make the manifest unpredictable.
+    attr_reader :cache_allowlist, :cache_blocklist
+
+    def cache_allowlist=(patterns)
+      @cache_allowlist = validate_patterns(patterns, :cache_allowlist)
+    end
+
+    def cache_blocklist=(patterns)
+      @cache_blocklist = validate_patterns(patterns, :cache_blocklist)
+    end
 
     # Decides whether a given request should register the worker at all. Receives the
     # ActionDispatch::Request. Defaults to registering everywhere; a Hotwire Native app
@@ -67,7 +85,8 @@ module Coldwire
       @cache_name = "coldwire"
       @scope = "/"
       @excluded_paths = [ "/up" ]
-      @uncached_paths = []
+      @cache_allowlist = []
+      @cache_blocklist = []
       @offline_marker = true
       @offline_entry_point = "@hotwired/turbo-rails"
       @ignore_query_params = true
@@ -83,6 +102,33 @@ module Coldwire
     # `view` is the view context, so a host can write `-> { current_user&.id }`.
     def cache_identity(view)
       view.instance_exec(&@cache_identity).to_s
+    end
+
+    private
+
+    # Fail here rather than when the worker script is rendered, so a bad pattern surfaces at
+    # boot instead of as a 500 that quietly takes caching down with it.
+    def validate_patterns(patterns, setting)
+      Array(patterns).each do |pattern|
+        next unless pattern.is_a?(Regexp)
+
+        # `\A` and friends are reflex for a Ruby developer, and JavaScript reads them as
+        # identity escapes — `\A` quietly becomes a literal "A" and the rule never matches.
+        if pattern.source.match?(/(?<!\\)\\[AzZ]/)
+          raise ArgumentError,
+                "Coldwire evaluates #{setting} patterns with JavaScript's RegExp, which reads " \
+                "\\A, \\z and \\Z as literal letters. Use ^ and $ instead: #{pattern.inspect}"
+        end
+
+        unsupported = []
+        unsupported << "x (extended)" if pattern.options.anybits?(Regexp::EXTENDED)
+        unsupported << "m (multiline)" if pattern.options.anybits?(Regexp::MULTILINE)
+        next if unsupported.empty?
+
+        raise ArgumentError,
+              "Coldwire evaluates #{setting} patterns with JavaScript's RegExp, which has no " \
+              "equivalent for #{unsupported.join(' and ')}: #{pattern.inspect}"
+      end
     end
   end
 end

@@ -34,6 +34,13 @@
 
 ### Fixed
 
+- The cache identity check wiped the whole cache whenever `localStorage` was empty.
+  `getItem` returns null when nothing is stored, and localStorage and the cache store are
+  evicted independently, so a browser that had simply lost its localStorage discarded a
+  complete cache on the next page load — a cold launch would then open to the offline page
+  with everything it needed already downloaded. A missing value now just gets recorded. The
+  cache is also never discarded while offline, when it cannot be refilled.
+
 - The registration snippet threw before reaching `navigator.serviceWorker.register`,
   disabling caching entirely. `})()` followed by `(function` on the next line parses as one
   call expression — ASI does not separate them — so the joined fragments needed terminating

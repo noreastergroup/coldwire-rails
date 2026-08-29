@@ -117,6 +117,14 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
   `localStorage` on each page load and the cache is dropped when it changes — that is what
   makes sign-out and account switching safe. Keep the comparison on the page, not in the
   worker: a worker global does not survive termination.
+- **A missing stored identity is not a changed identity.** `getItem` returns null when nothing
+  is stored, and localStorage and the cache store are evicted independently — so treating null
+  as "somebody else" destroys a good cache the first time localStorage comes back empty. On a
+  cold launch that means opening to the offline page with everything needed sitting in the
+  cache. Record it and move on.
+- **Never discard the cache while offline.** It is the only thing holding the app up and
+  cannot be refilled. Leave the stored identity alone too, so the mismatch survives to be
+  acted on once there is a connection.
 - Auth paths go in `cache_blocklist` (intercepted, never auto-stored), **not** `excluded_paths`
   (never intercepted). An unintercepted request offline dies as a network error and Hotwire
   Native shows its own screen; the point of intercepting is to reach our offline page.

@@ -244,6 +244,11 @@ Mounted at the engine root — `/coldwire` with the mount above. It gives you:
 It's styled with plain CSS and assumes no framework. Put it behind whatever authentication
 your app uses by wrapping the route, or override the template.
 
+To reach it offline, allowlist it like any other page — `config.cache_allowlist = [ "/coldwire" ]`
+alongside your own paths. The worker script and the manifest are never cached, so **Precache**
+will fail while offline; the inspector, **Clear cache**, and **Force offline** are client-side
+and keep working.
+
 > **Force offline is a convenience, not a test harness.** The flag lives in a worker
 > variable, and browsers terminate idle service workers — on restart it silently resets to
 > off. Airplane mode is the trustworthy test.

@@ -34,6 +34,11 @@
 
 ### Fixed
 
+- The debug page can now be cached. Coldwire excluded its whole mount point from
+  interception, which also made the debug page unreachable offline — exactly when you want
+  to look at the cache. Only the worker script and the manifest are excluded now; allowlist
+  the page like any other to have it offline.
+
 - The offline page's stylesheet no longer leaks into the app. Turbo's head merge copies new
   `<style>` elements in and never removes them, so visiting the offline page installed its
   `body { padding: … }` rule for the rest of the session and every later page rendered with

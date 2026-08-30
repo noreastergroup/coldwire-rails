@@ -14,11 +14,15 @@ module Coldwire
       yield config
     end
 
-    # Paths the worker never intercepts: whatever the host excluded, plus Coldwire's own
-    # endpoints. Caching the worker or the prefetch manifest would strand the app on a
-    # stale copy of the very thing meant to refresh it.
-    def excluded_paths(mount_path)
-      normalize(config.excluded_paths + [ mount_path ])
+    # Paths the worker never intercepts: whatever the host excluded, plus the engine endpoints
+    # passed in.
+    #
+    # Only two of Coldwire's own endpoints qualify — the worker script and the manifest —
+    # because caching either would strand the app on a stale copy of the thing meant to
+    # refresh it. The debug page is ordinary HTML and is left interceptable, so a host that
+    # wants to reach it offline can allowlist it like any other page.
+    def excluded_paths(*engine_paths)
+      normalize(config.excluded_paths + engine_paths)
     end
 
     # Serializes a mixed list of strings and Regexps into something the worker can rebuild.

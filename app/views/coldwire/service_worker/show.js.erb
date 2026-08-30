@@ -13,7 +13,7 @@
 
 const CACHE_NAME = <%= raw Coldwire.config.cache_name.to_json %>
 // Never intercepted: these go straight to the network, and fail outright when it is down.
-const EXCLUDED_PATHS = <%= raw Coldwire.excluded_paths(request.script_name).to_json %>
+const EXCLUDED_PATHS = <%= raw Coldwire.excluded_paths(coldwire.service_worker_path, coldwire.pack_path).to_json %>
 // Govern automatic caching only — the precache manifest ignores both.
 const CACHE_ALLOWLIST = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.cache_allowlist).to_json %>)
 const CACHE_BLOCKLIST = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.cache_blocklist).to_json %>)

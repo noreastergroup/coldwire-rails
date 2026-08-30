@@ -118,8 +118,12 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
 - The worker is served from the mount point, so its default scope is that directory. The
   response sends `Service-Worker-Allowed` and the registration snippet asks for the matching
   scope. Do not assume a root mount.
-- Coldwire's own paths are always excluded from interception — caching the worker or the
-  manifest would strand the app on a stale copy of the thing meant to refresh it.
+- Only two of Coldwire's own endpoints are excluded from interception: the worker script and
+  the manifest. Caching either would strand the app on a stale copy of the thing meant to
+  refresh it. The **debug page is not excluded** — it is ordinary HTML, and excluding the whole
+  mount made it unreachable offline, which is exactly when you want to inspect the cache. Hosts
+  allowlist it like any other page. Its precache button will fail offline, correctly; the
+  inspector, clear, and force-offline controls are client-side and still work.
 - Host apps override the offline page, offline frame, and debug page by shadowing the template
   paths. Keep those templates free of request context and current-user helpers: they are
   rendered when the worker script is built and embedded as string literals.

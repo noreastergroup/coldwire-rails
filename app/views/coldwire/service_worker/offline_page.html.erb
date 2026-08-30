@@ -14,46 +14,6 @@
     <meta name="turbo-cache-control" content="no-cache">
     <title>Offline</title>
 
-    <%# This page paints its own background. Without one the UA paints the dark-mode default
-        and the dark body text below is near-illegible on it. %>
-    <style>
-      :root { color-scheme: light dark; }
-      body {
-        margin: 0;
-        font-family: system-ui, -apple-system, sans-serif;
-        background: #ffffff;
-        color: #1f2937;
-
-        /* Hotwire Native apps often run the web view edge to edge, pinning it to the top
-           anchor rather than the safe area, so keep the content clear of the notch and the
-           home indicator. Additive, so there is 2rem of breathing room measured from the
-           safe edge rather than from the screen edge. */
-        padding:
-          calc(2rem + env(safe-area-inset-top, 0px))
-          calc(2rem + env(safe-area-inset-right, 0px))
-          calc(2rem + env(safe-area-inset-bottom, 0px))
-          calc(2rem + env(safe-area-inset-left, 0px));
-      }
-      /* State everything: `offline_head` pulls in the host's stylesheet, and a CSS reset there
-         (Tailwind's preflight, say) strips the UA defaults this used to rely on. */
-      h1 { font-size: 1.5rem; font-weight: 700; line-height: 1.25; margin: 0 0 0.5rem; }
-      p { font-size: 1rem; line-height: 1.5; margin: 0; }
-      .coldwire-retry {
-        display: inline-block;
-        margin-top: 1.5rem;
-        border-radius: 0.5rem;
-        background: #1f2937;
-        color: #ffffff;
-        padding: 0.625rem 1.25rem;
-        font-weight: 600;
-        text-decoration: none;
-      }
-      @media (prefers-color-scheme: dark) {
-        body { background: #111827; color: #e5e7eb; }
-        .coldwire-retry { background: #e5e7eb; color: #111827; }
-      }
-    </style>
-
     <%# Whatever your layout marks with data-turbo-track. Turbo will not render a page whose
         tracked elements differ from the current one's — it invalidates instead, and Hotwire
         Native answers that by showing a spinner and reloading, which can stick going back.
@@ -70,13 +30,70 @@
     <% end %>
   </head>
   <body>
-    <h1>You're offline</h1>
-    <p>This page isn't available offline. Reconnect and try again.</p>
+    <%# Deliberately in the body, and every selector scoped to .coldwire-offline.
 
-    <%# An empty href resolves to whatever URL this page was served for, which is the one
-        thing this template cannot know — it is baked when the worker script is built.
-        data-turbo="false" forces a real navigation: a Turbo visit to the identical URL can
-        be treated as same-page and do nothing at all. %>
-    <a class="coldwire-retry" href="" data-turbo="false">Try again</a>
+        Turbo's head merge copies new <style> elements in and never takes them out again —
+        only metas and titles are removed and replaced. A <style> in the head would therefore
+        install itself into the app for the rest of the session, and a bare `body { padding }`
+        rule would push every later page around until a full reload cleared it. In the body it
+        goes away with the body swap, and the scoping means it does nothing even if it does
+        somehow outlive this page. %>
+    <style>
+      .coldwire-offline {
+        /* Fixed rather than a body rule: fills the viewport whether or not the host's CSS
+           resets body margins, and without styling body itself. */
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        overflow-y: auto;
+        box-sizing: border-box;
+        color-scheme: light dark;
+        font-family: system-ui, -apple-system, sans-serif;
+        background: #ffffff;
+        color: #1f2937;
+
+        /* Hotwire Native apps often run the web view edge to edge, pinning it to the top
+           anchor rather than the safe area, so keep the content clear of the notch and the
+           home indicator. Additive, so there is 2rem of breathing room measured from the
+           safe edge rather than from the screen edge. */
+        padding:
+          calc(2rem + env(safe-area-inset-top, 0px))
+          calc(2rem + env(safe-area-inset-right, 0px))
+          calc(2rem + env(safe-area-inset-bottom, 0px))
+          calc(2rem + env(safe-area-inset-left, 0px));
+      }
+      /* State everything: `offline_head` pulls in the host's stylesheet, and a CSS reset there
+         (Tailwind's preflight, say) strips the UA defaults this would otherwise rely on. */
+      .coldwire-offline h1 { font-size: 1.5rem; font-weight: 700; line-height: 1.25; margin: 0 0 0.5rem; }
+      .coldwire-offline p { font-size: 1rem; line-height: 1.5; margin: 0; }
+      .coldwire-offline a {
+        display: inline-block;
+        margin-top: 1.5rem;
+        border-radius: 0.5rem;
+        background: #1f2937;
+        color: #ffffff;
+        padding: 0.625rem 1.25rem;
+        font-size: 1rem;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      @media (prefers-color-scheme: dark) {
+        .coldwire-offline { background: #111827; color: #e5e7eb; }
+        .coldwire-offline a { background: #e5e7eb; color: #111827; }
+      }
+    </style>
+
+    <div class="coldwire-offline">
+      <h1>You're offline</h1>
+      <p>This page isn't available offline. Reconnect and try again.</p>
+
+      <%# An empty href resolves to whatever URL this page was served for, which is the one
+          thing this template cannot know — it is baked when the worker script is built.
+          data-turbo="false" forces a real navigation: a Turbo visit to the identical URL can
+          be treated as same-page and do nothing at all. %>
+      <a href="" data-turbo="false">Try again</a>
+    </div>
   </body>
 </html>

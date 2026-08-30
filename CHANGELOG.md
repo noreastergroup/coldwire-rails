@@ -34,6 +34,12 @@
 
 ### Fixed
 
+- The offline page's stylesheet no longer leaks into the app. Turbo's head merge copies new
+  `<style>` elements in and never removes them, so visiting the offline page installed its
+  `body { padding: … }` rule for the rest of the session and every later page rendered with
+  the wrong spacing until a full reload. The CSS now lives in the body, scoped to
+  `.coldwire-offline`.
+
 - `offline_head`: the offline page can now carry the host's `data-turbo-track` elements.
   Without them Turbo refused to render it and invalidated instead, and Hotwire Native answers
   an invalidation by showing a spinner and reloading — which sticks when it happens mid-pop

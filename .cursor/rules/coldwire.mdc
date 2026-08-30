@@ -88,6 +88,12 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
   recovers, but on a back navigation it runs mid-pop and the spinner never clears. Because
   `offline_head` pulls the host's stylesheet in, the fallback must state its own typography
   rather than relying on UA defaults a reset would strip.
+- The fallback page's CSS goes in the **body**, scoped to `.coldwire-offline`. Turbo's head
+  merge copies new `<style>` and `<link rel=stylesheet>` elements in and never removes them —
+  only provisional elements (metas, title) are replaced. A `<style>` in the head therefore
+  installs itself into the host app for the rest of the session, and a bare `body { padding }`
+  rule pushes every later page around until a full reload clears it. In the body it goes with
+  the body swap; the scoping means it is inert even if it does outlive the page.
 - Only return HTML when the request wants HTML (`mode === "navigate"`, `destination ===
   "document"`, or an `Accept` containing `text/html`). Everything else gets an empty 504 — an
   HTML body just produces a broken asset.

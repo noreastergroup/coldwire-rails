@@ -200,7 +200,11 @@ and yours should too if you override the template.
 
 ### Overriding the templates
 
-Two things to keep if you override the page template:
+Three things to keep if you override the page template:
+
+- **CSS in the body, scoped.** Turbo's head merge copies new `<style>` elements into the app
+  and never removes them, so a `<style>` in the head — or any unscoped selector — outlives the
+  offline page and restyles everything after it until a full reload.
 
 - **The Turbo import.** Hotwire Native shows its own error screen for any page where
   `window.Turbo` never appears. Import Turbo alone rather than your app entry point — offline,

@@ -19,7 +19,7 @@ module Coldwire
       # so a missing semicolon here throws and takes the registration down with it.
       javascript_tag(nonce: true) do
         [ coldwire_identity_script, coldwire_offline_marker_script,
-          coldwire_auto_sync_script, coldwire_register_script ]
+          coldwire_forced_offline_script, coldwire_auto_sync_script, coldwire_register_script ]
           .compact
           .join("\n")
           .html_safe
@@ -164,6 +164,40 @@ module Coldwire
           document.addEventListener("turbo:load", sync)
           window.addEventListener("online", sync)
           sync()
+        })();
+      JS
+    end
+
+    # Re-asserts "force offline" on every page load.
+    #
+    # The worker keeps that flag in a variable, and the browser shuts idle workers down — so
+    # left alone it silently switches itself off, which makes the one control you use to test
+    # offline behaviour untrustworthy. localStorage remembers; each page load reminds the
+    # worker.
+    #
+    # Only the on state is re-sent. Off is what a restarted worker already believes, and
+    # broadcasting it would fight the debug page's own toggle.
+    def coldwire_forced_offline_script
+      <<~JS
+        (function () {
+          if (!("serviceWorker" in navigator)) return
+
+          function apply() {
+            try {
+              if (window.localStorage.getItem("coldwire-forced") !== "1") return
+            } catch (error) {
+              return
+            }
+
+            navigator.serviceWorker.ready.then(function (registration) {
+              if (registration.active) {
+                registration.active.postMessage({ type: "setForcedOffline", value: true })
+              }
+            })
+          }
+
+          document.addEventListener("turbo:load", apply)
+          apply()
         })();
       JS
     end

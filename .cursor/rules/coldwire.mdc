@@ -185,10 +185,20 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
 - `navigator.onLine` answers "is a network interface up", not "can I reach the server". In a
   web view it is true whenever wifi is on, so a stopped server still reads as online. Trust it
   only when it says **false** — that is conclusive — and otherwise probe.
-- Probe the worker script: no authentication, no database, and it is excluded from the cache so
-  it can never be answered from a stale copy. Any response counts, including a 401 or a
-  redirect — the question is whether the server answered, not what it said.
+- Probe `probe_path` (Rails' health check by default): no authentication, no database, almost
+  no response. Any answer counts, including a 401 or a redirect — the question is whether the
+  server answered, not what it said.
+- The probe path is **always** added to `EXCLUDED_PATHS`. An intercepted probe is answered by
+  the worker even with the network down, so it would report reachable exactly when it is not.
 - Probes race, so tag each one and let only the newest write its result.
+
+## Forced offline
+
+- The worker holds the flag in a variable and browsers shut idle workers down, so it must be
+  re-asserted from `localStorage` on every page load — otherwise the one control used to test
+  offline behaviour silently switches itself off mid-session.
+- Re-assert the **on** state only. Off is what a restarted worker already believes, and
+  broadcasting it would fight the debug page's own toggle.
 
 ## Manifest sync
 

@@ -135,6 +135,9 @@ Coldwire.configure do |config|
   # Treat "/map" and "/map?lat=1&zoom=9" as the same cached page. On by default.
   config.ignore_query_params = true
 
+  # What the debug page pings to tell online from offline. Always excluded from the cache.
+  config.probe_path = "/up"
+
   # Never intercept these path prefixes — they go straight to the network and fail outright
   # when it is down. Coldwire's own routes are excluded automatically.
   config.excluded_paths = [ "/up", "/cable" ]
@@ -249,9 +252,10 @@ alongside your own paths. The worker script and the manifest are never cached, s
 will fail while offline; the inspector, **Clear cache**, and **Force offline** are client-side
 and keep working.
 
-> **Force offline is a convenience, not a test harness.** The flag lives in a worker
-> variable, and browsers terminate idle service workers — on restart it silently resets to
-> off. Airplane mode is the trustworthy test.
+**Force offline** holds across the whole app: the flag lives in a worker variable and browsers
+terminate idle workers, so every page load re-asserts it from `localStorage`. The network row
+pings `probe_path` rather than reading `navigator.onLine`, which only reports whether an
+interface is up and stays `true` with the server stopped.
 
 ---
 

@@ -51,6 +51,17 @@ module Coldwire
     # query. Set false if your app leans on query strings for anything you cache.
     attr_accessor :ignore_query_params
 
+    # Path the debug page pings to tell online from offline.
+    #
+    # navigator.onLine only reports whether a network interface is up — in a web view it is
+    # true whenever wifi is on, so a stopped server still reads as online. The page has to
+    # actually reach something. Rails' health check is the cheapest thing that exists: no
+    # authentication, no database, and almost no response.
+    #
+    # Always excluded from interception. A probe answered by the worker resolves even when
+    # the network is down, which is precisely backwards.
+    attr_accessor :probe_path
+
     # Paths the worker must never intercept, as prefix strings. Health checks and anything
     # streaming belong here. The engine's own paths are added automatically.
     #
@@ -126,6 +137,7 @@ module Coldwire
     def initialize
       @cache_name = "coldwire"
       @scope = "/"
+      @probe_path = "/up"
       @excluded_paths = [ "/up" ]
       @cache_allowlist = []
       @cache_blocklist = []

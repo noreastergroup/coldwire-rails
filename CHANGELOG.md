@@ -32,7 +32,15 @@
   plain-HTML fallback could never render in the app — it reported "Turbo is not present"
   and showed the SDK's error screen instead.
 
+- `probe_path` (default `/up`): what the debug page pings to tell online from offline. Always
+  excluded from interception, since a probe the worker answers resolves even with the network
+  down.
+
 ### Fixed
+
+- Forced offline switched itself off mid-session. The worker holds the flag in a variable and
+  browsers shut idle workers down, so it is now re-asserted from `localStorage` on every page
+  load and holds across the whole app.
 
 - The debug page reported "Online" while the server was unreachable. It read
   `navigator.onLine`, which only says whether a network interface is up — true whenever wifi

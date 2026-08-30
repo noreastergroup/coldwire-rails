@@ -180,6 +180,16 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
   identity escapes, so `\A` becomes a literal "A" and the rule silently never matches — and
   reject the `x` and `m` flags, which mean different things in JS.
 
+## Reachability
+
+- `navigator.onLine` answers "is a network interface up", not "can I reach the server". In a
+  web view it is true whenever wifi is on, so a stopped server still reads as online. Trust it
+  only when it says **false** — that is conclusive — and otherwise probe.
+- Probe the worker script: no authentication, no database, and it is excluded from the cache so
+  it can never be answered from a stale copy. Any response counts, including a 401 or a
+  redirect — the question is whether the server answered, not what it said.
+- Probes race, so tag each one and let only the newest write its result.
+
 ## Manifest sync
 
 - There is no background scheduling primitive to build on: WebKit has no Background Sync,

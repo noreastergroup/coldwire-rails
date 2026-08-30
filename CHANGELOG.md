@@ -34,6 +34,11 @@
 
 ### Fixed
 
+- The debug page reported "Online" while the server was unreachable. It read
+  `navigator.onLine`, which only says whether a network interface is up — true whenever wifi
+  is on, including with the server stopped. It now probes the server and distinguishes
+  "Offline" from "Offline · server unreachable".
+
 - The debug page can now be cached. Coldwire excluded its whole mount point from
   interception, which also made the debug page unreachable offline — exactly when you want
   to look at the cache. Only the worker script and the manifest are excluded now; allowlist

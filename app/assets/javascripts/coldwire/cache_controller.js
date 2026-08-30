@@ -7,7 +7,7 @@ const TIMESTAMP_HEADER = "timestamp"
 
 // Drives the Coldwire debug page: inspect the cache, precache the manifest, force offline.
 export default class extends Controller {
-  static values = { packUrl: String, autoSync: Boolean, syncInterval: Number }
+  static values = { packUrl: String, probeUrl: String, autoSync: Boolean, syncInterval: Number }
   static targets = [
     "status",
     "connection",
@@ -298,15 +298,47 @@ export default class extends Controller {
     }
   }
 
-  renderConnection() {
+  // navigator.onLine answers "is a network interface up", not "can I reach the server". In a
+  // web view it is true whenever wifi is on, so a stopped server still reads as Online — which
+  // is the one moment you are looking at this page to find out otherwise. Trust it only when
+  // it says false, which is conclusive, and otherwise ask the server.
+  async renderConnection() {
     if (!this.hasConnectionTarget) return
-    const forced = this.hasForcedToggleTarget && this.forcedToggleTarget.checked
-    if (forced) {
+
+    if (this.hasForcedToggleTarget && this.forcedToggleTarget.checked) {
       this.connectionTarget.textContent = "Forced offline"
-    } else if (navigator.onLine) {
-      this.connectionTarget.textContent = "Online"
-    } else {
+      return
+    }
+
+    if (!navigator.onLine) {
       this.connectionTarget.textContent = "Offline"
+      return
+    }
+
+    this.connectionTarget.textContent = "Checking…"
+
+    // A later check can finish after an earlier one; only the newest may write.
+    const token = (this.connectionToken = (this.connectionToken || 0) + 1)
+    const reachable = await this.serverReachable()
+    if (token !== this.connectionToken) return
+
+    this.connectionTarget.textContent = reachable ? "Online" : "Offline · server unreachable"
+  }
+
+  async serverReachable() {
+    if (!this.hasProbeUrlValue) return navigator.onLine
+
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 4000)
+
+    try {
+      // Any answer at all means reachable — a 401 or a redirect is still the server talking.
+      await fetch(this.probeUrlValue, { method: "HEAD", cache: "no-store", signal: controller.signal })
+      return true
+    } catch {
+      return false
+    } finally {
+      window.clearTimeout(timeout)
     }
   }
 

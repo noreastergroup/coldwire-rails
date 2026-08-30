@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Renamed the gem to `coldwire-rails`, following turbo-rails and importmap-rails. The module
+  is still `Coldwire`, so nothing in an app's own code changes — only the Gemfile line.
+
 - `auto_sync`: the worker keeps the precache manifest current on its own. Fetches newly
   listed URLs, refetches copies older than `max_age`, retires URLs the manifest dropped, and
   stops at `sync_batch_limit` per run. Triggered on page load and throttled, because WebKit

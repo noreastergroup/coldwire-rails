@@ -3,7 +3,7 @@
 require_relative "lib/coldwire/version"
 
 Gem::Specification.new do |spec|
-  spec.name        = "coldwire"
+  spec.name        = "coldwire-rails"
   spec.version     = Coldwire::VERSION
   spec.authors     = [ "Stuart Yamartino" ]
   spec.email       = [ "stuart@noreastergroup.com" ]
@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
   spec.description = "When your Hotwire wires go cold. A Rails engine that serves a " \
                      "Cache API service worker, precaches the pages you nominate, and " \
                      "falls back to an offline view Turbo and Hotwire Native will render."
-  spec.homepage    = "https://github.com/stuyam/coldwire"
+  spec.homepage    = "https://github.com/stuyam/coldwire-rails"
   spec.license     = "MIT"
 
   spec.required_ruby_version = ">= 3.1.0"

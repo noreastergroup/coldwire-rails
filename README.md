@@ -58,8 +58,11 @@ gives everything else an empty `504`.
 
 ```ruby
 # Gemfile
-gem "coldwire"
+gem "coldwire-rails"
 ```
+
+The gem is `coldwire-rails`; everything in it lives under `Coldwire`, the way `turbo-rails`
+provides `Turbo`.
 
 Mount the engine:
 

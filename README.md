@@ -120,6 +120,10 @@ Coldwire.configure do |config|
   # limits it to the native user agent so browser tests stay uncached.
   config.register_if = ->(request) { request.user_agent.to_s.include?("Hotwire Native") }
 
+  # Must match the data-turbo-track elements in your layout, or Turbo invalidates instead of
+  # rendering and Hotwire Native sticks on a spinner going back.
+  config.offline_head = -> { stylesheet_link_tag "application", "data-turbo-track": "reload" }
+
   # The importmap module the offline page loads. Hotwire Native rejects any page without
   # window.Turbo, so the fallback has to boot Turbo like a real page. Set to nil if you are
   # not on importmap-rails, and load Turbo your own way in the template.
@@ -174,6 +178,27 @@ Create either file in your own app to replace Coldwire's:
 
 Both offline templates are rendered at worker-build time and embedded in the script, so they
 are plain markup — no request context, no helpers that need a current user.
+
+### Match your layout's tracked elements
+
+**Set `offline_head`.** Turbo will not render a page whose `data-turbo-track="reload"`
+elements differ from the current page's — it invalidates instead. Hotwire Native answers an
+invalidation by showing a spinner and reloading, which survives going forward but can leave
+the spinner up for good when it happens mid-pop on a back navigation.
+
+So the offline page has to carry the same tracked elements as your real pages, in the same
+order. Whatever your layout tracks goes here:
+
+```ruby
+config.offline_head = -> { stylesheet_link_tag "application", "data-turbo-track": "reload" }
+```
+
+Coldwire emits its importmap after this, matching the usual stylesheets-then-scripts order.
+Note that this pulls your stylesheet into the offline page, so a CSS reset there applies to
+it — Coldwire's own styles state everything explicitly rather than relying on UA defaults,
+and yours should too if you override the template.
+
+### Overriding the templates
 
 Two things to keep if you override the page template:
 

@@ -34,6 +34,11 @@
 
 ### Fixed
 
+- `offline_head`: the offline page can now carry the host's `data-turbo-track` elements.
+  Without them Turbo refused to render it and invalidated instead, and Hotwire Native answers
+  an invalidation by showing a spinner and reloading — which sticks when it happens mid-pop
+  on a back navigation, leaving the app frozen until it is quit.
+
 - The cache identity check wiped the whole cache whenever `localStorage` was empty.
   `getItem` returns null when nothing is stored, and localStorage and the cache store are
   evicted independently, so a browser that had simply lost its localStorage discarded a

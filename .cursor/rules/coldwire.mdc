@@ -81,6 +81,13 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
   and do nothing. The frame uses the `coldwire:retry-url` token, substituted with
   `request.url` and escaped; an empty href inside a frame resolves to the *page* and would
   load the whole document into the card.
+- The fallback page's `[data-turbo-track=reload]` elements must match a real page's, in the
+  same order — that is what `offline_head` is for. Turbo refuses to render a page whose
+  tracked signature differs and calls `pageInvalidated`; the SDK answers that by showing the
+  activity indicator and reloading (`Session#webViewDidInvalidatePage`). Going forward that
+  recovers, but on a back navigation it runs mid-pop and the spinner never clears. Because
+  `offline_head` pulls the host's stylesheet in, the fallback must state its own typography
+  rather than relying on UA defaults a reset would strip.
 - Only return HTML when the request wants HTML (`mode === "navigate"`, `destination ===
   "document"`, or an `Accept` containing `text/html`). Everything else gets an empty 504 — an
   HTML body just produces a broken asset.

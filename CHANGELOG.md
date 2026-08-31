@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+- Automatic sync works on every page, not just the debug page. Both the head snippet and the
+  debug page listen for the worker with `addEventListener`, and a `ServiceWorkerContainer`'s
+  message queue starts *disabled* — setting `onmessage` enables it, `addEventListener` does
+  not. So they listened faithfully and heard nothing: no progress, no counts, and a clock
+  that never advanced, which is why a sync never appeared to have happened while you were on
+  another page. Both now call `startMessages()`.
+
+- The sync clock no longer depends on broadcasts arriving at all. The head snippet asks for a
+  run over a `MessageChannel` it owns and settles the clock from the reply on that port.
+  Leaving a page mid-sync drops that port and records nothing — which is the honest result:
+  the stamp stays old, and the next page joins the run still in flight and records it when it
+  finishes.
+
 - The debug page starts its own sync when its countdown runs out, through the same path as
   its button — spinner, progress bar and all. It used to only *display* a deadline that a
   separate head snippet was responsible for acting on, and whenever those two clocks

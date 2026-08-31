@@ -250,6 +250,14 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
   acting on: those are two clocks, and every time they disagreed the page sat on "due now"
   with nothing scheduled and no way to tell which half had failed. For the same reason it
   writes the stamp itself on a complete run rather than trusting the snippet to.
+- `navigator.serviceWorker.startMessages()` is mandatory wherever a broadcast is listened for
+  with `addEventListener`. A ServiceWorkerContainer's message queue starts *disabled*; setting
+  `onmessage` enables it, `addEventListener` does not. Miss this and the page listens
+  faithfully and hears nothing — no progress, no counts, no outcome, and a clock that never
+  advances. It is also invisible to any harness that dispatches synthetic MessageEvents.
+- The clock is settled by the run's own reply on a MessagePort the page opened, never by a
+  broadcast. Broadcasts are for the UI and for holding the retry off; if they go missing the
+  scheduling must still be correct.
 - The open page is the clock. WebKit has no Background Sync, so on load the head snippet
   works out when a sync is next owed and sleeps exactly that long with a single `setTimeout`
   — never a poll. An overdue deadline, including never having synced, is a delay of zero.

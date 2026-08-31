@@ -174,44 +174,63 @@ module Coldwire
               // The worker hands back the run already in flight rather than starting a
               // second, so asking twice costs nothing.
               var worker = registration.active || navigator.serviceWorker.controller
-              if (worker) worker.postMessage({ type: "sync" })
+              if (!worker) return
+
+              // Ask over a channel this page owns, and hear the outcome on it. A page that
+              // navigates away mid-run takes its port with it and records nothing — which is
+              // the honest result: the stamp stays old, and the next page picks the work up
+              // where the cache left off.
+              var channel = new MessageChannel()
+              channel.port1.onmessage = function (event) { settle(event.data) }
+              worker.postMessage({ type: "sync" }, [ channel.port2 ])
             })
           }
 
+          // What a finished run means for the clock. Reached from the run's own reply, so
+          // this does not depend on broadcasts arriving.
+          function settle(result) {
+            // Only a run that got through the whole manifest restarts the clock.
+            if (result && result.complete) {
+              write(stampKey, Date.now())
+              write(attemptsKey, 0)
+              write(backoffKey, 0)
+              return schedule()
+            }
+
+            // Count finished-but-incomplete runs, not messages sent. A manifest holding a
+            // URL that will never fetch would otherwise be retried for the life of the
+            // session; past the limit, wait out an interval before trying again.
+            //
+            // Backing off is deliberately not the same as syncing: the stamp keeps saying
+            // when the cache was actually brought up to date, however long ago that was.
+            var attempts = stamp(attemptsKey) + 1
+
+            if (attempts >= maxAttempts) {
+              write(attemptsKey, 0)
+              write(backoffKey, Date.now() + interval)
+              return schedule()
+            }
+
+            write(attemptsKey, attempts)
+            // Sooner than the interval, but never instantly — the deadline is already in the
+            // past, so scheduling off that alone would retry in a tight loop.
+            schedule(Math.min(interval, attempts * 2000))
+          }
+
           if ("serviceWorker" in navigator) {
+            // A ServiceWorkerContainer starts with its message queue disabled. Setting
+            // onmessage enables it; addEventListener alone does not, and this call is the
+            // documented way to enable it for a listener registered this way. Without it a
+            // page can sit and never hear a word the worker says.
+            if (navigator.serviceWorker.startMessages) navigator.serviceWorker.startMessages()
+
+            // Broadcasts are for keeping the retry at bay while a run is visibly working.
+            // The clock itself is settled by the reply, below, which arrives on a port this
+            // page opened and so cannot be missed the way a broadcast can.
             navigator.serviceWorker.addEventListener("message", function (event) {
               var data = event.data
               if (!data || data.type !== "coldwire:sync") return
-
-              // Still talking, so still alive: hold the retry off rather than counting it out.
-              if (data.state !== "finished") return schedule(silence)
-
-              // Only a run that got through the whole manifest restarts the clock.
-              if (data.complete) {
-                write(stampKey, Date.now())
-                write(attemptsKey, 0)
-                write(backoffKey, 0)
-                return schedule()
-              }
-
-              // Count finished-but-incomplete runs, not messages sent. A manifest holding a
-              // URL that will never fetch would otherwise be retried for the life of the
-              // session; past the limit, wait out an interval before trying again.
-              //
-              // Backing off is deliberately not the same as syncing: the stamp keeps saying
-              // when the cache was actually brought up to date, however long ago that was.
-              var attempts = stamp(attemptsKey) + 1
-
-              if (attempts >= maxAttempts) {
-                write(attemptsKey, 0)
-                write(backoffKey, Date.now() + interval)
-                return schedule()
-              }
-
-              write(attemptsKey, attempts)
-              // Sooner than the interval, but never instantly — the deadline is already in
-              // the past, so scheduling off that alone would retry in a tight loop.
-              schedule(Math.min(interval, attempts * 2000))
+              if (data.state !== "finished") schedule(silence)
             })
           }
 

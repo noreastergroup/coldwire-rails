@@ -52,6 +52,10 @@ export default class extends Controller {
     this.onWorkerMessage = (event) => this.handleSyncMessage(event)
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.addEventListener("message", this.onWorkerMessage)
+      // A ServiceWorkerContainer starts with its message queue disabled. Setting onmessage
+      // enables it; addEventListener alone does not. Without this the page can listen
+      // faithfully and never hear a thing — no progress, no counts, no outcome.
+      if (navigator.serviceWorker.startMessages) navigator.serviceWorker.startMessages()
     }
 
     this.restoreForced()

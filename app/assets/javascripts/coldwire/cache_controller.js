@@ -61,7 +61,7 @@ export default class extends Controller {
 
     if (data.state === "started") {
       const retired = data.retired ? `, retired ${data.retired}` : ""
-      this.setSyncStatus(`Syncing ${data.batch} of ${data.pending} outstanding${retired}…`)
+      this.setSyncStatus(`Syncing ${data.pending} outstanding${retired}…`)
     } else if (data.state === "progress") {
       const noun = data.phase === "assets" ? "Assets" : "Pages"
       this.setSyncStatus(data.total ? `${noun} ${data.done} of ${data.total}` : `${noun}: none`)
@@ -78,9 +78,9 @@ export default class extends Controller {
     const parts = [ `Cached ${data.cached}` ]
     if (data.retired) parts.push(`retired ${data.retired}`)
     if (data.failed?.length) parts.push(`${data.failed.length} failed`)
-    // An incomplete run is normal, not an error: the batch limit stops it and the next page
-    // load carries on.
-    if (!data.complete) parts.push(`${data.remaining} still to go`)
+    // A sync attempts the whole manifest, so anything left is something that would not
+    // fetch. It stays missing, so the next sync finds it and tries again.
+    if (!data.complete) parts.push(`${data.remaining} to retry`)
 
     return `${parts.join(", ")}.`
   }

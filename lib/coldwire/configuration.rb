@@ -126,9 +126,12 @@ module Coldwire
     # URL that can never be fetched would try again on every single navigation, forever.
     attr_accessor :sync_max_attempts
 
-    # Most pages one sync will fetch, so a first run on a cellular connection does not pull
-    # the whole manifest at once. The rest are picked up by later syncs. 0 means no limit.
-    attr_accessor :sync_batch_limit
+    # How many fetches a sync runs at once.
+    #
+    # A sync works through the whole manifest in one pass. Sequential would take as many round
+    # trips as there are URLs, and all-at-once would open a connection per URL and stall the
+    # app's own requests behind them — so a fixed number of lanes pull from one queue.
+    attr_accessor :sync_concurrency
 
     # Returns the list of paths to precache. Evaluated in the controller, so route helpers
     # and the current user are both available.
@@ -151,7 +154,7 @@ module Coldwire
       @auto_sync = false
       @sync_interval = 6 * 60 * 60
       @max_age = 7 * 24 * 60 * 60
-      @sync_batch_limit = 25
+      @sync_concurrency = 4
       @sync_max_attempts = 25
     end
 

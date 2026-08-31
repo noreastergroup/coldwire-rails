@@ -24,7 +24,7 @@ const RETRY_URL_TOKEN = "coldwire:retry-url"
 // Manifest sync.
 const PACK_PATH = <%= raw coldwire.pack_path.to_json %>
 const MAX_AGE = <%= raw Coldwire.config.max_age ? Coldwire.config.max_age.to_i.to_json : "null" %>
-const SYNC_BATCH_LIMIT = <%= raw Coldwire.config.sync_batch_limit.to_i.to_json %>
+const SYNC_CONCURRENCY = <%= raw Coldwire.config.sync_concurrency.to_i.to_json %>
 // Marks entries the manifest owns, so a sync can retire the ones it dropped without
 // touching assets or pages picked up by ordinary browsing.
 const MANAGED_HEADER = "coldwire-managed"
@@ -303,20 +303,20 @@ async function runSync() {
     if (!key || !at || (MAX_AGE !== null && now - at > MAX_AGE)) pending.push(href)
   }
 
-  const batch = SYNC_BATCH_LIMIT > 0 ? pending.slice(0, SYNC_BATCH_LIMIT) : pending
-
   // Every open page hears about this, not just the one that asked. A sync outlives the page
   // that triggered it, so by the time it lands the user is usually somewhere else — and the
   // page that started it can no longer record that it finished, or show it happening.
-  notifyClients({ type: SYNC_MESSAGE, state: "started", pending: pending.length, batch: batch.length, retired })
+  notifyClients({ type: SYNC_MESSAGE, state: "started", pending: pending.length, retired })
 
-  const result = await prefetchUrls(batch, (progress) => {
+  const result = await prefetchUrls(pending, (progress) => {
     notifyClients({ type: SYNC_MESSAGE, state: "progress", ...progress })
   })
 
-  const remaining = pending.length - batch.length
+  // The whole manifest was attempted, so what is left is what would not fetch. Those stay
+  // missing from the cache, so the next sync finds them pending again and tries once more.
+  const remaining = result.pageFailures
   const complete = remaining === 0
-  const finished = { ...result, retired, synced: batch.length, remaining, complete }
+  const finished = { ...result, retired, synced: pending.length - remaining, remaining, complete }
 
   await notifyClients({ type: SYNC_MESSAGE, state: "finished", ...finished })
 
@@ -368,43 +368,81 @@ function cacheUrl(href) {
   return url.href
 }
 
+// A fixed number of lanes pulling from one queue.
+//
+// One at a time takes as many round trips as there are URLs — minutes for a real manifest.
+// Promise.all over the lot opens a connection per URL and leaves the app's own requests
+// queued behind its own precaching, which is worse than slow.
+async function runPool(items, concurrency, handler) {
+  const queue = items.slice()
+  const lanes = Math.max(1, Math.min(concurrency, queue.length))
+
+  await Promise.all(Array.from({ length: lanes }, async () => {
+    while (queue.length) {
+      try {
+        await handler(queue.shift())
+      } catch {
+        // A lane has to outlive its work. Callers record their own failures, so this is a
+        // backstop — but without it one unexpected throw kills that lane, rejects the
+        // Promise.all, and abandons every URL still queued behind it.
+      }
+    }
+  }))
+}
+
+// One retry, because a sync runs for a while on a phone and a single dropped request should
+// not leave a page missing until the next interval comes round.
+async function fetchWithRetry(cache, href, options) {
+  try {
+    return await fetchAndCache(cache, href, options)
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    return fetchAndCache(cache, href, options)
+  }
+}
+
 async function prefetchUrls(inputUrls, onProgress = () => {}) {
   const cache = await caches.open(CACHE_NAME)
-  const cached = []
+  // A Set, not an array: lanes finish out of order and an array turns the "already have it"
+  // check into a scan per asset.
+  const cached = new Set()
   const failed = []
+  const pageFailures = []
   const assets = new Set()
 
   let done = 0
   onProgress({ phase: "pages", done, total: inputUrls.length })
 
-  for (const value of inputUrls) {
+  await runPool(inputUrls, SYNC_CONCURRENCY, async (value) => {
     try {
       const href = new URL(value, self.location.origin).href
-      const extra = await fetchAndCache(cache, href, { managed: true })
-      cached.push(href)
+      const extra = await fetchWithRetry(cache, href, { managed: true })
+      cached.add(href)
       extra.forEach((url) => assets.add(url))
     } catch {
       failed.push(String(value))
+      pageFailures.push(String(value))
     }
     onProgress({ phase: "pages", done: ++done, total: inputUrls.length })
-  }
+  })
 
   // Assets are only known once the pages are parsed, so they get their own count.
-  const pending = [...assets].filter((href) => !cached.includes(href))
+  const pending = [...assets].filter((href) => !cached.has(href))
   done = 0
   onProgress({ phase: "assets", done, total: pending.length })
 
-  for (const href of pending) {
+  await runPool(pending, SYNC_CONCURRENCY, async (href) => {
     try {
-      await fetchAndCache(cache, href)
-      cached.push(href)
+      await fetchWithRetry(cache, href)
+      cached.add(href)
     } catch {
       failed.push(href)
     }
     onProgress({ phase: "assets", done: ++done, total: pending.length })
-  }
+  })
 
-  return { ok: failed.length === 0, cached: cached.length, failed }
+  return { ok: failed.length === 0, cached: cached.size, failed, pageFailures: pageFailures.length }
 }
 
 async function fetchAndCache(cache, href, { managed = false } = {}) {

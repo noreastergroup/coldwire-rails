@@ -220,8 +220,15 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
 - `sync_max_attempts` is the circuit breaker for a manifest that can never finish; without it
   an unfetchable URL means a sync attempt on every navigation, forever.
 - One sync at a time (`syncing` promise). The page triggers on `turbo:load` and on `online`.
-- A sync fetches manifest URLs that are missing or older than `max_age`, skips the rest, and
-  stops at `sync_batch_limit` so a first run on cellular does not pull everything.
+- A sync attempts the **whole** manifest in one pass — missing or older than `max_age`, skipping
+  the rest. It does not stop partway; batching across page loads made the common case feel
+  broken.
+- Fetches run through `runPool`: a fixed number of lanes pulling one queue. Sequential costs a
+  round trip per URL; `Promise.all` over the lot opens a connection per URL and queues the
+  app's own requests behind its precaching. **A lane must catch handler errors** — without that
+  one unexpected throw rejects the `Promise.all` and abandons every URL still queued.
+- One retry per URL. A sync runs for a while on a phone and a single dropped request should not
+  leave a page missing until the next interval.
 - Retiring is limited to entries carrying `MANAGED_HEADER`, set only on manifest URLs
   themselves — never on the assets they reference, which are shared and would thrash. Assets
   and casually-browsed pages must survive a sync untouched.

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- A sync now works through the whole manifest in one pass, through a bounded concurrent pool
+  (`sync_concurrency`, default 4), retrying each URL once. Replaces `sync_batch_limit`, which
+  spread a first run across page loads and made syncing feel like it had stalled.
+
 - Renamed the gem to `coldwire-rails`, following turbo-rails and importmap-rails. The module
   is still `Coldwire`, so nothing in an app's own code changes — only the Gemfile line.
 

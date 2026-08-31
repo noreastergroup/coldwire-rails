@@ -15,6 +15,7 @@ async function entrySize(response) {
 
 const FORCED_KEY = "coldwire-forced"
 const SYNCED_AT_KEY = "coldwire-synced-at"
+const BACKOFF_KEY = "coldwire-sync-backoff"
 const SYNC_MESSAGE = "coldwire:sync"
 const TIMESTAMP_HEADER = "timestamp"
 
@@ -55,9 +56,15 @@ export default class extends Controller {
 
     this.restoreForced()
     this.refresh()
+
+    // Recomputed from the same clock the head snippet reads, rather than counted down from a
+    // number held here — a web view freezes timers when backgrounded, and a countdown that
+    // kept its own tally would come back wrong.
+    this.ticker = window.setInterval(() => this.renderSyncedAt(), 1000)
   }
 
   disconnect() {
+    window.clearInterval(this.ticker)
     window.removeEventListener("online", this.onOnline)
     window.removeEventListener("offline", this.onOnline)
     if ("serviceWorker" in navigator) {
@@ -72,6 +79,7 @@ export default class extends Controller {
     if (!data || data.type !== SYNC_MESSAGE) return
 
     if (data.state === "started") {
+      this.syncRunning = true
       const retired = data.retired ? `, retired ${data.retired}` : ""
       this.setSyncStatus(data.pending
         ? `Syncing ${data.pending} file${data.pending === 1 ? "" : "s"}${retired}…`
@@ -86,6 +94,7 @@ export default class extends Controller {
       // The bar carries the live count; the line above stays on the high-level "what".
       this.renderProgress(data)
     } else if (data.state === "finished") {
+      this.syncRunning = false
       this.syncSettled = true
       this.setSyncStatus(this.describeFinishedSync(data))
       this.hideProgress()
@@ -161,21 +170,40 @@ export default class extends Controller {
   renderSyncedAt() {
     if (!this.hasSyncedAtTarget) return
 
-    let stamp = null
+    const stamp = this.readStamp(SYNCED_AT_KEY)
+    const synced = stamp
+      ? `Synced ${this.formatCachedAt(Math.floor(stamp / 1000))}`
+      : "Never synced"
+    const next = this.describeNextSync(stamp)
+
+    this.syncedAtTarget.textContent = next ? `${synced} · ${next}` : synced
+    this.syncedAtTarget.title = stamp ? new Date(stamp).toLocaleString() : ""
+  }
+
+  // When the head snippet's next check will find a sync owed. Both read the same two keys,
+  // so this is the real countdown rather than an estimate of one.
+  describeNextSync(stamp) {
+    if (!this.autoSyncValue || this.syncIntervalValue <= 0) return ""
+    if (this.syncRunning) return "syncing now"
+
+    // A run that kept failing backs off for an interval without touching the stamp, so the
+    // wait can be longer than the stamp alone implies.
+    const dueAt = Math.max(stamp ? stamp + this.syncIntervalValue * 1000 : 0,
+                           this.readStamp(BACKOFF_KEY) || 0)
+    const seconds = Math.ceil((dueAt - Date.now()) / 1000)
+
+    return seconds > 0 ? `next in ${this.formatDuration(seconds)}` : "due now"
+  }
+
+  readStamp(key) {
+    let value = null
     try {
-      stamp = Number(window.localStorage.getItem(SYNCED_AT_KEY))
+      value = Number(window.localStorage.getItem(key))
     } catch {
       // Private mode and the like. The line just stays unknown.
     }
 
-    if (!Number.isFinite(stamp) || stamp <= 0) {
-      this.syncedAtTarget.textContent = "Never synced"
-      return
-    }
-
-    const date = new Date(stamp)
-    this.syncedAtTarget.textContent = `Synced ${this.formatCachedAt(Math.floor(stamp / 1000))}`
-    this.syncedAtTarget.title = date.toLocaleString()
+    return Number.isFinite(value) && value > 0 ? value : null
   }
 
   formatDuration(seconds) {

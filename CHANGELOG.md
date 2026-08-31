@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Automatic sync actually happens while you sit on a page. It used to fire only on load and
+  on a Turbo visit, so a page left open sat past its interval indefinitely and nothing
+  synced until you navigated. The snippet now checks once a second, and on returning to the
+  foreground — a backgrounded web view freezes its timers, so the interval alone cannot be
+  trusted to have kept counting. The debug page shows a live countdown to the next one.
+
+- A sync that keeps failing backs off for an interval instead of retrying every second, and
+  it no longer does that by writing the success stamp. "Synced 2 minutes ago" now only ever
+  describes a run that completed.
+
 - There is one way to fill the cache. "Precache" was a second path that fetched the manifest
   in the page and cached every URL regardless of age; it is gone, and "Sync now" runs the same
   pass the background sync runs, just without waiting for the interval. The `prefetch` worker

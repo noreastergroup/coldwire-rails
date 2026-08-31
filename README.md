@@ -242,11 +242,11 @@ Mounted at the engine root — `/coldwire` with the mount above. It gives you:
   red unreachable), how much is cached, and when it last synced. Reload and Clear sit beside
   it. The connection is decided by pinging `probe_path`, never by `navigator.onLine`.
 - **Force offline** — serve only from cache even with a connection. Holds across the app.
-- **Sync** — whether automatic sync is on and how often, when it last finished, and what it
-  is doing right now with a live progress bar. **Sync now** runs that same pass immediately
-  instead of waiting for the interval — there is no second mechanism. It listens for the
-  worker's broadcasts, so it shows syncs it did not start, including one already running when
-  you opened the page.
+- **Sync** — whether automatic sync is on and how often, when it last ran and a live
+  countdown to the next one, and what it is doing right now with a progress bar. **Sync now**
+  runs that same pass immediately instead of waiting out the countdown — there is no second
+  mechanism. It listens for the worker's broadcasts, so it shows syncs it did not start,
+  including one already running when you opened the page.
 - **Cached** — every cached URL with size and how long ago it was stored
 
 It's styled with plain CSS and assumes no framework. Put it behind whatever authentication

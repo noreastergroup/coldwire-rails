@@ -91,9 +91,10 @@ module Coldwire
       JS
     end
 
-    # Hands the manifest to the worker and steps back. WebKit has no Background Sync, so a
-    # page load is the only moment anything can be kicked off — but the work itself runs in
-    # the worker, which keeps going after this page is gone.
+    # Hands the manifest to the worker and steps back. WebKit has no Background Sync, so an
+    # open page is the only clock there is — it checks on load, on each Turbo visit, on
+    # coming back to the foreground, and on a one-second tick for the case nobody navigates
+    # at all. The work itself runs in the worker, which keeps going after this page is gone.
     #
     # The stamp is written only when the worker reports the manifest fully in sync, and by
     # whichever page is open at that moment rather than the one that started it. So a sync cut
@@ -108,10 +109,27 @@ module Coldwire
 
       <<~JS
         (function () {
+          // Turbo copies head scripts it does not already recognise, and a per-request CSP
+          // nonce makes this one look new on every visit. Without this guard each visit would
+          // leave another ticker behind, all of them asking at once.
+          if (window.__coldwireAutoSync) return
+          window.__coldwireAutoSync = true
+
           var stampKey = "coldwire-synced-at"
           var attemptsKey = "coldwire-sync-attempts"
+          var backoffKey = "coldwire-sync-backoff"
           var interval = #{(Coldwire.config.sync_interval.to_i * 1000).to_json}
           var maxAttempts = #{Coldwire.config.sync_max_attempts.to_i.to_json}
+
+          // How often the open page asks itself whether a sync is owed. Cheap — two
+          // localStorage reads and a comparison — and it is the only clock there is.
+          var checkEvery = 1000
+
+          // A run reports itself as it works. While those reports keep coming there is
+          // nothing to start; after this much silence — a worker shut down mid-sync — the
+          // field is clear again and the next check may start a fresh one.
+          var silence = 30000
+          var activeUntil = 0
 
           function read(key) {
             try { return Number(window.localStorage.getItem(key)) } catch (error) { return NaN }
@@ -121,51 +139,86 @@ module Coldwire
             try { window.localStorage.setItem(key, String(value)) } catch (error) {}
           }
 
-          function due() {
-            var last = read(stampKey)
-            return !Number.isFinite(last) || last <= 0 || (Date.now() - last) > interval
+          function stale(key) {
+            var at = read(key)
+            return !Number.isFinite(at) || at <= 0
           }
 
-          // Only a finished sync sets the clock running again.
-          function settle() {
-            write(stampKey, Date.now())
-            write(attemptsKey, 0)
+          function due() {
+            var backoff = read(backoffKey)
+            if (Number.isFinite(backoff) && Date.now() < backoff) return false
+
+            return stale(stampKey) || (Date.now() - read(stampKey)) > interval
           }
 
           if ("serviceWorker" in navigator) {
             navigator.serviceWorker.addEventListener("message", function (event) {
               var data = event.data
               if (!data || data.type !== "coldwire:sync") return
-              // Only a run that got through the whole manifest restarts the clock. A batch
-              // that stopped at the limit, or failed, leaves the next page load to carry on.
-              if (data.state === "finished" && data.complete) settle()
+
+              if (data.state !== "finished") {
+                activeUntil = Date.now() + silence
+                return
+              }
+
+              activeUntil = 0
+
+              // Only a run that got through the whole manifest restarts the clock.
+              if (data.complete) {
+                write(stampKey, Date.now())
+                write(attemptsKey, 0)
+                write(backoffKey, 0)
+                return
+              }
+
+              // Count finished-but-incomplete runs, not messages sent. A manifest holding a
+              // URL that will never fetch would otherwise be retried for the life of the
+              // session; past the limit, wait out an interval before trying again.
+              //
+              // Backing off is deliberately not the same as syncing: the stamp keeps saying
+              // when the cache was actually brought up to date, however long ago that was.
+              var attempts = read(attemptsKey)
+              attempts = Number.isFinite(attempts) && attempts > 0 ? attempts : 0
+              attempts += 1
+
+              if (attempts >= maxAttempts) {
+                write(attemptsKey, 0)
+                write(backoffKey, Date.now() + interval)
+              } else {
+                write(attemptsKey, attempts)
+              }
             })
           }
 
           function sync() {
             // Deliberately not gated on navigator.onLine. A web view reports it unreliably,
             // and a false negative there means syncing never happens at all. A sync with no
-            // connection fails harmlessly and leaves no stamp, so the next load retries.
+            // connection fails harmlessly and leaves the stamp alone, so it is retried.
             if (!due()) return
+            if (Date.now() < activeUntil) return
             if (!("serviceWorker" in navigator)) return
 
-            var attempts = read(attemptsKey)
-            attempts = Number.isFinite(attempts) && attempts > 0 ? attempts : 0
-
-            // A manifest that can never finish would otherwise fetch on every navigation for
-            // the rest of the session. Give up and wait for the next interval instead.
-            if (attempts >= maxAttempts) return settle()
-            write(attemptsKey, attempts + 1)
-
             navigator.serviceWorker.ready.then(function (registration) {
-              // The worker ignores this if a sync is already running, so navigating during a
-              // long sync nudges it rather than starting a second one.
+              // The worker hands back the run already in flight rather than starting a
+              // second, so an extra nudge here costs nothing.
               if (registration.active) registration.active.postMessage({ type: "sync" })
             })
           }
 
           document.addEventListener("turbo:load", sync)
           window.addEventListener("online", sync)
+
+          // A backgrounded web view freezes its timers, so the interval below cannot be
+          // trusted to have kept counting. Coming back to the app is its own moment to check.
+          document.addEventListener("visibilitychange", function () {
+            if (!document.hidden) sync()
+          })
+
+          // The open page is not just a trigger, it is the clock. WebKit has no Background
+          // Sync to schedule against, so nothing else can wake this up — and a page left open
+          // past the interval has to notice by itself rather than waiting for a navigation
+          // that may never come.
+          window.setInterval(sync, checkEvery)
           sync()
         })();
       JS

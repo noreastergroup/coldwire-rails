@@ -239,6 +239,16 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
 
 - Follow subresources only — stylesheets, scripts, images, `srcset`, importmap entries. Never
   follow `<a href>` or this becomes a site crawler.
+- The open page is the clock. WebKit has no Background Sync, so the head snippet checks on
+  load, on `turbo:load`, on returning to the foreground, and on a one-second `setInterval`.
+  Drop the interval and a page nobody navigates away from never syncs, however long it sits.
+- That snippet must be re-entrant: Turbo copies head scripts it does not recognise, and a
+  per-request CSP nonce makes it look new every visit. `window.__coldwireAutoSync` guards it,
+  or each visit leaves another ticker behind.
+- Count failures per finished-incomplete run, never per message posted — with a once-a-second
+  check the latter burns `sync_max_attempts` in that many seconds. Backing off writes
+  `coldwire-sync-backoff`, never the `coldwire-synced-at` stamp: "Synced 2 minutes ago" must
+  only ever describe a run that actually completed.
 - There is exactly one way to fill the cache: `syncManifest()`. The debug page's button posts
   the same `sync` message a page load posts on a timer, so manual and automatic runs cannot
   drift apart. Do not add a second path that fetches the manifest page-side.

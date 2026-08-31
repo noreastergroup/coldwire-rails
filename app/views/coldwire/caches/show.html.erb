@@ -78,6 +78,16 @@
   .coldwire-empty { color: #9ca3af; font-size: 0.875rem; }
   .coldwire-status { padding: 0 0.25rem; font-size: 0.875rem; color: #6b7280; min-height: 1.25rem; }
 
+  /* A phone gives up a lot of its width to two sets of gutters — the page's and each card's.
+     Tighten both, and let the cards run closer to the edges where the room is worth more
+     than the margin. */
+  @media (max-width: 30rem) {
+    .coldwire { padding: 0.75rem 0.5rem; }
+    .coldwire h1 { font-size: 1.375rem; margin-bottom: 0.75rem; }
+    .coldwire-card { padding: 0.75rem; border-radius: 0.75rem; }
+    .coldwire-status { padding: 0; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .coldwire-icon-button[data-busy] svg,
     .coldwire-spinner,

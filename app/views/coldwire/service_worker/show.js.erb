@@ -76,17 +76,10 @@ self.addEventListener("message", (event) => {
     forcedOffline = Boolean(event.data.value)
     return reply({ ok: true, forcedOffline })
   }
+  // One way to fill the cache, whether a page load asked for it on a timer or somebody
+  // pressed the button. Progress goes out on the broadcast, not this port, so every open
+  // page sees the run and not just whoever started it.
   if (type === "sync") return reply(syncManifest())
-  if (type !== "prefetch") return
-
-  const urls = []
-  if (event.data.url) urls.push(event.data.url)
-  if (Array.isArray(event.data.urls)) urls.push(...event.data.urls)
-
-  // Prefetch streams progress over the same port before the final result; the page tells
-  // them apart by `type`.
-  const port = event.ports[0]
-  reply(prefetchUrls(urls, (progress) => port?.postMessage({ type: "progress", ...progress })))
 })
 
 function shouldHandle(request) {

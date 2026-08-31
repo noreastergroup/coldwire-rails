@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- There is one way to fill the cache. "Precache" was a second path that fetched the manifest
+  in the page and cached every URL regardless of age; it is gone, and "Sync now" runs the same
+  pass the background sync runs, just without waiting for the interval. The `prefetch` worker
+  message went with it. To rebuild from nothing, clear the cache and sync.
+
+- The debug page shows a live progress bar for *any* sync, not just one started by its own
+  button — the automatic one is the one that usually runs, and it used to move nothing but a
+  line of text. The "finished" broadcast is authoritative, so a worker that restarts mid-run
+  cannot leave the page spinning forever.
+
 - Debug page is titled "Offline settings" and shows a status light beside the network row:
   green online, amber forced offline, red no connection.
 

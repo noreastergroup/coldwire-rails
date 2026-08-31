@@ -20,7 +20,7 @@ const TIMESTAMP_HEADER = "timestamp"
 
 // Drives the Coldwire debug page: inspect the cache, precache the manifest, force offline.
 export default class extends Controller {
-  static values = { packUrl: String, probeUrl: String, autoSync: Boolean, syncInterval: Number }
+  static values = { probeUrl: String, autoSync: Boolean, syncInterval: Number }
   static targets = [
     "status",
     "connection",
@@ -28,8 +28,6 @@ export default class extends Controller {
     "summary",
     "entries",
     "forcedToggle",
-    "prefetchButton",
-    "prefetchLabel",
     "spinner",
     "progress",
     "progressBar",
@@ -39,7 +37,8 @@ export default class extends Controller {
     "autoSync",
     "syncedAt",
     "syncStatus",
-    "syncButton"
+    "syncButton",
+    "syncLabel"
   ]
 
   connect() {
@@ -74,12 +73,26 @@ export default class extends Controller {
 
     if (data.state === "started") {
       const retired = data.retired ? `, retired ${data.retired}` : ""
-      this.setSyncStatus(`Syncing ${data.pending} outstanding${retired}…`)
+      this.setSyncStatus(data.pending
+        ? `Syncing ${data.pending} file${data.pending === 1 ? "" : "s"}${retired}…`
+        : `Already up to date${retired}.`)
+      // Counts arrive with the first progress tick; until then the bar just says "working".
+      if (data.pending) this.showProgress("Starting…")
+      // Spin for a run this page did not start, but leave the buttons alone: a worker that
+      // dies mid-sync sends no "finished", and a permanently disabled page would be worse
+      // than a button you can press twice. Pressing it joins the run in flight anyway.
+      this.toggleSyncing(Boolean(data.pending))
     } else if (data.state === "progress") {
-      const noun = data.phase === "assets" ? "Assets" : "Pages"
-      this.setSyncStatus(data.total ? `${noun} ${data.done} of ${data.total}` : `${noun}: none`)
+      // The bar carries the live count; the line above stays on the high-level "what".
+      this.renderProgress(data)
     } else if (data.state === "finished") {
+      this.syncSettled = true
       this.setSyncStatus(this.describeFinishedSync(data))
+      this.hideProgress()
+      this.toggleBusy(false)
+      this.toggleSyncing(false)
+      // The stamp is written by the head snippet's listener, which is registered first and
+      // runs synchronously, so it is already up to date by the time this reads it.
       this.renderSyncedAt()
       this.renderCache()
     }
@@ -98,16 +111,33 @@ export default class extends Controller {
     return `${parts.join(", ")}.`
   }
 
-  // Forces a sync regardless of how recently one ran — the interval is a page-side throttle,
-  // and the worker does whatever it is asked.
+  // The same pass a page load kicks off by itself, minus the wait — the interval throttles
+  // only the automatic trigger, and asking by hand means now. The worker hands back the run
+  // already in flight rather than starting a second, so pressing this during a sync joins it.
+  //
+  // Progress and the closing summary arrive on the broadcast every page gets, so this run
+  // renders through handleSyncMessage exactly like one another tab started.
   async syncNow(event) {
     event?.preventDefault()
+    this.setStatus("")
+    this.syncSettled = false
+    this.toggleBusy(true)
+    this.toggleSyncing(true)
     this.setSyncStatus("Starting…")
+    this.showProgress("Starting…")
 
     try {
       await this.sendToWorker("sync", {}, 10 * 60 * 1000)
     } catch (error) {
-      this.setSyncStatus(error.message || "Sync failed")
+      // A sync that already reported itself finished has nothing to apologise for; the reply
+      // channel simply did not survive to say so.
+      if (!this.syncSettled) {
+        this.setSyncStatus(error.message || "Sync failed")
+        this.hideProgress()
+      }
+    } finally {
+      this.toggleBusy(false)
+      this.toggleSyncing(false)
     }
   }
 
@@ -124,8 +154,8 @@ export default class extends Controller {
     }
 
     this.autoSyncTarget.textContent = this.syncIntervalValue > 0
-      ? `Syncs automatically every ${this.formatDuration(this.syncIntervalValue)}`
-      : "Syncs automatically"
+      ? `Automatic sync is on — every ${this.formatDuration(this.syncIntervalValue)}`
+      : "Automatic sync is on"
   }
 
   renderSyncedAt() {
@@ -192,43 +222,6 @@ export default class extends Controller {
     this.refreshButtonTarget.disabled = busy
   }
 
-  async prefetch(event) {
-    event.preventDefault()
-    this.setStatus("Loading manifest…")
-    this.toggleBusy(true)
-    this.togglePrefetching(true)
-    this.showProgress("Loading manifest…")
-
-    try {
-      const urls = await this.fetchPackUrls()
-      if (urls.length === 0) {
-        this.setStatus("Nothing to precache.")
-        return
-      }
-
-      this.setStatus(`Prefetching ${urls.length} pages…`)
-      const result = await this.sendToWorker(
-        "prefetch",
-        { urls },
-        10 * 60 * 1000,
-        (progress) => this.renderProgress(progress)
-      )
-      const failed = result.failed?.length || 0
-      if (result.ok) {
-        this.setStatus(`Cached ${result.cached} files.`)
-      } else {
-        this.setStatus(`Cached ${result.cached} files, ${failed} failed.`)
-      }
-      await this.renderCache()
-    } catch (error) {
-      this.setStatus(error.message || "Prefetch failed")
-    } finally {
-      this.toggleBusy(false)
-      this.togglePrefetching(false)
-      this.hideProgress()
-    }
-  }
-
   showProgress(label) {
     if (this.hasProgressTarget) this.progressTarget.hidden = false
     this.setProgressBar(null)
@@ -272,25 +265,6 @@ export default class extends Controller {
     } else {
       this.progressTarget.setAttribute("aria-valuenow", String(percent))
     }
-  }
-
-  async fetchPackUrls() {
-    if (!this.packUrlValue) {
-      throw new Error("Manifest URL is missing")
-    }
-
-    const response = await fetch(this.packUrlValue, { headers: { Accept: "application/json" } })
-    // A signed-out request follows a redirect to the sign-in page and arrives here as a
-    // perfectly ok 200 of HTML, which would fail as an opaque JSON parse error.
-    if (response.redirected) {
-      throw new Error("Signed out — sign in and try again")
-    }
-    if (!response.ok) {
-      throw new Error(`Could not load manifest (${response.status})`)
-    }
-
-    const pack = await response.json()
-    return Array.isArray(pack.urls) ? pack.urls : []
   }
 
   async clear(event) {
@@ -517,7 +491,7 @@ export default class extends Controller {
     return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
   }
 
-  async sendToWorker(type, payload, timeoutMs, onProgress) {
+  async sendToWorker(type, payload, timeoutMs) {
     if (!("serviceWorker" in navigator)) {
       throw new Error("Service workers are not available in this web view")
     }
@@ -529,21 +503,11 @@ export default class extends Controller {
 
     return new Promise((resolve, reject) => {
       const { port1, port2 } = new MessageChannel()
-      let timeout = null
-      const arm = () => {
-        window.clearTimeout(timeout)
-        timeout = window.setTimeout(() => reject(new Error("Timed out")), timeoutMs)
-      }
-      arm()
+      // A worker torn down mid-job answers nobody, so every send needs a way out. For a sync
+      // that is a backstop only: the run reports itself over the broadcast either way.
+      const timeout = window.setTimeout(() => reject(new Error("Timed out")), timeoutMs)
 
       port1.onmessage = (event) => {
-        // Progress ticks keep the timeout alive, so it bounds silence, not total work.
-        if (event.data?.type === "progress") {
-          arm()
-          onProgress?.(event.data)
-          return
-        }
-
         window.clearTimeout(timeout)
         resolve(event.data)
       }
@@ -557,16 +521,16 @@ export default class extends Controller {
   }
 
   toggleBusy(disabled) {
-    if (this.hasPrefetchButtonTarget) this.prefetchButtonTarget.disabled = disabled
+    if (this.hasSyncButtonTarget) this.syncButtonTarget.disabled = disabled
     if (this.hasClearButtonTarget) this.clearButtonTarget.disabled = disabled
     if (this.hasRefreshButtonTarget) this.refreshButtonTarget.disabled = disabled
   }
 
-  // Only the prefetch button spins — toggleBusy also runs for Clear and Refresh.
-  togglePrefetching(active) {
+  // Only the sync button spins — toggleBusy also runs for Clear and Refresh.
+  toggleSyncing(active) {
     if (this.hasSpinnerTarget) this.spinnerTarget.hidden = !active
-    if (this.hasPrefetchLabelTarget) {
-      this.prefetchLabelTarget.textContent = active ? "Prefetching…" : "Precache"
+    if (this.hasSyncLabelTarget) {
+      this.syncLabelTarget.textContent = active ? "Syncing…" : "Sync now"
     }
   }
 }

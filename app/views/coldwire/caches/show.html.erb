@@ -99,7 +99,6 @@
 
 <div class="coldwire"
      data-controller="coldwire-cache"
-     data-coldwire-cache-pack-url-value="<%= coldwire.pack_path %>"
      data-coldwire-cache-probe-url-value="<%= Coldwire.config.probe_path %>"
      data-coldwire-cache-auto-sync-value="<%= Coldwire.config.auto_sync %>"
      data-coldwire-cache-sync-interval-value="<%= Coldwire.config.sync_interval.to_i %>">
@@ -113,8 +112,7 @@
           <span data-coldwire-cache-target="connection">Checking…</span>
         </p>
         <p class="coldwire-facts">
-          <span data-coldwire-cache-target="summary">Reading the cache…</span><br>
-          <span data-coldwire-cache-target="syncedAt">Never synced</span>
+          <span data-coldwire-cache-target="summary">Reading the cache…</span>
         </p>
       </div>
 
@@ -163,7 +161,12 @@
   <div class="coldwire-card">
     <h2>Sync</h2>
     <p class="coldwire-facts" style="margin-top: 0;">
+      Downloads the pages you need offline and drops the ones no longer listed. It runs on its
+      own in the background; <strong>Sync now</strong> runs that same pass immediately.
+    </p>
+    <p class="coldwire-facts">
       <span data-coldwire-cache-target="autoSync">Checking…</span><br>
+      <span data-coldwire-cache-target="syncedAt">Never synced</span><br>
       <span data-coldwire-cache-target="syncStatus">Idle</span>
     </p>
 
@@ -172,14 +175,8 @@
               data-coldwire-cache-target="syncButton"
               class="coldwire-button"
               data-action="click->coldwire-cache#syncNow">
-        Sync now
-      </button>
-      <button type="button"
-              class="coldwire-button"
-              data-coldwire-cache-target="prefetchButton"
-              data-action="click->coldwire-cache#prefetch">
         <span class="coldwire-spinner" data-coldwire-cache-target="spinner" aria-hidden="true" hidden></span>
-        <span data-coldwire-cache-target="prefetchLabel">Re-cache everything</span>
+        <span data-coldwire-cache-target="syncLabel">Sync now</span>
       </button>
     </div>
 

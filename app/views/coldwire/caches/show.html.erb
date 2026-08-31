@@ -32,8 +32,10 @@
   .coldwire-button[disabled] { opacity: 0.6; cursor: default; }
   .coldwire-button--danger { color: #b91c1c; border-color: #fecaca; }
   .coldwire-icon-button { width: 2.25rem; height: 2.25rem; padding: 0; flex-shrink: 0; }
-  .coldwire-icon-button svg { width: 1.05rem; height: 1.05rem; fill: none; stroke: currentColor;
-    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  /* Heroicons outline, which are drawn for 1.5. Set here rather than on each svg: CSS beats
+     presentation attributes, so a value here silently wins anyway. */
+  .coldwire-icon-button svg { width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor;
+    stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
   /* Spins while a refresh is in flight — without it the button re-reads values that usually
      look identical and seems to do nothing. */
   .coldwire-icon-button[data-busy] svg { animation: coldwire-spin 0.7s linear infinite; }
@@ -124,8 +126,7 @@
                 data-coldwire-cache-target="refreshButton"
                 data-action="click->coldwire-cache#reload">
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M20 11a8 8 0 1 0-.6 4"></path>
-            <polyline points="20 4 20 11 13 11"></polyline>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
           </svg>
         </button>
         <button type="button"
@@ -135,8 +136,7 @@
                 data-coldwire-cache-target="clearButton"
                 data-action="click->coldwire-cache#clear">
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M8 6V4h8v2m1 0v14a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V6"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
           </svg>
         </button>
       </div>
@@ -154,8 +154,8 @@
       <span>
         <span class="coldwire-setting-title">Force offline</span>
         <span class="coldwire-setting-note">
-          Serve only cached pages even with a connection. Stays on across the app until you
-          turn it off.
+          On a slow connection, load cached pages instantly instead of waiting on the network.
+          Anything not cached shows the offline page until you switch this back off.
         </span>
       </span>
     </label>

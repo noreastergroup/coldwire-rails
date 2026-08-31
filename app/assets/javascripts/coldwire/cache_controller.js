@@ -11,6 +11,7 @@ export default class extends Controller {
   static targets = [
     "status",
     "connection",
+    "connectionLight",
     "worker",
     "summary",
     "entries",
@@ -306,23 +307,33 @@ export default class extends Controller {
     if (!this.hasConnectionTarget) return
 
     if (this.hasForcedToggleTarget && this.forcedToggleTarget.checked) {
-      this.connectionTarget.textContent = "Forced offline"
+      // Amber, not red: nothing is wrong, you asked for this.
+      this.setConnection("Forced offline", "forced")
       return
     }
 
     if (!navigator.onLine) {
-      this.connectionTarget.textContent = "Offline"
+      this.setConnection("Offline", "offline")
       return
     }
 
-    this.connectionTarget.textContent = "Checking…"
+    this.setConnection("Checking…", "checking")
 
     // A later check can finish after an earlier one; only the newest may write.
     const token = (this.connectionToken = (this.connectionToken || 0) + 1)
     const reachable = await this.serverReachable()
     if (token !== this.connectionToken) return
 
-    this.connectionTarget.textContent = reachable ? "Online" : "Offline · server unreachable"
+    if (reachable) {
+      this.setConnection("Online", "online")
+    } else {
+      this.setConnection("Offline · server unreachable", "offline")
+    }
+  }
+
+  setConnection(text, state) {
+    this.connectionTarget.textContent = text
+    if (this.hasConnectionLightTarget) this.connectionLightTarget.dataset.state = state
   }
 
   async serverReachable() {

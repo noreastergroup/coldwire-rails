@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Debug page is titled "Offline settings" and shows a status light beside the network row:
+  green online, amber forced offline, red no connection.
+
 - A sync now works through the whole manifest in one pass, through a bounded concurrent pool
   (`sync_concurrency`, default 4), retrying each URL once. Replaces `sync_batch_limit`, which
   spread a first run across page loads and made syncing feel like it had stalled.

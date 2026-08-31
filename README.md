@@ -238,6 +238,8 @@ baked at worker-build time cannot know the URL it will stand in for:
 
 Mounted at the engine root — `/coldwire` with the mount above. It gives you:
 
+- **Status** — network, worker, and cache size, with a light beside the network row: green
+  online, amber forced offline, red no connection
 - **Automatic sync** — whether it is on, when the last full sync finished, and what a sync
   is doing right now. It listens for the worker's broadcasts, so it shows syncs it did not
   start — including one already running when you opened the page. **Sync now** forces one

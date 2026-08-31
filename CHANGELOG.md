@@ -48,6 +48,11 @@
 
 ### Fixed
 
+- The debug page could report Offline without ever checking. It short-circuited on
+  `navigator.onLine`, which a web view reports unreliably in **both** directions. The probe
+  is now the only source of truth. Automatic sync was gated on it too, so a false negative
+  there meant syncing never ran at all.
+
 - The debug page's Refresh gave no sign it had run and abandoned the rest of a refresh
   silently if any one step failed. It now spins while working and reports what went wrong.
   Listing the cache also reads sizes from `Content-Length` instead of pulling every response

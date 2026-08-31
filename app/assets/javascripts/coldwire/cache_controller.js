@@ -25,7 +25,6 @@ export default class extends Controller {
     "status",
     "connection",
     "connectionLight",
-    "worker",
     "summary",
     "entries",
     "forcedToggle",
@@ -120,14 +119,13 @@ export default class extends Controller {
     if (!this.hasAutoSyncTarget) return
 
     if (!this.autoSyncValue) {
-      this.autoSyncTarget.textContent = "Off"
+      this.autoSyncTarget.textContent = "Automatic sync is off"
       return
     }
 
-    const every = this.syncIntervalValue > 0
-      ? ` · every ${this.formatDuration(this.syncIntervalValue)}`
-      : ""
-    this.autoSyncTarget.textContent = `On${every}`
+    this.autoSyncTarget.textContent = this.syncIntervalValue > 0
+      ? `Syncs automatically every ${this.formatDuration(this.syncIntervalValue)}`
+      : "Syncs automatically"
   }
 
   renderSyncedAt() {
@@ -141,12 +139,12 @@ export default class extends Controller {
     }
 
     if (!Number.isFinite(stamp) || stamp <= 0) {
-      this.syncedAtTarget.textContent = "Never"
+      this.syncedAtTarget.textContent = "Never synced"
       return
     }
 
     const date = new Date(stamp)
-    this.syncedAtTarget.textContent = this.formatCachedAt(Math.floor(stamp / 1000))
+    this.syncedAtTarget.textContent = `Synced ${this.formatCachedAt(Math.floor(stamp / 1000))}`
     this.syncedAtTarget.title = date.toLocaleString()
   }
 
@@ -162,8 +160,7 @@ export default class extends Controller {
     this.setRefreshing(true)
 
     try {
-      this.renderWorker()
-      this.renderAutoSync()
+        this.renderAutoSync()
       this.renderSyncedAt()
       await this.syncForcedToWorker()
       await this.renderCache()
@@ -177,6 +174,15 @@ export default class extends Controller {
     } finally {
       this.setRefreshing(false)
     }
+  }
+
+  // Reloading beats re-rendering in place: it re-runs the worker registration, the identity
+  // check and the sync trigger too, so what you see afterwards is a genuine fresh start
+  // rather than a few values re-read.
+  reload(event) {
+    event?.preventDefault()
+    this.setRefreshing(true)
+    window.location.reload()
   }
 
   setRefreshing(busy) {
@@ -289,6 +295,10 @@ export default class extends Controller {
 
   async clear(event) {
     event.preventDefault()
+    // It is an unlabelled icon next to Reload and it throws away everything the app has to
+    // work with offline. Worth one question.
+    if (!window.confirm("Delete everything cached? The app will have nothing to show offline until it syncs again.")) return
+
     this.setStatus("Clearing cache…")
     this.toggleBusy(true)
 
@@ -331,21 +341,18 @@ export default class extends Controller {
     }
   }
 
-  // navigator.onLine answers "is a network interface up", not "can I reach the server". In a
-  // web view it is true whenever wifi is on, so a stopped server still reads as Online — which
-  // is the one moment you are looking at this page to find out otherwise. Trust it only when
-  // it says false, which is conclusive, and otherwise ask the server.
+  // Ask the server, always.
+  //
+  // navigator.onLine answers "is a network interface up", which is not the question — and in
+  // a web view it is unreliable in both directions: true with the server stopped, and
+  // sometimes false while everything works. Consulting it at all meant the page could report
+  // Offline without ever checking. One HEAD to the health check is cheap and it is the truth.
   async renderConnection() {
     if (!this.hasConnectionTarget) return
 
     if (this.hasForcedToggleTarget && this.forcedToggleTarget.checked) {
       // Amber, not red: nothing is wrong, you asked for this.
       this.setConnection("Forced offline", "forced")
-      return
-    }
-
-    if (!navigator.onLine) {
-      this.setConnection("Offline", "offline")
       return
     }
 
@@ -356,11 +363,12 @@ export default class extends Controller {
     const reachable = await this.serverReachable()
     if (token !== this.connectionToken) return
 
-    if (reachable) {
-      this.setConnection("Online", "online")
-    } else {
-      this.setConnection("Offline · server unreachable", "offline")
+    if (reachable === null) {
+      this.setConnection("Unknown", "checking")
+      return
     }
+
+    this.setConnection(reachable ? "Online" : "Offline", reachable ? "online" : "offline")
   }
 
   setConnection(text, state) {
@@ -369,7 +377,8 @@ export default class extends Controller {
   }
 
   async serverReachable() {
-    if (!this.hasProbeUrlValue) return navigator.onLine
+    // With nothing to probe there is no honest answer, so say so rather than guess.
+    if (!this.hasProbeUrlValue) return null
 
     const controller = new AbortController()
     const timeout = window.setTimeout(() => controller.abort(), 4000)
@@ -385,19 +394,6 @@ export default class extends Controller {
     }
   }
 
-  renderWorker() {
-    if (!this.hasWorkerTarget) return
-    if (!("serviceWorker" in navigator)) {
-      this.workerTarget.textContent = "Not supported"
-      return
-    }
-    if (navigator.serviceWorker.controller) {
-      this.workerTarget.textContent = "Controlling this page"
-      return
-    }
-    this.workerTarget.textContent = "Registered, not controlling yet"
-  }
-
   async renderCache() {
     const cachesInfo = await this.listCaches()
     const entries = cachesInfo.flatMap((cache) => cache.entries || [])
@@ -406,7 +402,9 @@ export default class extends Controller {
     if (this.hasSummaryTarget) {
       const cacheCount = cachesInfo.length
       const urlCount = entries.length
-      this.summaryTarget.textContent = `${urlCount} URL${urlCount === 1 ? "" : "s"} in ${cacheCount} cache${cacheCount === 1 ? "" : "s"} · ${this.formatBytes(totalBytes)}`
+      this.summaryTarget.textContent = urlCount === 0
+        ? "Nothing cached"
+        : `${urlCount} file${urlCount === 1 ? "" : "s"} cached · ${this.formatBytes(totalBytes)}`
     }
 
     if (!this.hasEntriesTarget) return

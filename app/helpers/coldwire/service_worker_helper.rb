@@ -143,7 +143,10 @@ module Coldwire
           }
 
           function sync() {
-            if (!navigator.onLine || !due()) return
+            // Deliberately not gated on navigator.onLine. A web view reports it unreliably,
+            // and a false negative there means syncing never happens at all. A sync with no
+            // connection fails harmlessly and leaves no stamp, so the next load retries.
+            if (!due()) return
             if (!("serviceWorker" in navigator)) return
 
             var attempts = read(attemptsKey)

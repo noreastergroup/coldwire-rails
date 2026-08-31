@@ -238,16 +238,15 @@ baked at worker-build time cannot know the URL it will stand in for:
 
 Mounted at the engine root — `/coldwire` with the mount above. It gives you:
 
-- **Status** — network, worker, and cache size, with a light beside the network row: green
-  online, amber forced offline, red no connection
-- **Automatic sync** — whether it is on, when the last full sync finished, and what a sync
-  is doing right now. It listens for the worker's broadcasts, so it shows syncs it did not
-  start — including one already running when you opened the page. **Sync now** forces one
-  regardless of the interval.
-- **Cache inspector** — every cached URL with size and how long ago it was stored
-- **Precache** — runs the manifest with a live progress bar (`Pages 47 of 84`, then assets)
-- **Clear cache**
-- **Force offline** — serve only from cache even with a connection
+- **Status** — a light and one word for the connection (green online, amber forced offline,
+  red unreachable), how much is cached, and when it last synced. Reload and Clear sit beside
+  it. The connection is decided by pinging `probe_path`, never by `navigator.onLine`.
+- **Force offline** — serve only from cache even with a connection. Holds across the app.
+- **Sync** — what it is doing right now, with a progress bar. **Sync now** ignores the
+  interval; **Re-cache everything** refetches the manifest regardless of age. It listens for
+  the worker's broadcasts, so it shows syncs it did not start — including one already running
+  when you opened the page.
+- **Cached** — every cached URL with size and how long ago it was stored
 
 It's styled with plain CSS and assumes no framework. Put it behind whatever authentication
 your app uses by wrapping the route, or override the template.

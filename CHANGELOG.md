@@ -3,10 +3,15 @@
 ## [Unreleased]
 
 - Automatic sync actually happens while you sit on a page. It used to fire only on load and
-  on a Turbo visit, so a page left open sat past its interval indefinitely and nothing
-  synced until you navigated. The snippet now checks once a second, and on returning to the
-  foreground — a backgrounded web view freezes its timers, so the interval alone cannot be
-  trusted to have kept counting. The debug page shows a live countdown to the next one.
+  on a Turbo visit, so a page left open sat past its interval indefinitely and nothing synced
+  until you navigated. On load the snippet now works out when a sync is next owed and sleeps
+  exactly that long — no polling, and an overdue deadline runs immediately. It re-arms on
+  returning to the foreground too, since a backgrounded web view freezes its timers. The
+  debug page shows a live countdown to the next one.
+
+- The debug page asks the worker what it missed when it connects. A sync starts while the
+  page is still parsing, so a short run could begin and end before the page was listening,
+  leaving it on "Idle" through a sync it had caused itself.
 
 - A sync that keeps failing backs off for an interval instead of retrying every second, and
   it no longer does that by writing the success stamp. "Synced 2 minutes ago" now only ever

@@ -80,6 +80,9 @@ self.addEventListener("message", (event) => {
   // pressed the button. Progress goes out on the broadcast, not this port, so every open
   // page sees the run and not just whoever started it.
   if (type === "sync") return reply(syncManifest())
+
+  // What a page missed by not listening yet, and whether it is still going on.
+  if (type === "syncState") return reply({ ok: true, running: Boolean(syncing), last: lastSyncMessage })
 })
 
 function shouldHandle(request) {
@@ -327,7 +330,15 @@ async function runSync() {
   return finished
 }
 
+// Kept so a page can ask what it missed. The head snippet starts a sync while the page is
+// still parsing, so a short run can begin and end before any Stimulus controller has
+// connected to hear it — without this the debug page would sit on "Idle" through a sync it
+// caused itself.
+let lastSyncMessage = null
+
 async function notifyClients(message) {
+  lastSyncMessage = message
+
   const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" })
   clients.forEach((client) => client.postMessage(message))
 }

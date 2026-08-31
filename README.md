@@ -245,8 +245,9 @@ Mounted at the engine root — `/coldwire` with the mount above. It gives you:
 - **Sync** — whether automatic sync is on and how often, when it last ran and a live
   countdown to the next one, and what it is doing right now with a progress bar. **Sync now**
   runs that same pass immediately instead of waiting out the countdown — there is no second
-  mechanism. It listens for the worker's broadcasts, so it shows syncs it did not start,
-  including one already running when you opened the page.
+  mechanism. It listens for the worker's broadcasts, and asks the worker what it missed when
+  it connects, so it shows syncs it did not start — including one already running, or already
+  finished, before the page had loaded.
 - **Cached** — every cached URL with size and how long ago it was stored
 
 It's styled with plain CSS and assumes no framework. Put it behind whatever authentication

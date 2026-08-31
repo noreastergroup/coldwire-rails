@@ -91,6 +91,11 @@ export default class extends Controller {
       // than a button you can press twice. Pressing it joins the run in flight anyway.
       this.toggleSyncing(Boolean(data.pending))
     } else if (data.state === "progress") {
+      // A page that opened mid-run arrives here without ever having seen "started", so this
+      // branch has to be able to put the page into the running state on its own.
+      this.syncRunning = true
+      this.toggleSyncing(true)
+      if (this.hasProgressTarget) this.progressTarget.hidden = false
       // The bar carries the live count; the line above stays on the high-level "what".
       this.renderProgress(data)
     } else if (data.state === "finished") {
@@ -105,6 +110,33 @@ export default class extends Controller {
       this.renderSyncedAt()
       this.renderCache()
     }
+  }
+
+  // The head snippet fires a sync while the page is still parsing, so a run — a short one
+  // especially — can start and finish before this controller connects and starts listening.
+  // Asking the worker on arrival is the difference between showing the sync you just caused
+  // and sitting on "Idle" through it.
+  async catchUpOnSync() {
+    let state = null
+    try {
+      state = await this.sendToWorker("syncState", {}, 5000)
+    } catch {
+      // No worker yet, or an older one that does not answer. Nothing to catch up on.
+      return
+    }
+
+    const last = state?.last
+    if (!last) return
+
+    // A run that stopped without ever saying "finished" is a worker that was shut down
+    // mid-sync. Replaying it would leave a spinner up for a sync nobody is doing.
+    if (!state.running && last.state !== "finished") return
+
+    // Joining part way through, the count of what this run set out to do is already gone —
+    // only "started" carried it. The bar still says where it has got to.
+    if (last.state !== "finished") this.setSyncStatus("Syncing…")
+
+    this.handleSyncMessage({ data: last })
   }
 
   describeFinishedSync(data) {
@@ -221,6 +253,7 @@ export default class extends Controller {
         this.renderAutoSync()
       this.renderSyncedAt()
       await this.syncForcedToWorker()
+      await this.catchUpOnSync()
       await this.renderCache()
       // Last, and awaited: it waits on a network probe, so the button should still be
       // spinning while it does.

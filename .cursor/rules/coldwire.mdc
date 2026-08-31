@@ -239,9 +239,20 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
 
 - Follow subresources only — stylesheets, scripts, images, `srcset`, importmap entries. Never
   follow `<a href>` or this becomes a site crawler.
-- The open page is the clock. WebKit has no Background Sync, so the head snippet checks on
-  load, on `turbo:load`, on returning to the foreground, and on a one-second `setInterval`.
-  Drop the interval and a page nobody navigates away from never syncs, however long it sits.
+- The open page is the clock. WebKit has no Background Sync, so on load the head snippet
+  works out when a sync is next owed and sleeps exactly that long with a single `setTimeout`
+  — never a poll. An overdue deadline, including never having synced, is a delay of zero.
+  It re-arms on `turbo:load`, on `online`, on returning to the foreground, and after every
+  run. Drop that and a page nobody navigates away from never syncs, however long it sits.
+- `setTimeout` holds its delay in a signed 32-bit int and fires *immediately* past about
+  24.8 days, so a longer wait must wake early and sleep out the remainder.
+- A failed run leaves the deadline in the past. Rescheduling off that alone retries in a
+  tight loop, so failures back away (`attempts * 2000`, capped at the interval).
+- The snippet starts a sync while the page is still parsing, so a short run can begin and end
+  before any Stimulus controller has connected to hear it. The worker keeps the last
+  broadcast and answers `syncState`, and the debug page asks on connect — otherwise it sits
+  on "Idle" through a sync it caused itself. For the same reason the `progress` branch must
+  be able to put the page into the running state without having seen `started`.
 - That snippet must be re-entrant: Turbo copies head scripts it does not recognise, and a
   per-request CSP nonce makes it look new every visit. `window.__coldwireAutoSync` guards it,
   or each visit leaves another ticker behind.

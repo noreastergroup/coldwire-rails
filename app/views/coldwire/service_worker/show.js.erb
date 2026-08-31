@@ -223,12 +223,23 @@ async function listCaches() {
 }
 
 async function describeCached(request, response) {
-  const blob = response ? await response.clone().blob() : null
   return {
     url: request.url,
-    size: blob?.size ?? 0,
+    size: await entrySize(response),
     timestamp: unixTimestamp(request.headers.get(TIMESTAMP_HEADER))
   }
+}
+
+// Ask the headers before reading the body. Listing a real cache means hundreds of entries and
+// tens of megabytes, and blob() on every one of them is a multi-second job for a number that
+// Content-Length already carries.
+async function entrySize(response) {
+  if (!response) return 0
+
+  const declared = Number(response.headers.get("Content-Length"))
+  if (Number.isFinite(declared) && declared >= 0) return declared
+
+  return (await response.clone().blob()).size
 }
 
 // The key an entry is stored under.

@@ -48,6 +48,11 @@
 
 ### Fixed
 
+- The debug page's Refresh gave no sign it had run and abandoned the rest of a refresh
+  silently if any one step failed. It now spins while working and reports what went wrong.
+  Listing the cache also reads sizes from `Content-Length` instead of pulling every response
+  body into a blob.
+
 - Forced offline switched itself off mid-session. The worker holds the flag in a variable and
   browsers shut idle workers down, so it is now re-asserted from `localStorage` on every page
   load and holds across the whole app.

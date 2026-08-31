@@ -1,5 +1,18 @@
 import { Controller } from "@hotwired/stimulus"
 
+// Ask the headers before reading the body. A real cache is hundreds of entries and tens of
+// megabytes; blob() on every one of them turns listing the cache into a multi-second job that
+// makes the refresh button look broken. Content-Length is present on nearly everything Rails
+// serves, and the body is only read when it is not.
+async function entrySize(response) {
+  if (!response) return 0
+
+  const declared = Number(response.headers.get("Content-Length"))
+  if (Number.isFinite(declared) && declared >= 0) return declared
+
+  return (await response.clone().blob()).size
+}
+
 const FORCED_KEY = "coldwire-forced"
 const SYNCED_AT_KEY = "coldwire-synced-at"
 const SYNC_MESSAGE = "coldwire:sync"
@@ -146,12 +159,31 @@ export default class extends Controller {
 
   async refresh(event) {
     event?.preventDefault()
-    this.renderConnection()
-    this.renderWorker()
-    this.renderAutoSync()
-    this.renderSyncedAt()
-    await this.syncForcedToWorker()
-    await this.renderCache()
+    this.setRefreshing(true)
+
+    try {
+      this.renderWorker()
+      this.renderAutoSync()
+      this.renderSyncedAt()
+      await this.syncForcedToWorker()
+      await this.renderCache()
+      // Last, and awaited: it waits on a network probe, so the button should still be
+      // spinning while it does.
+      await this.renderConnection()
+    } catch (error) {
+      // One unreadable cache entry used to abandon the rest of the refresh with nothing said,
+      // which is indistinguishable from a button that does not work.
+      this.setStatus(error.message || "Could not refresh")
+    } finally {
+      this.setRefreshing(false)
+    }
+  }
+
+  setRefreshing(busy) {
+    if (!this.hasRefreshButtonTarget) return
+
+    this.refreshButtonTarget.toggleAttribute("data-busy", busy)
+    this.refreshButtonTarget.disabled = busy
   }
 
   async prefetch(event) {
@@ -433,11 +465,11 @@ export default class extends Controller {
   }
 
   async describeCached(request, response) {
-    const blob = response ? await response.clone().blob() : null
     const seconds = Number(request.headers.get(TIMESTAMP_HEADER))
+
     return {
       url: request.url,
-      size: blob?.size ?? 0,
+      size: await entrySize(response),
       timestamp: Number.isFinite(seconds) && seconds > 0 ? seconds : null
     }
   }

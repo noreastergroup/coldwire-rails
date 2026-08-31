@@ -60,7 +60,7 @@ export default class extends Controller {
     // Recomputed from the same clock the head snippet reads, rather than counted down from a
     // number held here — a web view freezes timers when backgrounded, and a countdown that
     // kept its own tally would come back wrong.
-    this.ticker = window.setInterval(() => this.renderSyncedAt(), 1000)
+    this.ticker = window.setInterval(() => this.tick(), 1000)
   }
 
   disconnect() {
@@ -101,6 +101,14 @@ export default class extends Controller {
     } else if (data.state === "finished") {
       this.syncRunning = false
       this.syncSettled = true
+
+      if (data.complete) {
+        this.writeStamp(SYNCED_AT_KEY, Date.now())
+        this.retryAfter = 0
+      } else {
+        this.retryAfter = Date.now() + this.syncIntervalValue * 1000
+      }
+
       this.setSyncStatus(this.describeFinishedSync(data))
       this.hideProgress()
       this.toggleBusy(false)
@@ -162,6 +170,8 @@ export default class extends Controller {
     event?.preventDefault()
     this.setStatus("")
     this.syncSettled = false
+    // Reaching the worker takes a moment, and the ticker keeps ticking while it does.
+    this.syncStarting = true
     this.toggleBusy(true)
     this.toggleSyncing(true)
     this.setSyncStatus("Starting…")
@@ -177,6 +187,7 @@ export default class extends Controller {
         this.hideProgress()
       }
     } finally {
+      this.syncStarting = false
       this.toggleBusy(false)
       this.toggleSyncing(false)
     }
@@ -206,25 +217,58 @@ export default class extends Controller {
     const synced = stamp
       ? `Synced ${this.formatCachedAt(Math.floor(stamp / 1000))}`
       : "Never synced"
-    const next = this.describeNextSync(stamp)
+    const next = this.describeNextSync()
 
     this.syncedAtTarget.textContent = next ? `${synced} · ${next}` : synced
     this.syncedAtTarget.title = stamp ? new Date(stamp).toLocaleString() : ""
   }
 
-  // When the head snippet's next check will find a sync owed. Both read the same two keys,
-  // so this is the real countdown rather than an estimate of one.
-  describeNextSync(stamp) {
+  // A page that shows a countdown had better act on it. The head snippet keeps its own timer
+  // for every other page in the app, but this page must not depend on it: the two are
+  // separate clocks, and when they disagreed the page sat there saying "due now" with
+  // nothing scheduled to do anything about it — and no way to tell from the page which of
+  // them had gone wrong. Now the countdown reaching zero *is* what starts the sync, so what
+  // the page says and what it does cannot come apart.
+  tick() {
+    this.renderSyncedAt()
+
+    if (!this.autoSyncValue || this.syncIntervalValue <= 0) return
+    if (this.syncRunning || this.syncStarting) return
+    if (Date.now() < this.dueAt()) return
+
+    this.syncNow()
+  }
+
+  // When a sync is next owed. Reads the same keys the head snippet writes, so opening this
+  // page never resets a clock that was already running.
+  dueAt() {
+    const stamp = this.readStamp(SYNCED_AT_KEY)
+
+    return Math.max(
+      stamp ? stamp + this.syncIntervalValue * 1000 : 0,
+      this.readStamp(BACKOFF_KEY) || 0,
+      // A run that finished without getting through everything leaves the deadline in the
+      // past. Held here rather than in storage: it is this page pacing its own retries, not
+      // a decision the rest of the app should inherit.
+      this.retryAfter || 0
+    )
+  }
+
+  describeNextSync() {
     if (!this.autoSyncValue || this.syncIntervalValue <= 0) return ""
     if (this.syncRunning) return "syncing now"
 
-    // A run that kept failing backs off for an interval without touching the stamp, so the
-    // wait can be longer than the stamp alone implies.
-    const dueAt = Math.max(stamp ? stamp + this.syncIntervalValue * 1000 : 0,
-                           this.readStamp(BACKOFF_KEY) || 0)
-    const seconds = Math.ceil((dueAt - Date.now()) / 1000)
+    const seconds = Math.ceil((this.dueAt() - Date.now()) / 1000)
 
     return seconds > 0 ? `next in ${this.formatDuration(seconds)}` : "due now"
+  }
+
+  writeStamp(key, value) {
+    try {
+      window.localStorage.setItem(key, String(value))
+    } catch {
+      // Private mode and the like. The clock falls back to the head snippet's copy.
+    }
   }
 
   readStamp(key) {

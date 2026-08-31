@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- The debug page starts its own sync when its countdown runs out, through the same path as
+  its button — spinner, progress bar and all. It used to only *display* a deadline that a
+  separate head snippet was responsible for acting on, and whenever those two clocks
+  disagreed the page sat on "due now" with nothing scheduled and no way to tell which half
+  had failed. The snippet still drives every other page in the app.
+
+- The manifest is fetched with `cache: "no-store"`. A heuristically-cached copy had a sync
+  faithfully fetching an old list, missing exactly the newly published pages auto-sync exists
+  to pick up.
+
 - Automatic sync actually happens while you sit on a page. It used to fire only on load and
   on a Turbo visit, so a page left open sat past its interval indefinitely and nothing synced
   until you navigated. On load the snippet now works out when a sync is next owed and sleeps

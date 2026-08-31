@@ -232,6 +232,8 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
 - Retiring is limited to entries carrying `MANAGED_HEADER`, set only on manifest URLs
   themselves — never on the assets they reference, which are shared and would thrash. Assets
   and casually-browsed pages must survive a sync untouched.
+- Fetch the manifest with `cache: "no-store"`. A heuristically-cached copy makes a sync
+  faithfully fetch yesterday's list, missing the new pages it exists to pick up.
 - Compare URLs through `cacheUrl()` when deciding what is unlisted, or every entry looks
   unlisted as soon as a query string is involved.
 
@@ -239,6 +241,11 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
 
 - Follow subresources only — stylesheets, scripts, images, `srcset`, importmap entries. Never
   follow `<a href>` or this becomes a site crawler.
+- The debug page triggers its own sync when its countdown runs out, through the same path as
+  its button. It must not merely *display* a deadline the head snippet is responsible for
+  acting on: those are two clocks, and every time they disagreed the page sat on "due now"
+  with nothing scheduled and no way to tell which half had failed. For the same reason it
+  writes the stamp itself on a complete run rather than trusting the snippet to.
 - The open page is the clock. WebKit has no Background Sync, so on load the head snippet
   works out when a sync is next owed and sleeps exactly that long with a single `setTimeout`
   — never a poll. An overdue deadline, including never having synced, is a delay of zero.

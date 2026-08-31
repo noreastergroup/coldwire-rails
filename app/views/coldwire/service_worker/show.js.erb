@@ -346,6 +346,10 @@ async function notifyClients(message) {
 async function fetchManifest() {
   const response = await fetch(PACK_PATH, {
     credentials: "same-origin",
+    // The manifest has to describe the server as it is now. Left to the HTTP cache a browser
+    // may serve a heuristically-fresh copy without asking, and a sync would then faithfully
+    // fetch yesterday's list — missing exactly the newly published pages it exists to pick up.
+    cache: "no-store",
     headers: { Accept: "application/json" }
   })
 

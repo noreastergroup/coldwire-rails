@@ -9,6 +9,13 @@ module Coldwire
     # The precache manifest. Internal JSON consumed by the Stimulus controller, not a
     # page — the list can be long and is not meant to be rendered.
     def pack
+      # Never stored, by anything. The worker asks for it with `cache: "no-store"`, but that
+      # only binds the one caller — a browser left to its own heuristics served a copy without
+      # asking, and a sync then faithfully fetched an old list, missing exactly the newly
+      # published pages it exists to pick up. `private` because this is built from what the
+      # signed-in user can see and belongs to nobody else.
+      response.headers["Cache-Control"] = "no-store, private"
+
       render json: { urls: Array(prefetch_urls) }
     end
 

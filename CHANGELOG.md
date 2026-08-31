@@ -8,9 +8,12 @@
   disagreed the page sat on "due now" with nothing scheduled and no way to tell which half
   had failed. The snippet still drives every other page in the app.
 
-- The manifest is fetched with `cache: "no-store"`. A heuristically-cached copy had a sync
-  faithfully fetching an old list, missing exactly the newly published pages auto-sync exists
-  to pick up.
+- The manifest is fetched with `cache: "no-store"`, and served with `Cache-Control: no-store,
+  private`. A heuristically-cached copy had a sync faithfully fetching an old list, missing
+  exactly the newly published pages auto-sync exists to pick up — and it is built from what
+  the signed-in user can see, so no shared cache should hold it either. (The worker never
+  intercepts it in the first place: the engine adds the manifest, the worker script and
+  `probe_path` to `excluded_paths` itself.)
 
 - Automatic sync actually happens while you sit on a page. It used to fire only on load and
   on a Turbo visit, so a page left open sat past its interval indefinitely and nothing synced

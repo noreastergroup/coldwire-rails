@@ -254,7 +254,9 @@ It's styled with plain CSS and assumes no framework. Put it behind whatever auth
 your app uses by wrapping the route, or override the template.
 
 To reach it offline, allowlist it like any other page — `config.cache_allowlist = [ "/coldwire" ]`
-alongside your own paths. The worker script and the manifest are never cached, so **Sync now**
+alongside your own paths. The worker script and the manifest are never intercepted — the
+engine adds them and `probe_path` to `excluded_paths` for you, and the manifest is served
+`no-store` so no HTTP cache holds it either — so **Sync now**
 will fail while offline; the inspector, **Clear cache**, and **Force offline** are client-side
 and keep working.
 

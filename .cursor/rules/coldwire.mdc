@@ -232,8 +232,12 @@ Precache, force-offline, and the inspector all use this same `match` / `put(clon
 - Retiring is limited to entries carrying `MANAGED_HEADER`, set only on manifest URLs
   themselves — never on the assets they reference, which are shared and would thrash. Assets
   and casually-browsed pages must survive a sync untouched.
-- Fetch the manifest with `cache: "no-store"`. A heuristically-cached copy makes a sync
-  faithfully fetch yesterday's list, missing the new pages it exists to pick up.
+- Fetch the manifest with `cache: "no-store"` *and* serve it `Cache-Control: no-store,
+  private`. A heuristically-cached copy makes a sync faithfully fetch yesterday's list,
+  missing the new pages it exists to pick up; the fetch option only binds the one caller.
+  The engine already puts the manifest, the worker script and `probe_path` in
+  `excluded_paths`, so the worker never intercepts them — that is a different layer from the
+  HTTP cache, and it was the HTTP cache that served the stale copy.
 - Compare URLs through `cacheUrl()` when deciding what is unlisted, or every entry looks
   unlisted as soon as a query string is involved.
 

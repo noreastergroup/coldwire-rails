@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- The cached list has a filter box and a sort: most recent (the default), largest first, or
+  A–Z. Both work on the entries already read rather than re-inspecting the cache, which means
+  asking every entry for its headers and is far too slow to repeat on each keystroke. Within
+  equal timestamps the order falls back to the path, so a sync that stamped everything in the
+  same second does not produce a list that reshuffles itself between renders.
+
 - The debug page records a finished sync from the reply to its own request, not from the
   broadcast. It drives its own sync, so the head snippet stands down there — which meant that
   when a broadcast went missing, nothing recorded the outcome at all: the page read "Never

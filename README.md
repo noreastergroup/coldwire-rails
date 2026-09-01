@@ -247,7 +247,9 @@ Mounted at the engine root — `/coldwire` with the mount above. It gives you:
   mechanism. It listens for the worker's broadcasts, and asks the worker what it missed when
   it connects, so it shows syncs it did not start — including one already running, or already
   finished, before the page had loaded.
-- **Cached** — every cached URL with size and how long ago it was stored
+- **Cached** — every cached URL with size and how long ago it was stored, with a filter box
+  and a sort (most recent, largest, A–Z). Both work on the list already read, so typing does
+  not re-inspect the cache.
 
 It's styled with plain CSS and assumes no framework. Put it behind whatever authentication
 your app uses by wrapping the route, or override the template.

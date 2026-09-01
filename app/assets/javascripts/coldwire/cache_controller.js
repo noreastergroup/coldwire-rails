@@ -48,7 +48,9 @@ export default class extends Controller {
     "syncedAt",
     "syncStatus",
     "syncButton",
-    "syncLabel"
+    "syncLabel",
+    "search",
+    "sort"
   ]
 
   get store() {
@@ -543,39 +545,76 @@ export default class extends Controller {
         : `${urlCount} file${urlCount === 1 ? "" : "s"} cached · ${this.formatBytes(totalBytes)}`
     }
 
+    // Held so searching and sorting are pure display work. Reading the cache means asking
+    // every entry for its headers, which is slow enough to feel broken if it happened on each
+    // keystroke.
+    this.entries = entries
+
+    this.renderEntries()
+  }
+
+  filterEntries() {
+    this.renderEntries()
+  }
+
+  renderEntries() {
     if (!this.hasEntriesTarget) return
 
+    const entries = this.entries || []
+    const query = this.hasSearchTarget ? this.searchTarget.value.trim().toLowerCase() : ""
+    const matches = query
+      ? entries.filter((entry) => this.displayUrl(entry.url).toLowerCase().includes(query))
+      : entries
+
     this.entriesTarget.replaceChildren()
-    if (entries.length === 0) {
+
+    if (matches.length === 0) {
       const empty = document.createElement("li")
       empty.className = "coldwire-empty"
-      empty.textContent = "None yet."
+      // Nothing cached and nothing matching are different problems, and the fix for each is
+      // different too.
+      empty.textContent = entries.length === 0 ? "None yet." : `No paths matching “${query}”.`
       this.entriesTarget.append(empty)
       return
     }
 
-    entries
-      .slice()
-      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0) || this.displayUrl(a.url).localeCompare(this.displayUrl(b.url)))
-      .forEach((entry) => {
-        const item = document.createElement("li")
-        item.className = "coldwire-entry"
+    this.sortEntries(matches).forEach((entry) => {
+      const item = document.createElement("li")
+      item.className = "coldwire-entry"
 
-        const path = document.createElement("div")
-        path.className = "coldwire-entry-url"
-        path.textContent = this.displayUrl(entry.url)
-        path.title = entry.url
+      const path = document.createElement("div")
+      path.className = "coldwire-entry-url"
+      path.textContent = this.displayUrl(entry.url)
+      path.title = entry.url
 
-        const meta = document.createElement("div")
-        meta.className = "coldwire-entry-meta"
-        meta.textContent = entry.timestamp
-          ? `${this.formatBytes(entry.size)} · ${this.formatCachedAt(entry.timestamp)}`
-          : this.formatBytes(entry.size)
-        if (entry.timestamp) meta.title = new Date(entry.timestamp * 1000).toLocaleString()
+      const meta = document.createElement("div")
+      meta.className = "coldwire-entry-meta"
+      meta.textContent = entry.timestamp
+        ? `${this.formatBytes(entry.size)} · ${this.formatCachedAt(entry.timestamp)}`
+        : this.formatBytes(entry.size)
+      if (entry.timestamp) meta.title = new Date(entry.timestamp * 1000).toLocaleString()
 
-        item.append(path, meta)
-        this.entriesTarget.append(item)
-      })
+      item.append(path, meta)
+      this.entriesTarget.append(item)
+    })
+  }
+
+  // Sorted on a copy: `entries` is the cache as it was read, and re-sorting it in place would
+  // make the order depend on whatever was picked last.
+  sortEntries(entries) {
+    const byPath = (a, b) => this.displayUrl(a.url).localeCompare(this.displayUrl(b.url))
+    const order = this.hasSortTarget ? this.sortTarget.value : "recent"
+
+    if (order === "alphabetical") return entries.slice().sort(byPath)
+
+    if (order === "largest") {
+      return entries.slice().sort((a, b) => (b.size || 0) - (a.size || 0) || byPath(a, b))
+    }
+
+    // Newest first, and paths alphabetically within a second — a sync stamps everything it
+    // fetched at almost the same moment, so without the tiebreak the order looks arbitrary
+    // and shuffles between renders.
+    return entries.slice().sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0) || byPath(a, b))
   }
 
   async listCaches() {

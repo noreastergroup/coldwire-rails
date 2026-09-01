@@ -69,6 +69,19 @@
   @keyframes coldwire-fade { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
   .coldwire-progress-label { margin-top: 0.375rem; font-size: 0.75rem; color: #6b7280; }
 
+  /* Search and sort sit above the list rather than beside the heading: on a phone the two
+     controls need the full width between them, and the heading is only a label. */
+  .coldwire-filters { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+  .coldwire-input, .coldwire-select { border: 1px solid #d1d5db; border-radius: 0.5rem;
+    background: #fff; color: #111827; padding: 0.375rem 0.5rem; font-size: 0.875rem;
+    line-height: 1.5rem; font-family: inherit; }
+  /* The search takes the slack; the select asks only for its own content. 0 min-width lets it
+     shrink inside the flex row instead of forcing the card wider than the screen. */
+  .coldwire-input { flex: 1 1 auto; min-width: 0; }
+  .coldwire-select { flex: 0 0 auto; cursor: pointer; }
+  .coldwire-input:focus-visible, .coldwire-select:focus-visible { outline: 2px solid #6b7280;
+    outline-offset: 1px; }
+
   .coldwire-entries { list-style: none; margin: 0; padding: 0; max-height: 16rem; overflow-y: auto; }
   .coldwire-entries li + li { margin-top: 0.5rem; }
   .coldwire-entry { min-width: 0; }
@@ -101,6 +114,8 @@
     .coldwire-button { background: #1f2937; border-color: #4b5563; color: #f9fafb; }
     .coldwire-button--danger { color: #fca5a5; border-color: #7f1d1d; }
     .coldwire-entry-url { color: #e5e7eb; }
+    .coldwire-input, .coldwire-select { background: #111827; border-color: #374151; color: #f9fafb; }
+    .coldwire-input::placeholder { color: #6b7280; }
     .coldwire-track { background: #374151; }
     .coldwire-bar { background: #9ca3af; }
     .coldwire-switch span { background: #4b5563; }
@@ -205,6 +220,27 @@
 
   <div class="coldwire-card">
     <h2>Cached</h2>
+
+    <div class="coldwire-filters">
+      <input type="search"
+             class="coldwire-input"
+             placeholder="Filter by path"
+             aria-label="Filter cached files by path"
+             autocomplete="off"
+             autocapitalize="none"
+             spellcheck="false"
+             data-coldwire-cache-target="search"
+             data-action="input->coldwire-cache#filterEntries search->coldwire-cache#filterEntries">
+      <select class="coldwire-select"
+              aria-label="Sort cached files"
+              data-coldwire-cache-target="sort"
+              data-action="change->coldwire-cache#filterEntries">
+        <option value="recent">Most recent</option>
+        <option value="largest">Largest</option>
+        <option value="alphabetical">A–Z</option>
+      </select>
+    </div>
+
     <ul class="coldwire-entries" data-coldwire-cache-target="entries">
       <li class="coldwire-empty">Nothing cached yet.</li>
     </ul>

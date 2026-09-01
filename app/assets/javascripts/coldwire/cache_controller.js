@@ -125,11 +125,16 @@ export default class extends Controller {
       this.syncRunning = false
       this.syncSettled = true
 
-      if (data.complete) {
+      if (data.offline) {
+        // Nothing was attempted, so the clock keeps saying when the cache was last actually
+        // brought up to date — but do not ask again on the very next tick either.
+        this.retryAfter = Date.now() + this.syncIntervalValue * 1000
+      } else {
+        // A pass happened. Record it however it went: requiring every URL to succeed meant
+        // one bad entry among hundreds stopped the clock for good, leaving this reading
+        // "Never synced" and re-syncing on every tick because a past deadline is always due.
         this.store.set(this.store.keys.syncedAt, data.finishedAt || Date.now())
         this.retryAfter = 0
-      } else if (!data.offline) {
-        this.retryAfter = Date.now() + this.syncIntervalValue * 1000
       }
 
       this.setSyncStatus(this.describeFinishedSync(data))
@@ -277,10 +282,9 @@ export default class extends Controller {
 
     return Math.max(
       stamp ? stamp + this.syncIntervalValue * 1000 : 0,
-      this.store.number(this.store.keys.backoff),
-      // A run that finished without getting through everything leaves the deadline in the
-      // past. Held here rather than in storage: it is this page pacing its own retries, not
-      // a decision the rest of the app should inherit.
+      // Set only when a run was refused outright, which leaves the clock untouched and the
+      // deadline in the past. Held here rather than in storage: it is this page pacing itself,
+      // not a decision the rest of the app should inherit.
       this.retryAfter || 0
     )
   }

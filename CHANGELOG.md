@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+- A sync records that it ran as soon as it has been through the whole manifest, whether or not
+  every URL came back. It used to require a perfect pass, so a single bad entry among hundreds
+  stopped the clock for good: the app read "Never synced" for as long as that URL stayed
+  broken, and re-synced constantly, because a deadline in the past is always due. What failed
+  stays missing from the cache, so the next pass finds it and tries again.
+
+  A run that was refused outright — no connection, or force offline — still does not count. It
+  leaves the clock alone and waits an interval, so "Synced N ago" keeps meaning when the cache
+  was genuinely last brought up to date.
+
+- Removed `sync_max_attempts`, and the attempt counter and backoff behind it. They existed to
+  stop an unfinishable manifest retrying forever; now that every retry waits an interval and a
+  partial pass counts, they no longer decided anything.
+
 - Everything Coldwire remembers goes through one small `window.coldwireStore` wrapper, defined
   once in the head: one set of key names, one try/catch, and no chance of the head snippet and
   the debug page disagreeing about where something is kept. It replaces three different idioms

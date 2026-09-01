@@ -156,7 +156,6 @@ Coldwire.configure do |config|
   config.sync_interval = 6.hours
   config.max_age = 7.days
   config.sync_concurrency = 4
-  config.sync_max_attempts = 25
 
   # Bump to invalidate every cached entry at once.
   config.cache_name = "coldwire"
@@ -369,7 +368,6 @@ config.auto_sync = true
 config.sync_interval = 6.hours    # leave this long between syncs
 config.max_age = 7.days           # refetch a page once its copy is older than this
 config.sync_concurrency = 4       # fetches in flight at once
-config.sync_max_attempts = 25     # give up on an unfinishable sync after this many loads
 ```
 
 **There is no true background scheduling to use.** WebKit ships neither Background Sync,
@@ -408,9 +406,15 @@ Completion is announced to **every open page**, not just the one that asked, bec
 the user is usually somewhere else and that page can no longer record anything. Navigating
 during a sync nudges the worker rather than starting a second one.
 
-If a manifest can never finish — it lists a URL that always fails — `sync_max_attempts` stops
-it after that many page loads and waits for the next interval, rather than fetching on every
-navigation for the rest of the session.
+A sync records that it ran as soon as it has been through the whole manifest, whether or not
+every URL came back. A single bad entry among hundreds would otherwise stop the clock for
+good: the app would say "never synced" for as long as that URL stayed broken, and retry as
+fast as it could, because a deadline in the past is always due. What failed simply stays
+missing from the cache, so the next pass finds it and tries again.
+
+A run that was refused outright — no connection, or force offline — is the one case that does
+not count. It leaves the clock alone, so it keeps saying when the cache was genuinely last
+brought up to date, and waits an interval before trying again.
 
 Retiring only touches entries the manifest owns — they are marked when stored. Assets, and
 pages you cached by simply visiting them, are never retired by a sync, because the manifest

@@ -62,8 +62,6 @@ module Coldwire
               identity: "coldwire-identity",
               forced: "coldwire-forced",
               syncedAt: "coldwire-synced-at",
-              attempts: "coldwire-sync-attempts",
-              backoff: "coldwire-sync-backoff",
               claim: "coldwire-sync-claim"
             },
 
@@ -203,7 +201,6 @@ module Coldwire
           // outlives a config change follows the new interval rather than the one it was
           // born with.
           var fallbackInterval = #{(Coldwire.config.sync_interval.to_i * 1000).to_json}
-          var maxAttempts = #{Coldwire.config.sync_max_attempts.to_i.to_json}
 
           function interval() {
             // The last one, not the first. Turbo appends what a visit brought and clears the
@@ -245,12 +242,12 @@ module Coldwire
             return store.on(keys.forced)
           }
 
-          // When a sync is next owed: an interval after the last completed one, pushed later
-          // if a string of failures set a backoff past that. Zero — never synced — is in the
-          // past, which is exactly right.
+          // When a sync is next owed: an interval after the last one that ran. Zero — never
+          // synced — is in the past, which is exactly right.
           function dueAt() {
             var last = store.number(keys.syncedAt)
-            return Math.max(last ? last + interval() : 0, store.number(keys.backoff))
+
+            return last ? last + interval() : 0
           }
 
           // Sleep exactly as long as is owed rather than waking up to ask. An overdue
@@ -324,41 +321,20 @@ module Coldwire
           // What a finished run means for the clock. Reached from the run's own reply, so
           // this does not depend on broadcasts arriving.
           function settle(result) {
-            // Nothing was attempted, so nothing counts against the manifest: no connection, or
-            // force offline is on. Wait out an interval; the `online` listener below brings it
-            // forward if a connection turns up sooner.
+            // Nothing was attempted: no connection, or force offline is on. Leave the clock
+            // untouched so it keeps saying when the cache was last actually brought up to
+            // date, and wait out an interval — the `online` listener brings that forward if a
+            // connection turns up sooner.
             if (result && result.offline) return schedule(interval())
 
-            // Only a run that got through the whole manifest restarts the clock.
-            if (result && result.complete) {
-              store.set(keys.syncedAt, result.finishedAt || Date.now())
-              store.set(keys.attempts, 0)
-              store.set(keys.backoff, 0)
-              return schedule()
-            }
-
-            // Count finished-but-incomplete runs, not messages sent. A manifest holding a
-            // URL that will never fetch would otherwise be retried for the life of the
-            // session; past the limit, wait out an interval before trying again.
-            //
-            // Backing off is deliberately not the same as syncing: the stamp keeps saying
-            // when the cache was actually brought up to date, however long ago that was.
-            var attempts = store.number(keys.attempts) + 1
-
-            if (attempts >= maxAttempts) {
-              store.set(keys.attempts, 0)
-              store.set(keys.backoff, Date.now() + interval())
-              return schedule()
-            }
-
-            store.set(keys.attempts, attempts)
-            // A retry waits exactly as long as a success does. Backing off faster than the
-            // interval — which this used to do, on a 2s, 4s, 6s ladder — meant a manifest with
-            // one URL that would not fetch synced several times a minute while the page
-            // faithfully displayed the interval it was configured with. The interval is the
-            // interval, whatever the outcome. Scheduling off the deadline alone cannot work
-            // here: a failed run leaves it in the past, so this must be an explicit wait.
-            schedule(interval())
+            // A pass happened, so record it — even if some of the manifest would not fetch.
+            // Requiring every single URL to succeed meant one bad entry among hundreds stopped
+            // the clock permanently: the app said "never synced" for as long as that URL was
+            // broken, and tried again as fast as it could because a deadline in the past is
+            // always due. What failed simply stays missing from the cache, so the next pass
+            // finds it and tries once more.
+            store.set(keys.syncedAt, (result && result.finishedAt) || Date.now())
+            schedule()
           }
 
           if ("serviceWorker" in navigator) {

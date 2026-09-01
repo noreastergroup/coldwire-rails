@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+- A page that draws a countdown is the only clock on that page. The debug page schedules its
+  own sync, and the head snippet was scheduling one too — two clocks, each with its own idea
+  of the interval. Whichever fired first won, so the page could sync part way through a
+  countdown that still showed time remaining. The snippet now stands down where the page is
+  driving, and keeps its timer everywhere else.
+
+- The interval is read from the *last* matching meta rather than the first. Turbo appends what
+  a visit brought and clears the old provisional head elements afterwards; caught mid-merge,
+  `querySelector` returns the previous page's value — which is how a document ends up syncing
+  on an interval nobody configured.
+
 - A failed sync waits a full interval before trying again, exactly like a successful one. It
   used to back off on a 2s, 4s, 6s ladder, so a manifest holding a single URL that would not
   fetch synced several times a minute while the page faithfully displayed the interval it was

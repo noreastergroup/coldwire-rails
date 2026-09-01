@@ -68,10 +68,16 @@ export default class extends Controller {
     // number held here — a web view freezes timers when backgrounded, and a countdown that
     // kept its own tally would come back wrong.
     this.ticker = window.setInterval(() => this.tick(), 1000)
+
+    // This page draws a countdown, so it must be the thing that acts on it. The head snippet
+    // keeps its own timer for every other page; here it would be a second clock with its own
+    // idea of the interval, firing while the countdown still showed time remaining.
+    window.__coldwireSyncOwnedByPage = true
   }
 
   disconnect() {
     window.clearInterval(this.ticker)
+    delete window.__coldwireSyncOwnedByPage
     window.removeEventListener("online", this.onOnline)
     window.removeEventListener("offline", this.onOnline)
     if ("serviceWorker" in navigator) {

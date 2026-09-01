@@ -137,7 +137,12 @@ module Coldwire
           var fallbackInterval = #{(Coldwire.config.sync_interval.to_i * 1000).to_json}
 
           function interval() {
-            var meta = document.querySelector('meta[name="coldwire-sync-interval"]')
+            // The last one, not the first. Turbo appends what a visit brought and clears the
+            // old provisional head elements after; catch it mid-merge and querySelector hands
+            // back the previous page's value, which is how a document ends up syncing on an
+            // interval nobody configured.
+            var metas = document.querySelectorAll('meta[name="coldwire-sync-interval"]')
+            var meta = metas.length ? metas[metas.length - 1] : null
             var seconds = meta ? Number(meta.getAttribute("content")) : NaN
 
             return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : fallbackInterval
@@ -221,6 +226,11 @@ module Coldwire
           }
 
           function fire() {
+            // A page that shows a countdown drives its own sync, and two clocks on one page
+            // cannot be kept honest: whichever fires first wins, and the display is left
+            // describing the other one. Stand down and let it schedule.
+            if (window.__coldwireSyncOwnedByPage) return schedule(interval())
+
             // A page cannot assume it is the only one. Another may have synced while this one
             // slept, or the wait may have been clamped, in which case sleep out the rest.
             if (Date.now() < dueAt()) return schedule()

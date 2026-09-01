@@ -173,7 +173,7 @@ module Coldwire
     # boot instead of as a 500 that quietly takes caching down with it.
     def validate_patterns(patterns, setting)
       Array(patterns).each do |pattern|
-        next unless pattern.is_a?(Regexp)
+        next validate_path_pattern(pattern, setting) unless pattern.is_a?(Regexp)
 
         # `\A` and friends are reflex for a Ruby developer, and JavaScript reads them as
         # identity escapes — `\A` quietly becomes a literal "A" and the rule never matches.
@@ -191,6 +191,39 @@ module Coldwire
         raise ArgumentError,
               "Coldwire evaluates #{setting} patterns with JavaScript's RegExp, which has no " \
               "equivalent for #{unsupported.join(' and ')}: #{pattern.inspect}"
+      end
+    end
+
+    # Path patterns are route-shaped: literal segments, ":name" for exactly one segment, and a
+    # trailing "*" for the rest. Checked here because every mistake in this shape fails the
+    # same silent way — the rule simply never matches, and you find out when something you
+    # expected to be there offline is not.
+    def validate_path_pattern(pattern, setting)
+      path = pattern.to_s
+
+      unless path.start_with?("/")
+        raise ArgumentError,
+              "Coldwire #{setting} paths are matched from the root, so they start with a " \
+              "slash: #{pattern.inspect}"
+      end
+
+      parts = path.split("/").reject(&:empty?)
+
+      parts.each_with_index do |part, index|
+        next if part == "*" && index == parts.length - 1
+
+        if part == "*"
+          raise ArgumentError,
+                "Coldwire #{setting} \"*\" matches everything remaining, so it can only be " \
+                "the last segment: #{pattern.inspect}"
+        end
+
+        next if part.match?(/\A:[A-Za-z_]\w*\z/)
+        next if part.match?(/\A[^:*]+\z/)
+
+        raise ArgumentError,
+              "Coldwire #{setting} segment #{part.inspect} is not a literal, a \":name\", or " \
+              "a trailing \"*\": #{pattern.inspect}"
       end
     end
   end

@@ -103,17 +103,42 @@ function matchesPath(url, paths) {
 
 // Rules arrive as plain objects so a Regexp survives the trip through JSON.
 function compileRules(rules) {
-  return rules.map((rule) => (rule.type === "regexp" ? new RegExp(rule.source, rule.flags) : rule.value))
+  return rules.map((rule) =>
+    rule.type === "regexp" ? new RegExp(rule.source, rule.flags) : segments(rule.value))
 }
 
-// A string matches the path as a segment prefix, so "/users" covers "/users/sign_in" but
-// not "/username". A Regexp is tested against the path.
+function segments(value) {
+  return value.split("/").filter(Boolean)
+}
+
+// Strings are route-shaped and match nothing beyond their own shape: "/sites" is /sites and
+// not /sites/1, ":id" is exactly one segment, and a trailing "*" takes the rest. A Regexp is
+// tested against the whole path.
+//
+// Deliberately strict. A prefix rule reads as "this section of the app", but it quietly takes
+// everything underneath — search results, new/edit forms, nested collections — and with
+// `ignore_query_params` a single "/sites/search" entry ends up answering every search.
 function matchesRules(url, rules) {
   return rules.some((rule) =>
     rule instanceof RegExp
       ? rule.test(url.pathname)
-      : url.pathname === rule || url.pathname.startsWith(`${rule}/`)
+      : matchesPattern(segments(url.pathname), rule)
   )
+}
+
+function matchesPattern(path, pattern) {
+  for (let index = 0; index < pattern.length; index++) {
+    const part = pattern[index]
+
+    // "*" is only ever the last segment — the Ruby side refuses it anywhere else — and takes
+    // everything remaining, so there has to be something remaining.
+    if (part === "*") return path.length > index
+    if (index >= path.length) return false
+    if (part.charAt(0) === ":") continue
+    if (part !== path[index]) return false
+  }
+
+  return path.length === pattern.length
 }
 
 // Whether *automatic* caching may store this. The precache manifest deliberately skips this

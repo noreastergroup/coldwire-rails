@@ -145,7 +145,7 @@ Coldwire.configure do |config|
   # when it is down. Coldwire's own routes are excluded automatically.
   config.excluded_paths = [ "/up", "/cable" ]
 
-  # What automatic caching may and may not store. Strings match a path segment prefix,
+  # What automatic caching may and may not store. Strings are route patterns ("/sites/:id"),
   # Regexps are tested against the path. An empty allowlist allows everything; the
   # blocklist always wins. Neither applies to the precache manifest.
   config.cache_allowlist = []
@@ -346,14 +346,30 @@ Rendering the age needs the client, since only it knows the timestamp — read
 Automatic caching — anything the worker sees you visit — is governed by two lists:
 
 ```ruby
-config.cache_allowlist = [ "/sites", %r{^/stories} ]
-config.cache_blocklist = [ "/users", %r{^/admin(/|$)} ]
+config.cache_allowlist = [ "/sites", "/sites/:id", "/sites/:id/card" ]
+config.cache_blocklist = [ "/users/:id/edit", %r{^/admin(/|$)} ]
 ```
 
 Both take **strings or Regexps**:
 
-- A **string** matches the path as a segment prefix. `"/users"` covers `/users` and
-  `/users/sign_in`, but not `/username`.
+- A **string** is a **route pattern**, and matches that shape and nothing else:
+
+  | Pattern | Matches | Does not match |
+  | --- | --- | --- |
+  | `/sites` | `/sites` | `/sites/1`, `/sites/search` |
+  | `/sites/:id` | `/sites/1` | `/sites`, `/sites/1/card` |
+  | `/sites/:id/card` | `/sites/1/card` | `/sites/1/notices` |
+  | `/sites/*` | `/sites/1`, `/sites/1/card` | `/sites` |
+
+  `:name` is exactly one segment; `*` takes everything remaining and may only be the last
+  segment. Coldwire raises at boot on anything else, because every mistake in this shape fails
+  the same silent way — the rule never matches, and you find out when a page you expected
+  offline is not there.
+
+  Prefer the explicit shapes over `*`. A prefix reads as "this section of the app", but it
+  takes everything underneath with it: search results, `new` and `edit` forms, nested
+  collections. With `ignore_query_params` on, a single `/sites/search` entry ends up answering
+  every search.
 - A **Regexp** is tested against the path. It is evaluated by JavaScript's `RegExp`, so write
   JS-compatible syntax: `^` and `$`, not `\A` and `\z`. Coldwire raises at boot if you use
   `\A`/`\z`/`\Z` or the `x`/`m` flags, rather than letting a rule silently never match.

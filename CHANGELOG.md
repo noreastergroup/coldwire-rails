@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+- Allowlist and blocklist strings are route patterns rather than prefixes. `"/sites"` now
+  matches `/sites` and nothing beneath it; `"/sites/:id"` takes exactly one segment; `"/sites/*"`
+  restores the old greedy behaviour where it is really wanted.
+
+  **This changes what an existing string means.** A prefix reads as "this section of the app",
+  but it quietly took everything underneath — search results, `new` and `edit` forms, nested
+  collections — and with `ignore_query_params` a single `/sites/search` entry answered every
+  search. Anything relying on the old behaviour needs a trailing `*`.
+
+  Malformed patterns raise at boot: a bare `sites` with no leading slash, a `*` that is not
+  last, a segment like `:1`. They all used to fail the same silent way, by never matching.
+
 - Renamed `prefetch_urls` to `precache_urls`. The rest of the library already called this the
   precache manifest, and the debug page has said "precache" throughout; the config was the odd
   one out. No alias: nothing is released yet, so a host app just renames the setting.

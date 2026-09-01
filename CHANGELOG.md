@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Renamed `prefetch_urls` to `precache_urls`. The rest of the library already called this the
+  precache manifest, and the debug page has said "precache" throughout; the config was the odd
+  one out. No alias: nothing is released yet, so a host app just renames the setting.
+
 - Tapping a row in the cached list opens the whole URL in a dialog, wrapped rather than
   ellipsised, with its size, age, and a Delete button. The row's text is a real button, so it
   is reachable from a keyboard and announced as a control.

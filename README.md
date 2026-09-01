@@ -103,14 +103,14 @@ scope, so a worker mounted anywhere still controls the whole origin. Narrow it w
 Coldwire.configure do |config|
   # Which pages to precache. Evaluated against your app's URL helpers, so `article_path`
   # means your route rather than one of Coldwire's.
-  config.prefetch_urls = -> {
+  config.precache_urls = -> {
     Article.published.flat_map { |article| [ article_path(article), card_article_path(article) ] }
   }
 
   # Give the lambda an argument and it receives the controller, for `current_user` and
   # anything else request-scoped:
   #
-  #   config.prefetch_urls = ->(controller) {
+  #   config.precache_urls = ->(controller) {
   #     controller.current_user.articles.map { |article| article_path(article) }
   #   }
 
@@ -428,7 +428,7 @@ A sync also skips itself when `navigator.onLine` is false, and only one runs at 
 
 ### The precache manifest ignores both
 
-`prefetch_urls` stores whatever you list, blocklist or not. Putting a URL in the manifest is
+`precache_urls` stores whatever you list, blocklist or not. Putting a URL in the manifest is
 an explicit instruction, and quietly declining it would make the manifest unpredictable — you
 would precache 84 pages and silently get 60. The same goes for the subresources a manifest
 page references.

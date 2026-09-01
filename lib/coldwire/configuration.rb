@@ -2,7 +2,7 @@
 
 module Coldwire
   # Host apps tune Coldwire through `Coldwire.configure`. Everything here has a working
-  # default except `prefetch_urls`, which only the host app can know.
+  # default except `precache_urls`, which only the host app can know.
   class Configuration
     # Name of the Cache API cache. Bump it to invalidate everything at once.
     attr_accessor :cache_name
@@ -130,7 +130,7 @@ module Coldwire
 
     # Returns the list of paths to precache. Evaluated in the controller, so route helpers
     # and the current user are both available.
-    attr_accessor :prefetch_urls
+    attr_accessor :precache_urls
 
     def initialize
       @cache_name = "coldwire"
@@ -145,7 +145,7 @@ module Coldwire
       @ignore_query_params = true
       @register_if = ->(_request) { true }
       @cache_identity = -> { nil }
-      @prefetch_urls = -> { [] }
+      @precache_urls = -> { [] }
       @auto_sync = false
       @sync_interval = 6 * 60 * 60
       @max_age = 7 * 24 * 60 * 60

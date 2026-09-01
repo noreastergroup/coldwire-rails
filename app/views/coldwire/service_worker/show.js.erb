@@ -342,7 +342,7 @@ async function runSync() {
   // page that started it can no longer record that it finished, or show it happening.
   notifyClients({ type: SYNC_MESSAGE, state: "started", pending: pending.length, retired })
 
-  const result = await prefetchUrls(pending, (progress) => {
+  const result = await precacheUrls(pending, (progress) => {
     notifyClients({ type: SYNC_MESSAGE, state: "progress", ...progress })
   })
 
@@ -461,7 +461,7 @@ async function fetchWithRetry(cache, href, options) {
   }
 }
 
-async function prefetchUrls(inputUrls, onProgress = () => {}) {
+async function precacheUrls(inputUrls, onProgress = () => {}) {
   const cache = await caches.open(CACHE_NAME)
   // A Set, not an array: lanes finish out of order and an array turns the "already have it"
   // check into a scan per asset.

@@ -16,17 +16,17 @@ module Coldwire
       # signed-in user can see and belongs to nobody else.
       response.headers["Cache-Control"] = "no-store, private"
 
-      render json: { urls: Array(prefetch_urls) }
+      render json: { urls: Array(precache_urls) }
     end
 
     private
 
-    # Evaluated against the host application's URL helpers, so `config.prefetch_urls` can
+    # Evaluated against the host application's URL helpers, so `config.precache_urls` can
     # say `site_path(site)` and mean the host's route rather than one of Coldwire's. A
     # lambda that takes an argument is handed this controller, for `current_user` and the
     # like.
-    def prefetch_urls
-      manifest = Coldwire.config.prefetch_urls
+    def precache_urls
+      manifest = Coldwire.config.precache_urls
       helpers = ::Rails.application.routes.url_helpers
 
       if manifest.arity.zero?

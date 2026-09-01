@@ -51,7 +51,11 @@ export default class extends Controller {
     "syncLabel",
     "search",
     "sort",
-    "forgetTemplate"
+    "forgetTemplate",
+    "detail",
+    "detailUrl",
+    "detailMeta",
+    "detailForget"
   ]
 
   get store() {
@@ -584,8 +588,12 @@ export default class extends Controller {
       const item = document.createElement("li")
       item.className = "coldwire-entry"
 
-      const text = document.createElement("div")
+      const text = document.createElement("button")
+      text.type = "button"
       text.className = "coldwire-entry-text"
+      text.dataset.url = entry.url
+      if (entry.cache) text.dataset.cache = entry.cache
+      text.dataset.action = "click->coldwire-cache#showDetail"
 
       const path = document.createElement("div")
       path.className = "coldwire-entry-url"
@@ -609,6 +617,69 @@ export default class extends Controller {
     })
   }
 
+  // A row can only ellipsise; the whole URL has to be readable somewhere, and this is it.
+  showDetail(event) {
+    event.preventDefault()
+
+    const { url, cache } = event.currentTarget.dataset
+    if (!url || !this.hasDetailTarget) return
+
+    const entry = (this.entries || []).find((candidate) => candidate.url === url)
+
+    if (this.hasDetailUrlTarget) this.detailUrlTarget.textContent = url
+    if (this.hasDetailMetaTarget) {
+      this.detailMetaTarget.textContent = entry ? this.describeEntry(entry) : ""
+    }
+    if (this.hasDetailForgetTarget) {
+      // The same handler the row button uses, so there is one way to remove an entry.
+      this.detailForgetTarget.dataset.url = url
+      if (cache) this.detailForgetTarget.dataset.cache = cache
+      this.detailForgetTarget.disabled = false
+    }
+
+    if (typeof this.detailTarget.showModal === "function") {
+      this.detailTarget.showModal()
+    } else {
+      // No <dialog> support: still show it, just without the backdrop and focus handling.
+      this.detailTarget.setAttribute("open", "")
+    }
+  }
+
+  closeDetail() {
+    if (!this.hasDetailTarget) return
+
+    if (typeof this.detailTarget.close === "function") {
+      this.detailTarget.close()
+    } else {
+      this.detailTarget.removeAttribute("open")
+    }
+  }
+
+  // A modal <dialog> is supposed to close itself on Escape, and mostly does — but it depends
+  // on the browser firing `cancel`, which is not something to rest a way out of a modal on.
+  // Checking the key here rather than with Stimulus's `keydown.esc` filter keeps this working
+  // on older Stimulus too.
+  closeDetailOnEscape(event) {
+    if (event.key !== "Escape") return
+
+    event.preventDefault()
+    this.closeDetail()
+  }
+
+  // A modal dialog fills the viewport with its backdrop, so a click outside the panel still
+  // lands on the dialog itself. Anything inside stops at the child that was clicked.
+  closeDetailOnBackdrop(event) {
+    if (event.target === this.detailTarget) this.closeDetail()
+  }
+
+  describeEntry(entry) {
+    const parts = [ this.formatBytes(entry.size) ]
+    if (entry.timestamp) parts.push(`cached ${this.formatCachedAt(entry.timestamp)}`)
+    if (entry.cache) parts.push(`in “${entry.cache}”`)
+
+    return parts.join(" · ")
+  }
+
   buildForgetButton(entry) {
     if (!this.hasForgetTemplateTarget) return null
 
@@ -617,8 +688,8 @@ export default class extends Controller {
     if (entry.cache) button.dataset.cache = entry.cache
     // Unlabelled but for its shape, and there is one per row — so the path goes in the label
     // rather than a bare "Remove", which would read as a column of identical buttons.
-    button.setAttribute("aria-label", `Remove ${this.displayUrl(entry.url)} from the cache`)
-    button.title = "Remove from the cache"
+    button.setAttribute("aria-label", `Delete ${this.displayUrl(entry.url)} from the cache`)
+    button.title = "Delete from the cache"
 
     return button
   }
@@ -626,6 +697,8 @@ export default class extends Controller {
   // Deliberately without a confirmation. Clear cache asks because it throws away everything
   // the app has to work with offline; one entry is a small, self-repairing loss — anything the
   // manifest lists comes back on the next sync — and a prompt per row would be noise.
+  //
+  // Reached from the row's icon and from the dialog's Delete button alike.
   async forgetEntry(event) {
     event.preventDefault()
 
@@ -637,11 +710,13 @@ export default class extends Controller {
 
     try {
       await this.forgetUrl(url, cache)
-      this.setStatus(`Removed ${this.displayUrl(url)}.`)
+      // Whether this came from the row or the dialog, the entry it was describing is gone.
+      this.closeDetail()
+      this.setStatus(`Deleted ${this.displayUrl(url)}.`)
       await this.renderCache()
     } catch (error) {
       button.disabled = false
-      this.setStatus(error.message || "Could not remove that entry")
+      this.setStatus(error.message || "Could not delete that entry")
     }
   }
 

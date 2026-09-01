@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Tapping a row in the cached list opens the whole URL in a dialog, wrapped rather than
+  ellipsised, with its size, age, and a Delete button. The row's text is a real button, so it
+  is reachable from a keyboard and announced as a control.
+
+  The dialog centres itself rather than leaving it to the browser. A modal `<dialog>` is
+  centred by the UA's `margin: auto`, and a host reset that zeroes margin on everything —
+  Tailwind's preflight does exactly that — drops it into the top left corner. Escape is
+  handled explicitly too, rather than resting the only way out of a modal on the browser
+  firing `cancel`.
+
 - Each row in the cached list has a trash button that removes just that entry. No confirmation:
   Clear cache asks because it throws away everything the app has to work with offline, whereas
   one entry is a small, self-repairing loss — anything the manifest lists returns on the next

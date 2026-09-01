@@ -249,8 +249,9 @@ Mounted at the engine root — `/coldwire` with the mount above. It gives you:
   finished, before the page had loaded.
 - **Cached** — every cached URL with size and how long ago it was stored, with a filter box
   and a sort (most recent, largest, A–Z). Both work on the list already read, so typing does
-  not re-inspect the cache. Each row has a trash button that removes just that entry; anything
-  the manifest lists comes back on the next sync.
+  not re-inspect the cache. Tapping a row shows the whole URL — rows can only ellipsise — with
+  its size and age and a Delete button. Each row also has a trash icon that deletes just that
+  entry; anything the manifest lists comes back on the next sync.
 
 It's styled with plain CSS and assumes no framework. Put it behind whatever authentication
 your app uses by wrapping the route, or override the template.

@@ -39,6 +39,8 @@
   .coldwire-icon-button { width: 2.25rem; height: 2.25rem; padding: 0; flex-shrink: 0; }
   /* Heroicons outline, which are drawn for 1.5. Set here rather than on each svg: CSS beats
      presentation attributes, so a value here silently wins anyway. */
+  .coldwire-button svg { width: 1rem; height: 1rem; flex-shrink: 0; fill: none;
+    stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
   .coldwire-icon-button svg { width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor;
     stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
   /* Spins while a refresh is in flight — without it the button re-reads values that usually
@@ -100,9 +102,14 @@
   .coldwire-entries { list-style: none; margin: 0; padding: 0; max-height: 16rem; overflow-y: auto; }
   .coldwire-entries li + li { margin-top: 0.5rem; }
   .coldwire-entry { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
-  /* The text takes the slack and is allowed to shrink, so a long path ellipsises instead of
-     pushing the button off the row. */
-  .coldwire-entry-text { flex: 1 1 auto; min-width: 0; }
+  /* A button, not a div: the whole point is that it is tappable, and this way it is reachable
+     from a keyboard and announced as a control without any of that being reinvented. It takes
+     the slack and is allowed to shrink, so a long path ellipsises rather than pushing the
+     trash off the row. */
+  .coldwire-entry-text { flex: 1 1 auto; min-width: 0; display: block; text-align: left;
+    padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
+  .coldwire-entry-text:focus-visible { outline: 2px solid #6b7280; outline-offset: 2px;
+    border-radius: 0.25rem; }
   .coldwire-entry-forget { flex: 0 0 auto; display: inline-flex; align-items: center;
     justify-content: center; width: 2rem; height: 2rem; padding: 0; cursor: pointer;
     border: 0; border-radius: 0.5rem; background: none; color: #9ca3af; }
@@ -117,6 +124,23 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; color: #1f2937; }
   .coldwire-entry-meta { margin-top: 0.125rem; font-size: 0.75rem; color: #6b7280; }
   .coldwire-empty { color: #9ca3af; font-size: 0.875rem; }
+  /* Centred here rather than left to the browser. A modal <dialog> is centred by the UA's
+     `margin: auto`, and a host app's CSS reset routinely zeroes margin on everything —
+     Tailwind's preflight does — which drops the dialog into the top left corner. A definite
+     width and height are what let `margin: auto` centre on both axes. */
+  .coldwire-dialog { position: fixed; inset: 0; margin: auto;
+    width: min(28rem, calc(100vw - 2rem)); height: fit-content;
+    max-height: calc(100vh - 2rem); overflow: auto;
+    border: 0; border-radius: 1rem; padding: 1rem; background: #fff; color: #1f2937;
+    font-family: inherit; }
+  .coldwire-dialog::backdrop { background: rgba(17, 24, 39, 0.45); }
+  .coldwire-dialog h2 { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.04em;
+    text-transform: uppercase; color: #9ca3af; margin: 0 0 0.75rem; }
+  /* The reason this exists: a URL too long for its row has to wrap here, anywhere it must,
+     rather than ellipsising again or pushing the dialog wider than the screen. */
+  .coldwire-dialog-url { margin: 0; font-size: 0.875rem; line-height: 1.5;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+
   .coldwire-status { padding: 0 0.25rem; font-size: 0.875rem; color: #6b7280; min-height: 1.25rem; }
 
   /* A phone gives up a lot of its width to two sets of gutters — the page's and each card's.
@@ -273,4 +297,29 @@
   </div>
 
   <p class="coldwire-status" data-coldwire-cache-target="status"></p>
+
+  <%# A real <dialog>: Escape, focus handling and the backdrop come with it, and none of that
+      is worth reimplementing to show one string. %>
+  <dialog class="coldwire-dialog"
+          data-coldwire-cache-target="detail"
+          data-action="click->coldwire-cache#closeDetailOnBackdrop
+                       keydown->coldwire-cache#closeDetailOnEscape">
+    <h2>Cached file</h2>
+    <p class="coldwire-dialog-url" data-coldwire-cache-target="detailUrl"></p>
+    <p class="coldwire-facts" data-coldwire-cache-target="detailMeta"></p>
+    <div class="coldwire-actions coldwire-actions--spaced">
+      <button type="button" class="coldwire-button" data-action="click->coldwire-cache#closeDetail">
+        Close
+      </button>
+      <button type="button"
+              class="coldwire-button coldwire-button--danger"
+              data-coldwire-cache-target="detailForget"
+              data-action="click->coldwire-cache#forgetEntry">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="<%= trash_path %>" />
+        </svg>
+        Delete
+      </button>
+    </div>
+  </dialog>
 </div>

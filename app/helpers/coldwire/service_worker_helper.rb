@@ -18,7 +18,7 @@ module Coldwire
       # next line is a single call expression, not two statements — ASI does not save you —
       # so a missing semicolon here throws and takes the registration down with it.
       safe_join([ coldwire_sync_interval_meta, javascript_tag(nonce: true) do
-        [ coldwire_identity_script, coldwire_offline_marker_script,
+        [ coldwire_store_script, coldwire_identity_script, coldwire_offline_marker_script,
           coldwire_forced_offline_script, coldwire_auto_sync_script, coldwire_register_script ]
           .compact
           .join("\n")
@@ -41,13 +41,82 @@ module Coldwire
       tag.meta(name: "coldwire-sync-interval", content: Coldwire.config.sync_interval.to_i)
     end
 
+    # Every piece of Coldwire that remembers anything goes through this: the head fragments
+    # below, and the debug page's Stimulus controller, which reads it off `window`. One
+    # implementation means one set of key names, one try/catch, and no chance of two parts of
+    # the library disagreeing about where something is kept.
+    #
+    # localStorage throws rather than returning null in a private window, and can be evicted
+    # whole, so every write is mirrored in memory and read back from there when the store has
+    # nothing. Without that a browser refusing to persist would leave the sync clock reading
+    # zero, and every finished sync would be due again the instant it ended — a hot loop.
+    def coldwire_store_script
+      <<~JS
+        (function () {
+          if (window.coldwireStore) return
+
+          var memory = {}
+
+          window.coldwireStore = {
+            keys: {
+              identity: "coldwire-identity",
+              forced: "coldwire-forced",
+              syncedAt: "coldwire-synced-at",
+              attempts: "coldwire-sync-attempts",
+              backoff: "coldwire-sync-backoff",
+              claim: "coldwire-sync-claim"
+            },
+
+            get: function (key) {
+              try {
+                var value = window.localStorage.getItem(key)
+                if (value !== null) return value
+              } catch (error) {
+                // Private mode and the like. Fall through to what this page remembers.
+              }
+
+              return key in memory ? memory[key] : null
+            },
+
+            set: function (key, value) {
+              memory[key] = String(value)
+
+              try {
+                window.localStorage.setItem(key, String(value))
+              } catch (error) {
+                // Nothing to do. The value is still in memory for as long as this page lives.
+              }
+            },
+
+            // A timestamp or a counter, and zero for anything missing or nonsensical — which
+            // for a deadline means "in the past", and that is the right answer for one that
+            // was never recorded.
+            number: function (key) {
+              var value = Number(this.get(key))
+
+              return Number.isFinite(value) && value > 0 ? value : 0
+            },
+
+            on: function (key) {
+              return this.get(key) === "1"
+            },
+
+            toggle: function (key, value) {
+              this.set(key, value ? "1" : "0")
+            }
+          }
+        })();
+      JS
+    end
+
     def coldwire_identity_script
       <<~JS
         (function () {
           var identity = #{Coldwire.config.cache_identity(self).to_json}
+          var store = window.coldwireStore
           try {
-            var key = "coldwire-identity"
-            var previous = window.localStorage.getItem(key)
+            var key = store.keys.identity
+            var previous = store.get(key)
             if (previous === identity) return
 
             // No stored identity is not a change of identity — it is a browser that has not
@@ -55,7 +124,7 @@ module Coldwire
             // treating null as "somebody else" would destroy a perfectly good cache the first
             // time localStorage came back empty.
             if (previous === null) {
-              window.localStorage.setItem(key, identity)
+              store.set(key, identity)
               return
             }
 
@@ -64,7 +133,7 @@ module Coldwire
             // to act on once there is a connection to refill from.
             if (!navigator.onLine) return
 
-            window.localStorage.setItem(key, identity)
+            store.set(key, identity)
             if ("caches" in window) caches.delete(#{Coldwire.config.cache_name.to_json})
           } catch (error) {
             console.warn("[coldwire] could not reconcile cache identity", error)
@@ -128,13 +197,13 @@ module Coldwire
           if (window.__coldwireAutoSync) return
           window.__coldwireAutoSync = true
 
-          var stampKey = "coldwire-synced-at"
-          var attemptsKey = "coldwire-sync-attempts"
-          var backoffKey = "coldwire-sync-backoff"
+          var store = window.coldwireStore
+          var keys = store.keys
           // Only the starting value. Read back from the meta on every use, so a document that
           // outlives a config change follows the new interval rather than the one it was
           // born with.
           var fallbackInterval = #{(Coldwire.config.sync_interval.to_i * 1000).to_json}
+          var maxAttempts = #{Coldwire.config.sync_max_attempts.to_i.to_json}
 
           function interval() {
             // The last one, not the first. Turbo appends what a visit brought and clears the
@@ -147,7 +216,6 @@ module Coldwire
 
             return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : fallbackInterval
           }
-          var maxAttempts = #{Coldwire.config.sync_max_attempts.to_i.to_json}
 
           // setTimeout holds its delay in a signed 32-bit integer and fires *immediately* on
           // anything larger — about 24.8 days. A longer wait wakes early and schedules the
@@ -156,10 +224,6 @@ module Coldwire
 
           // How long a started run may go quiet before it is presumed dead and tried again.
           var silence = 30000
-
-          // A year. Long enough that the clock is never lost to expiry, and the value is
-          // rewritten on every completed sync anyway.
-          var stampLife = 31536000
 
           // A Hotwire Native app is several web views at once — one per tab — and every one of
           // them runs this. Left alone they all hold a timer against the same shared deadline
@@ -173,71 +237,20 @@ module Coldwire
           //
           // The worker also hands back the run already in flight, so a duplicate would be
           // harmless — but not asking at all is better than being harmless.
-          var claimKey = "coldwire-sync-claim"
           var claimLife = 10000
 
           var timer = null
-          var lastFinished = 0
-
-          function read(key) {
-            // Fall back to what this page last saw. If the cookie cannot be stored — blocked,
-            // full, a private window — the clock would read zero forever, every completed sync
-            // would be due again the instant it ended, and the result is a hot loop against
-            // the network. Remembering it here keeps the pacing right even when nothing sticks.
-            if (key === stampKey) return Math.max(readCookie(key) || 0, lastFinished)
-
-            try { return Number(window.localStorage.getItem(key)) } catch (error) { return NaN }
-          }
-
-          function write(key, value) {
-            if (key === stampKey) {
-              lastFinished = Number(value) || 0
-              return writeCookie(key, value)
-            }
-
-            try { window.localStorage.setItem(key, String(value)) } catch (error) {}
-          }
-
-          // When the cache was last brought up to date is the one fact here worth keeping
-          // properly. A cookie with an explicit expiry outlives the site data a web view may
-          // clear out from under localStorage, and it is a single number, so the cost of
-          // carrying it on requests is a dozen bytes.
-          function readCookie(key) {
-            try {
-              var match = document.cookie.match(new RegExp("(?:^|; )" + key + "=([^;]*)"))
-              return match ? Number(decodeURIComponent(match[1])) : NaN
-            } catch (error) {
-              return NaN
-            }
-          }
-
-          function writeCookie(key, value) {
-            try {
-              var secure = document.location.protocol === "https:" ? "; secure" : ""
-              document.cookie = key + "=" + encodeURIComponent(String(value)) +
-                "; path=/; max-age=" + stampLife + "; samesite=lax" + secure
-            } catch (error) {}
-          }
 
           function forced() {
-            try {
-              return window.localStorage.getItem("coldwire-forced") === "1"
-            } catch (error) {
-              return false
-            }
-          }
-
-          function stamp(key) {
-            var at = read(key)
-            return Number.isFinite(at) && at > 0 ? at : 0
+            return store.on(keys.forced)
           }
 
           // When a sync is next owed: an interval after the last completed one, pushed later
           // if a string of failures set a backoff past that. Zero — never synced — is in the
           // past, which is exactly right.
           function dueAt() {
-            var last = stamp(stampKey)
-            return Math.max(last ? last + interval() : 0, stamp(backoffKey))
+            var last = store.number(keys.syncedAt)
+            return Math.max(last ? last + interval() : 0, store.number(keys.backoff))
           }
 
           // Sleep exactly as long as is owed rather than waking up to ask. An overdue
@@ -258,10 +271,10 @@ module Coldwire
           // A claim only one page can hold, and only briefly. Expiry rather than release: a
           // page that is closed mid-sync must not lock the others out.
           function claim() {
-            var held = stamp(claimKey)
+            var held = store.number(keys.claim)
             if (held && Date.now() - held < claimLife) return false
 
-            write(claimKey, Date.now())
+            store.set(keys.claim, Date.now())
 
             return true
           }
@@ -318,9 +331,9 @@ module Coldwire
 
             // Only a run that got through the whole manifest restarts the clock.
             if (result && result.complete) {
-              write(stampKey, result.finishedAt || Date.now())
-              write(attemptsKey, 0)
-              write(backoffKey, 0)
+              store.set(keys.syncedAt, result.finishedAt || Date.now())
+              store.set(keys.attempts, 0)
+              store.set(keys.backoff, 0)
               return schedule()
             }
 
@@ -330,15 +343,15 @@ module Coldwire
             //
             // Backing off is deliberately not the same as syncing: the stamp keeps saying
             // when the cache was actually brought up to date, however long ago that was.
-            var attempts = stamp(attemptsKey) + 1
+            var attempts = store.number(keys.attempts) + 1
 
             if (attempts >= maxAttempts) {
-              write(attemptsKey, 0)
-              write(backoffKey, Date.now() + interval())
+              store.set(keys.attempts, 0)
+              store.set(keys.backoff, Date.now() + interval())
               return schedule()
             }
 
-            write(attemptsKey, attempts)
+            store.set(keys.attempts, attempts)
             // A retry waits exactly as long as a success does. Backing off faster than the
             // interval — which this used to do, on a 2s, 4s, 6s ladder — meant a manifest with
             // one URL that would not fetch synced several times a minute while the page
@@ -399,11 +412,7 @@ module Coldwire
           if (!("serviceWorker" in navigator)) return
 
           function apply() {
-            try {
-              if (window.localStorage.getItem("coldwire-forced") !== "1") return
-            } catch (error) {
-              return
-            }
+            if (!window.coldwireStore.on(window.coldwireStore.keys.forced)) return
 
             navigator.serviceWorker.ready.then(function (registration) {
               if (registration.active) {

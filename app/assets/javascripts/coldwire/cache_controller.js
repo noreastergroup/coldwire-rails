@@ -13,12 +13,18 @@ async function entrySize(response) {
   return (await response.clone().blob()).size
 }
 
-const FORCED_KEY = "coldwire-forced"
-const SYNCED_AT_KEY = "coldwire-synced-at"
-const BACKOFF_KEY = "coldwire-sync-backoff"
-// A year. The value is rewritten on every completed sync, so this only has to outlast a gap
-// in use, not be tuned.
-const STAMP_LIFE = 31536000
+// Storage goes through the one wrapper the head snippet defines, so the page and the snippet
+// cannot disagree about where anything is kept. Without that snippet there is no service
+// worker either, so an inert stand-in is the honest degradation rather than a second
+// implementation that would only drift.
+const INERT_STORE = {
+  keys: {},
+  get: () => null,
+  set: () => {},
+  number: () => 0,
+  on: () => false,
+  toggle: () => {}
+}
 const SYNC_MESSAGE = "coldwire:sync"
 const TIMESTAMP_HEADER = "timestamp"
 
@@ -44,6 +50,10 @@ export default class extends Controller {
     "syncButton",
     "syncLabel"
   ]
+
+  get store() {
+    return window.coldwireStore || INERT_STORE
+  }
 
   connect() {
     this.onOnline = () => this.renderConnection()
@@ -116,7 +126,7 @@ export default class extends Controller {
       this.syncSettled = true
 
       if (data.complete) {
-        this.writeStamp(SYNCED_AT_KEY, data.finishedAt || Date.now())
+        this.store.set(this.store.keys.syncedAt, data.finishedAt || Date.now())
         this.retryAfter = 0
       } else if (!data.offline) {
         this.retryAfter = Date.now() + this.syncIntervalValue * 1000
@@ -232,7 +242,7 @@ export default class extends Controller {
   renderSyncedAt() {
     if (!this.hasSyncedAtTarget) return
 
-    const stamp = this.readStamp(SYNCED_AT_KEY)
+    const stamp = this.store.number(this.store.keys.syncedAt)
     const synced = stamp
       ? `Synced ${this.formatCachedAt(Math.floor(stamp / 1000))}`
       : "Never synced"
@@ -263,11 +273,11 @@ export default class extends Controller {
   // When a sync is next owed. Reads the same keys the head snippet writes, so opening this
   // page never resets a clock that was already running.
   dueAt() {
-    const stamp = this.readStamp(SYNCED_AT_KEY)
+    const stamp = this.store.number(this.store.keys.syncedAt)
 
     return Math.max(
       stamp ? stamp + this.syncIntervalValue * 1000 : 0,
-      this.readStamp(BACKOFF_KEY) || 0,
+      this.store.number(this.store.keys.backoff),
       // A run that finished without getting through everything leaves the deadline in the
       // past. Held here rather than in storage: it is this page pacing its own retries, not
       // a decision the rest of the app should inherit.
@@ -287,11 +297,7 @@ export default class extends Controller {
   isForced() {
     if (this.hasForcedToggleTarget) return this.forcedToggleTarget.checked
 
-    try {
-      return window.localStorage.getItem(FORCED_KEY) === "1"
-    } catch {
-      return false
-    }
+    return this.store.on(this.store.keys.forced)
   }
 
   describeNextSync() {
@@ -306,55 +312,6 @@ export default class extends Controller {
     const seconds = Math.ceil((this.dueAt() - Date.now()) / 1000)
 
     return seconds > 0 ? `next in ${this.formatDuration(seconds)}` : "due now"
-  }
-
-  // The one fact worth keeping properly — when the cache was last brought up to date — lives
-  // in a cookie with an explicit expiry, which outlives the site data a web view may clear
-  // out from under localStorage. It is one number, so it costs a dozen bytes on a request.
-  // The scheduling scratch (attempts, backoff) stays in localStorage; losing it costs
-  // nothing, and there is no reason to send it to the server.
-  writeStamp(key, value) {
-    if (key === SYNCED_AT_KEY) {
-      // Kept in memory as well: a cookie that will not store would otherwise leave the clock
-      // reading zero, making every finished sync instantly due again — a hot loop.
-      this.lastFinished = Number(value) || 0
-      return this.writeCookie(key, value)
-    }
-
-    try {
-      window.localStorage.setItem(key, String(value))
-    } catch {
-      // Private mode and the like. The clock falls back to the head snippet's copy.
-    }
-  }
-
-  readStamp(key) {
-    let value = null
-    try {
-      value = key === SYNCED_AT_KEY
-        ? Math.max(this.readCookie(key) || 0, this.lastFinished || 0)
-        : Number(window.localStorage.getItem(key))
-    } catch {
-      // Private mode and the like. The line just stays unknown.
-    }
-
-    return Number.isFinite(value) && value > 0 ? value : null
-  }
-
-  readCookie(key) {
-    const match = document.cookie.match(new RegExp(`(?:^|; )${key}=([^;]*)`))
-
-    return match ? Number(decodeURIComponent(match[1])) : NaN
-  }
-
-  writeCookie(key, value) {
-    try {
-      const secure = window.location.protocol === "https:" ? "; secure" : ""
-      document.cookie =
-        `${key}=${encodeURIComponent(String(value))}; path=/; max-age=${STAMP_LIFE}; samesite=lax${secure}`
-    } catch {
-      // Nothing to do; the line just stays unknown.
-    }
   }
 
   formatDuration(seconds) {
@@ -470,7 +427,7 @@ export default class extends Controller {
 
   async toggleForced(event) {
     const enabled = event.currentTarget.checked
-    window.localStorage.setItem(FORCED_KEY, enabled ? "1" : "0")
+    this.store.toggle(this.store.keys.forced, enabled)
     this.renderConnection()
     // The countdown means something different the instant this changes; do not make the user
     // wait a tick to see it.
@@ -486,7 +443,7 @@ export default class extends Controller {
 
   restoreForced() {
     if (!this.hasForcedToggleTarget) return
-    this.forcedToggleTarget.checked = window.localStorage.getItem(FORCED_KEY) === "1"
+    this.forcedToggleTarget.checked = this.store.on(this.store.keys.forced)
   }
 
   async syncForcedToWorker() {

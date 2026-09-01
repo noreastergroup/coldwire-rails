@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Everything Coldwire remembers goes through one small `window.coldwireStore` wrapper, defined
+  once in the head: one set of key names, one try/catch, and no chance of the head snippet and
+  the debug page disagreeing about where something is kept. It replaces three different idioms
+  across two files — including the cookie the last-synced time briefly used, which is back in
+  localStorage with everything else.
+
+  localStorage throws rather than returning null in a private window and can be evicted whole,
+  so every write is mirrored in memory and read back from there when the store has nothing.
+  That guard used to protect only the sync clock; it now covers every key.
+
 - Syncing stops while force offline is on. The switch asks for no network at all, but the
   worker's own fetches never pass through its fetch handler, so a sync went to the network
   regardless. The page checks before asking and the worker refuses when asked — both, because

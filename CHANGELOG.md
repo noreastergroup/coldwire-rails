@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- The debug page records a finished sync from the reply to its own request, not from the
+  broadcast. It drives its own sync, so the head snippet stands down there — which meant that
+  when a broadcast went missing, nothing recorded the outcome at all: the page read "Never
+  synced" indefinitely and re-synced on every tick, because a deadline in the past is always
+  due. The snippet had already been fixed this way; the page had not.
+
 - A sync records that it ran as soon as it has been through the whole manifest, whether or not
   every URL came back. It used to require a perfect pass, so a single bad entry among hundreds
   stopped the clock for good: the app read "Never synced" for as long as that URL stayed

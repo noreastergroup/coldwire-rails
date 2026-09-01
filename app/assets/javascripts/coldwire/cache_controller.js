@@ -125,18 +125,7 @@ export default class extends Controller {
       this.syncRunning = false
       this.syncSettled = true
 
-      if (data.offline) {
-        // Nothing was attempted, so the clock keeps saying when the cache was last actually
-        // brought up to date — but do not ask again on the very next tick either.
-        this.retryAfter = Date.now() + this.syncIntervalValue * 1000
-      } else {
-        // A pass happened. Record it however it went: requiring every URL to succeed meant
-        // one bad entry among hundreds stopped the clock for good, leaving this reading
-        // "Never synced" and re-syncing on every tick because a past deadline is always due.
-        this.store.set(this.store.keys.syncedAt, data.finishedAt || Date.now())
-        this.retryAfter = 0
-      }
-
+      this.settleSync(data)
       this.setSyncStatus(this.describeFinishedSync(data))
       this.hideProgress()
       this.toggleBusy(false)
@@ -173,6 +162,28 @@ export default class extends Controller {
     if (last.state !== "finished") this.setSyncStatus("Syncing…")
 
     this.handleSyncMessage({ data: last })
+  }
+
+  // What a finished run means for the clock. Reached from the reply to this page's own
+  // request as well as from the broadcast, because a broadcast can go missing and the clock
+  // must not depend on one arriving: this page drives its own sync, so if it fails to record
+  // the outcome nothing else will, and it reads "Never synced" and re-syncs on every tick.
+  //
+  // Writing the same finishedAt twice is harmless, so hearing it both ways costs nothing.
+  settleSync(data) {
+    if (!data) return
+
+    if (data.offline) {
+      // Nothing was attempted, so the clock keeps saying when the cache was last actually
+      // brought up to date — but do not ask again on the very next tick either.
+      this.retryAfter = Date.now() + this.syncIntervalValue * 1000
+      return
+    }
+
+    // A pass happened. Record it however it went: requiring every URL to succeed meant one
+    // bad entry among hundreds stopped the clock for good.
+    this.store.set(this.store.keys.syncedAt, data.finishedAt || Date.now())
+    this.retryAfter = 0
   }
 
   describeFinishedSync(data) {
@@ -212,7 +223,13 @@ export default class extends Controller {
     this.showProgress("Starting…")
 
     try {
-      await this.sendToWorker("sync", {}, 10 * 60 * 1000)
+      const result = await this.sendToWorker("sync", {}, 10 * 60 * 1000)
+
+      // The reply cannot be missed the way a broadcast can, so this is what the clock rests
+      // on. If the broadcast did arrive it has already recorded the same thing.
+      this.settleSync(result)
+      this.renderSyncedAt()
+      if (!this.syncSettled) this.setSyncStatus(this.describeFinishedSync(result))
     } catch (error) {
       // A sync that already reported itself finished has nothing to apologise for; the reply
       // channel simply did not survive to say so.

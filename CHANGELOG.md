@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+- A failed sync waits a full interval before trying again, exactly like a successful one. It
+  used to back off on a 2s, 4s, 6s ladder, so a manifest holding a single URL that would not
+  fetch synced several times a minute while the page faithfully displayed the interval it was
+  configured with. The interval is the interval, whatever the outcome.
+
+- A run records when *it* finished, not when a page happened to hear about it. The debug page
+  asks the worker what it missed on every load, and that replay re-dated the last sync to the
+  moment of asking — so refreshing the page reset "synced N ago" to zero every time.
+
+- That timestamp now lives in a cookie with a year's expiry rather than localStorage, which a
+  web view may clear from under it. The scheduling scratch stays in localStorage: losing it
+  costs nothing, and there is no reason to send it to the server. If the cookie cannot be
+  stored at all, the page keeps it in memory — otherwise the clock would read zero and every
+  finished sync would be instantly due again, which is a hot loop against the network.
+
 - The sync interval is read from a `coldwire-sync-interval` meta rather than only baked into
   the head script. A head script runs once per document and Turbo visits reuse the document,
   so a page opened before the interval changed kept the old one for as long as it stayed

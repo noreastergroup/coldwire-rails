@@ -152,14 +152,51 @@ module Coldwire
           // How long a started run may go quiet before it is presumed dead and tried again.
           var silence = 30000
 
+          // A year. Long enough that the clock is never lost to expiry, and the value is
+          // rewritten on every completed sync anyway.
+          var stampLife = 31536000
+
           var timer = null
+          var lastFinished = 0
 
           function read(key) {
+            // Fall back to what this page last saw. If the cookie cannot be stored — blocked,
+            // full, a private window — the clock would read zero forever, every completed sync
+            // would be due again the instant it ended, and the result is a hot loop against
+            // the network. Remembering it here keeps the pacing right even when nothing sticks.
+            if (key === stampKey) return Math.max(readCookie(key) || 0, lastFinished)
+
             try { return Number(window.localStorage.getItem(key)) } catch (error) { return NaN }
           }
 
           function write(key, value) {
+            if (key === stampKey) {
+              lastFinished = Number(value) || 0
+              return writeCookie(key, value)
+            }
+
             try { window.localStorage.setItem(key, String(value)) } catch (error) {}
+          }
+
+          // When the cache was last brought up to date is the one fact here worth keeping
+          // properly. A cookie with an explicit expiry outlives the site data a web view may
+          // clear out from under localStorage, and it is a single number, so the cost of
+          // carrying it on requests is a dozen bytes.
+          function readCookie(key) {
+            try {
+              var match = document.cookie.match(new RegExp("(?:^|; )" + key + "=([^;]*)"))
+              return match ? Number(decodeURIComponent(match[1])) : NaN
+            } catch (error) {
+              return NaN
+            }
+          }
+
+          function writeCookie(key, value) {
+            try {
+              var secure = document.location.protocol === "https:" ? "; secure" : ""
+              document.cookie = key + "=" + encodeURIComponent(String(value)) +
+                "; path=/; max-age=" + stampLife + "; samesite=lax" + secure
+            } catch (error) {}
           }
 
           function stamp(key) {
@@ -214,7 +251,7 @@ module Coldwire
           function settle(result) {
             // Only a run that got through the whole manifest restarts the clock.
             if (result && result.complete) {
-              write(stampKey, Date.now())
+              write(stampKey, result.finishedAt || Date.now())
               write(attemptsKey, 0)
               write(backoffKey, 0)
               return schedule()
@@ -235,9 +272,13 @@ module Coldwire
             }
 
             write(attemptsKey, attempts)
-            // Sooner than the interval, but never instantly — the deadline is already in the
-            // past, so scheduling off that alone would retry in a tight loop.
-            schedule(Math.min(interval(), attempts * 2000))
+            // A retry waits exactly as long as a success does. Backing off faster than the
+            // interval — which this used to do, on a 2s, 4s, 6s ladder — meant a manifest with
+            // one URL that would not fetch synced several times a minute while the page
+            // faithfully displayed the interval it was configured with. The interval is the
+            // interval, whatever the outcome. Scheduling off the deadline alone cannot work
+            // here: a failed run leaves it in the past, so this must be an explicit wait.
+            schedule(interval())
           }
 
           if ("serviceWorker" in navigator) {

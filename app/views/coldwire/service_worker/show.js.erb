@@ -287,7 +287,7 @@ async function runSync() {
   try {
     manifest = await fetchManifest()
   } catch (error) {
-    const failure = { ok: false, error: error.message, complete: false }
+    const failure = { ok: false, error: error.message, complete: false, finishedAt: Date.now() }
     await notifyClients({ type: SYNC_MESSAGE, state: "finished", ...failure })
 
     return failure
@@ -323,7 +323,11 @@ async function runSync() {
   // missing from the cache, so the next sync finds them pending again and tries once more.
   const remaining = result.pageFailures
   const complete = remaining === 0
-  const finished = { ...result, retired, synced: pending.length - remaining, remaining, complete }
+  // When the run actually ended, decided here rather than by whoever hears about it. A page
+  // that opens later and asks what it missed must be able to say "synced four minutes ago",
+  // not re-date the run to the moment it happened to look.
+  const finished = { ...result, retired, synced: pending.length - remaining, remaining, complete,
+                     finishedAt: Date.now() }
 
   await notifyClients({ type: SYNC_MESSAGE, state: "finished", ...finished })
 

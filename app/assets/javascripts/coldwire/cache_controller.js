@@ -16,6 +16,9 @@ async function entrySize(response) {
 const FORCED_KEY = "coldwire-forced"
 const SYNCED_AT_KEY = "coldwire-synced-at"
 const BACKOFF_KEY = "coldwire-sync-backoff"
+// A year. The value is rewritten on every completed sync, so this only has to outlast a gap
+// in use, not be tuned.
+const STAMP_LIFE = 31536000
 const SYNC_MESSAGE = "coldwire:sync"
 const TIMESTAMP_HEADER = "timestamp"
 
@@ -107,7 +110,7 @@ export default class extends Controller {
       this.syncSettled = true
 
       if (data.complete) {
-        this.writeStamp(SYNCED_AT_KEY, Date.now())
+        this.writeStamp(SYNCED_AT_KEY, data.finishedAt || Date.now())
         this.retryAfter = 0
       } else {
         this.retryAfter = Date.now() + this.syncIntervalValue * 1000
@@ -267,7 +270,19 @@ export default class extends Controller {
     return seconds > 0 ? `next in ${this.formatDuration(seconds)}` : "due now"
   }
 
+  // The one fact worth keeping properly — when the cache was last brought up to date — lives
+  // in a cookie with an explicit expiry, which outlives the site data a web view may clear
+  // out from under localStorage. It is one number, so it costs a dozen bytes on a request.
+  // The scheduling scratch (attempts, backoff) stays in localStorage; losing it costs
+  // nothing, and there is no reason to send it to the server.
   writeStamp(key, value) {
+    if (key === SYNCED_AT_KEY) {
+      // Kept in memory as well: a cookie that will not store would otherwise leave the clock
+      // reading zero, making every finished sync instantly due again — a hot loop.
+      this.lastFinished = Number(value) || 0
+      return this.writeCookie(key, value)
+    }
+
     try {
       window.localStorage.setItem(key, String(value))
     } catch {
@@ -278,12 +293,30 @@ export default class extends Controller {
   readStamp(key) {
     let value = null
     try {
-      value = Number(window.localStorage.getItem(key))
+      value = key === SYNCED_AT_KEY
+        ? Math.max(this.readCookie(key) || 0, this.lastFinished || 0)
+        : Number(window.localStorage.getItem(key))
     } catch {
       // Private mode and the like. The line just stays unknown.
     }
 
     return Number.isFinite(value) && value > 0 ? value : null
+  }
+
+  readCookie(key) {
+    const match = document.cookie.match(new RegExp(`(?:^|; )${key}=([^;]*)`))
+
+    return match ? Number(decodeURIComponent(match[1])) : NaN
+  }
+
+  writeCookie(key, value) {
+    try {
+      const secure = window.location.protocol === "https:" ? "; secure" : ""
+      document.cookie =
+        `${key}=${encodeURIComponent(String(value))}; path=/; max-age=${STAMP_LIFE}; samesite=lax${secure}`
+    } catch {
+      // Nothing to do; the line just stays unknown.
+    }
   }
 
   formatDuration(seconds) {

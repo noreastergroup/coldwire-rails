@@ -161,6 +161,21 @@ module Coldwire
           // rewritten on every completed sync anyway.
           var stampLife = 31536000
 
+          // A Hotwire Native app is several web views at once — one per tab — and every one of
+          // them runs this. Left alone they all hold a timer against the same shared deadline
+          // and all wake together, so one app becomes a small burst of identical requests.
+          // Two rules keep that from happening:
+          //
+          //   1. Only the visible page holds a timer. A hidden web view cancels its own and
+          //      re-arms when it comes back, so the tabs behind you are doing nothing at all.
+          //   2. Whoever gets there first claims the run for a few seconds. Anyone else
+          //      arriving in that window leaves it alone rather than asking for the same work.
+          //
+          // The worker also hands back the run already in flight, so a duplicate would be
+          // harmless — but not asking at all is better than being harmless.
+          var claimKey = "coldwire-sync-claim"
+          var claimLife = 10000
+
           var timer = null
           var lastFinished = 0
 
@@ -204,6 +219,14 @@ module Coldwire
             } catch (error) {}
           }
 
+          function forced() {
+            try {
+              return window.localStorage.getItem("coldwire-forced") === "1"
+            } catch (error) {
+              return false
+            }
+          }
+
           function stamp(key) {
             var at = read(key)
             return Number.isFinite(at) && at > 0 ? at : 0
@@ -220,9 +243,27 @@ module Coldwire
           // Sleep exactly as long as is owed rather than waking up to ask. An overdue
           // deadline is a delay of zero, so a page that loads late syncs as soon as it can.
           function schedule(delay) {
-            if (typeof delay !== "number") delay = Math.max(0, dueAt() - Date.now())
             window.clearTimeout(timer)
+            timer = null
+
+            // Nothing pending while out of sight. Coming back re-arms, and recomputes from
+            // the shared clock rather than resuming a countdown that stopped meaning anything
+            // the moment the web view was frozen.
+            if (document.hidden) return
+
+            if (typeof delay !== "number") delay = Math.max(0, dueAt() - Date.now())
             timer = window.setTimeout(fire, Math.min(delay, maxDelay))
+          }
+
+          // A claim only one page can hold, and only briefly. Expiry rather than release: a
+          // page that is closed mid-sync must not lock the others out.
+          function claim() {
+            var held = stamp(claimKey)
+            if (held && Date.now() - held < claimLife) return false
+
+            write(claimKey, Date.now())
+
+            return true
           }
 
           function fire() {
@@ -231,10 +272,21 @@ module Coldwire
             // describing the other one. Stand down and let it schedule.
             if (window.__coldwireSyncOwnedByPage) return schedule(interval())
 
+            // Out of sight, out of the running. The timer should already be cleared; this is
+            // the belt to that braces.
+            if (document.hidden) return
+
+            // Force offline asks for no network. Syncing is only network, so there is nothing
+            // to do but come back at the usual cadence and see whether it is still on.
+            if (forced()) return schedule(interval())
+
             // A page cannot assume it is the only one. Another may have synced while this one
             // slept, or the wait may have been clamped, in which case sleep out the rest.
             if (Date.now() < dueAt()) return schedule()
             if (!("serviceWorker" in navigator)) return
+
+            // Somebody else got here first. They will record the outcome for everyone.
+            if (!claim()) return schedule(interval())
 
             // A run that never reports back — no worker, no answer — must not park this page
             // forever. Anything the run does say replaces this.
@@ -259,6 +311,11 @@ module Coldwire
           // What a finished run means for the clock. Reached from the run's own reply, so
           // this does not depend on broadcasts arriving.
           function settle(result) {
+            // Nothing was attempted, so nothing counts against the manifest: no connection, or
+            // force offline is on. Wait out an interval; the `online` listener below brings it
+            // forward if a connection turns up sooner.
+            if (result && result.offline) return schedule(interval())
+
             // Only a run that got through the whole manifest restarts the clock.
             if (result && result.complete) {
               write(stampKey, result.finishedAt || Date.now())
@@ -316,8 +373,10 @@ module Coldwire
 
           // A backgrounded web view freezes its timers, so a wait that should have elapsed
           // may simply not have. Recomputing on the way back fires at once when overdue.
+          // Both directions matter now: coming back arms a timer and fires at once if the
+          // deadline has passed, and going away cancels it so a backgrounded tab holds nothing.
           document.addEventListener("visibilitychange", function () {
-            if (!document.hidden) schedule()
+            schedule()
           })
 
           schedule()

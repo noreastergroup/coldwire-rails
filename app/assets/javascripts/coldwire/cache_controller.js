@@ -118,7 +118,7 @@ export default class extends Controller {
       if (data.complete) {
         this.writeStamp(SYNCED_AT_KEY, data.finishedAt || Date.now())
         this.retryAfter = 0
-      } else {
+      } else if (!data.offline) {
         this.retryAfter = Date.now() + this.syncIntervalValue * 1000
       }
 
@@ -161,6 +161,12 @@ export default class extends Controller {
   }
 
   describeFinishedSync(data) {
+    // Nothing went wrong and nothing needs retrying — it was simply never asked to work.
+    if (data.offline) {
+      return data.reason === "forced"
+        ? "Paused while force offline is on."
+        : "No connection. Will sync when it is back."
+    }
     if (data.error) return `Sync failed: ${data.error}`
 
     const parts = [ `Cached ${data.cached}` ]
@@ -247,6 +253,8 @@ export default class extends Controller {
 
     if (!this.autoSyncValue || this.syncIntervalValue <= 0) return
     if (this.syncRunning || this.syncStarting) return
+    // Nothing to do out of sight, and nothing worth doing with no network.
+    if (document.hidden || this.syncPaused()) return
     if (Date.now() < this.dueAt()) return
 
     this.syncNow()
@@ -267,9 +275,33 @@ export default class extends Controller {
     )
   }
 
+  // Syncing is nothing but network. Force offline is a request for none of it, and with no
+  // connection there is nothing to ask for — so neither counts down to anything.
+  syncPaused() {
+    if (this.isForced()) return "forced"
+    if (this.online === false) return "offline"
+
+    return null
+  }
+
+  isForced() {
+    if (this.hasForcedToggleTarget) return this.forcedToggleTarget.checked
+
+    try {
+      return window.localStorage.getItem(FORCED_KEY) === "1"
+    } catch {
+      return false
+    }
+  }
+
   describeNextSync() {
     if (!this.autoSyncValue || this.syncIntervalValue <= 0) return ""
     if (this.syncRunning) return "syncing now"
+
+    const paused = this.syncPaused()
+    if (paused) {
+      return paused === "forced" ? "paused, force offline is on" : "paused, no connection"
+    }
 
     const seconds = Math.ceil((this.dueAt() - Date.now()) / 1000)
 
@@ -440,6 +472,9 @@ export default class extends Controller {
     const enabled = event.currentTarget.checked
     window.localStorage.setItem(FORCED_KEY, enabled ? "1" : "0")
     this.renderConnection()
+    // The countdown means something different the instant this changes; do not make the user
+    // wait a tick to see it.
+    this.renderSyncedAt()
 
     try {
       await this.sendToWorker("setForcedOffline", { value: enabled }, 5000)
@@ -490,6 +525,7 @@ export default class extends Controller {
       return
     }
 
+    this.online = reachable
     this.setConnection(reachable ? "Online" : "Offline", reachable ? "online" : "offline")
   }
 

@@ -281,13 +281,28 @@ function syncManifest() {
 }
 
 async function runSync() {
+  // Force offline is a request to use no network at all. A sync is nothing but network, and
+  // the worker's own fetches do not pass through its fetch handler — so without this it would
+  // quietly go to the network anyway, which is the one thing the switch exists to prevent.
+  if (forcedOffline) {
+    const paused = { ok: false, offline: true, reason: "forced", complete: false,
+                     cached: 0, retired: 0, remaining: 0, failed: [], finishedAt: Date.now() }
+    await notifyClients({ type: SYNC_MESSAGE, state: "finished", ...paused })
+
+    return paused
+  }
+
   const cache = await caches.open(CACHE_NAME)
 
   let manifest
   try {
     manifest = await fetchManifest()
   } catch (error) {
-    const failure = { ok: false, error: error.message, complete: false, finishedAt: Date.now() }
+    // No connection is not the manifest misbehaving, and retrying sooner cannot help. Said
+    // plainly so a page waits for the network instead of counting it as a failed attempt.
+    const failure = { ok: false, error: error.message, offline: Boolean(error.offline),
+                      complete: false, cached: 0, retired: 0, remaining: 0, failed: [],
+                      finishedAt: Date.now() }
     await notifyClients({ type: SYNC_MESSAGE, state: "finished", ...failure })
 
     return failure
@@ -348,14 +363,23 @@ async function notifyClients(message) {
 }
 
 async function fetchManifest() {
-  const response = await fetch(PACK_PATH, {
-    credentials: "same-origin",
-    // The manifest has to describe the server as it is now. Left to the HTTP cache a browser
-    // may serve a heuristically-fresh copy without asking, and a sync would then faithfully
-    // fetch yesterday's list — missing exactly the newly published pages it exists to pick up.
-    cache: "no-store",
-    headers: { Accept: "application/json" }
-  })
+  let response
+
+  try {
+    response = await fetch(PACK_PATH, {
+      credentials: "same-origin",
+      // The manifest has to describe the server as it is now. Left to the HTTP cache a
+      // browser may serve a heuristically-fresh copy without asking, and a sync would then
+      // faithfully fetch an old list, missing the pages it exists to pick up.
+      cache: "no-store",
+      headers: { Accept: "application/json" }
+    })
+  } catch (error) {
+    // The fetch never completed at all: no connection, rather than a server saying no.
+    const offline = new Error("No connection")
+    offline.offline = true
+    throw offline
+  }
 
   // Signed out, this follows a redirect to the login page and arrives as a perfectly ok 200
   // of HTML, which would fail as an opaque JSON parse error.

@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+- Syncing stops while force offline is on. The switch asks for no network at all, but the
+  worker's own fetches never pass through its fetch handler, so a sync went to the network
+  regardless. The page checks before asking and the worker refuses when asked — both, because
+  a restarted worker loses the flag and a long-lived page can be out of date. The debug page
+  says "paused, force offline is on" instead of counting down to nothing.
+
+- No connection is treated as a wait rather than a failed attempt. It counts against nothing
+  and the next try is one interval away, brought forward if a connection turns up sooner.
+
+- Only the visible page holds a sync timer, and only one page claims a run. A Hotwire Native
+  app is several web views at once, each running the head snippet; left alone they all held a
+  timer against the same shared deadline and woke together, turning one app into a burst of
+  identical requests. Hidden web views now hold nothing and re-arm when they come back, and
+  whoever gets there first claims the run for ten seconds. The claim expires rather than being
+  released, so a page closed mid-sync cannot lock the others out.
+
 - A page that draws a countdown is the only clock on that page. The debug page schedules its
   own sync, and the head snippet was scheduling one too — two clocks, each with its own idea
   of the interval. Whichever fired first won, so the page could sync part way through a

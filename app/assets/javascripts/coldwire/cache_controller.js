@@ -50,7 +50,8 @@ export default class extends Controller {
     "syncButton",
     "syncLabel",
     "search",
-    "sort"
+    "sort",
+    "forgetTemplate"
   ]
 
   get store() {
@@ -534,7 +535,8 @@ export default class extends Controller {
 
   async renderCache() {
     const cachesInfo = await this.listCaches()
-    const entries = cachesInfo.flatMap((cache) => cache.entries || [])
+    const entries = cachesInfo.flatMap((cache) =>
+      (cache.entries || []).map((entry) => ({ ...entry, cache: cache.name })))
     const totalBytes = entries.reduce((sum, entry) => sum + (entry.size || 0), 0)
 
     if (this.hasSummaryTarget) {
@@ -582,6 +584,9 @@ export default class extends Controller {
       const item = document.createElement("li")
       item.className = "coldwire-entry"
 
+      const text = document.createElement("div")
+      text.className = "coldwire-entry-text"
+
       const path = document.createElement("div")
       path.className = "coldwire-entry-url"
       path.textContent = this.displayUrl(entry.url)
@@ -594,9 +599,63 @@ export default class extends Controller {
         : this.formatBytes(entry.size)
       if (entry.timestamp) meta.title = new Date(entry.timestamp * 1000).toLocaleString()
 
-      item.append(path, meta)
+      text.append(path, meta)
+      item.append(text)
+
+      const forget = this.buildForgetButton(entry)
+      if (forget) item.append(forget)
+
       this.entriesTarget.append(item)
     })
+  }
+
+  buildForgetButton(entry) {
+    if (!this.hasForgetTemplateTarget) return null
+
+    const button = this.forgetTemplateTarget.content.firstElementChild.cloneNode(true)
+    button.dataset.url = entry.url
+    if (entry.cache) button.dataset.cache = entry.cache
+    // Unlabelled but for its shape, and there is one per row — so the path goes in the label
+    // rather than a bare "Remove", which would read as a column of identical buttons.
+    button.setAttribute("aria-label", `Remove ${this.displayUrl(entry.url)} from the cache`)
+    button.title = "Remove from the cache"
+
+    return button
+  }
+
+  // Deliberately without a confirmation. Clear cache asks because it throws away everything
+  // the app has to work with offline; one entry is a small, self-repairing loss — anything the
+  // manifest lists comes back on the next sync — and a prompt per row would be noise.
+  async forgetEntry(event) {
+    event.preventDefault()
+
+    const button = event.currentTarget
+    const { url, cache } = button.dataset
+    if (!url) return
+
+    button.disabled = true
+
+    try {
+      await this.forgetUrl(url, cache)
+      this.setStatus(`Removed ${this.displayUrl(url)}.`)
+      await this.renderCache()
+    } catch (error) {
+      button.disabled = false
+      this.setStatus(error.message || "Could not remove that entry")
+    }
+  }
+
+  async forgetUrl(url, name) {
+    // The page can reach the cache directly, exactly as listing does — but only when the row
+    // knew which cache it came from. Guessing a name would silently delete nothing, so with
+    // no name the worker decides: it is the one that knows what it configured.
+    if (name && "caches" in window) {
+      const cache = await caches.open(name)
+      await cache.delete(new Request(url), { ignoreVary: true, ignoreSearch: true })
+      return
+    }
+
+    await this.sendToWorker("forget", { url, cache: name }, 5000)
   }
 
   // Sorted on a copy: `entries` is the cache as it was read, and re-sorting it in place would

@@ -70,6 +70,7 @@ self.addEventListener("message", (event) => {
   }
 
   if (type === "clearCache") return reply(clearCaches())
+  if (type === "forget") return reply(forgetUrl(event.data.url, event.data.cache))
   if (type === "listCache") return reply(listCaches())
   if (type === "getForcedOffline") return reply({ ok: true, forcedOffline })
   if (type === "setForcedOffline") {
@@ -193,6 +194,17 @@ async function markOffline(cache, request, cached) {
     statusText: cached.statusText,
     headers
   })
+}
+
+// Drop one entry. Matched with the same options everything else uses, or a URL that was
+// stored with a query string would refuse to be found by the one shown in the list.
+async function forgetUrl(url, name) {
+  if (!url) return { ok: false, error: "No URL given" }
+
+  const cache = await caches.open(name || CACHE_NAME)
+  const deleted = await cache.delete(new Request(url), MATCH_OPTIONS)
+
+  return { ok: deleted, deleted }
 }
 
 async function clearCaches() {

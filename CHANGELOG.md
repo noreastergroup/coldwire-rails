@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Each row in the cached list has a trash button that removes just that entry. No confirmation:
+  Clear cache asks because it throws away everything the app has to work with offline, whereas
+  one entry is a small, self-repairing loss — anything the manifest lists returns on the next
+  sync — and a prompt per row would be noise. The row carries the cache it came from, so a
+  page holding more than one cache removes from the right one.
+
 - Dropped the debug page's dark palette. It is a settings surface styled with plain CSS and no
   framework, and a second set of colours to keep in step with every change was not worth its
   weight. The page renders light whatever the device is set to. The reduced-motion query

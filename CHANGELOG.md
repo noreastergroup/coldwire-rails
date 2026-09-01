@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Dropped the debug page's dark palette. It is a settings surface styled with plain CSS and no
+  framework, and a second set of colours to keep in step with every change was not worth its
+  weight. The page renders light whatever the device is set to. The reduced-motion query
+  stays — that is an accessibility preference, not a theme.
+
 - The cached list has a filter box and a sort: most recent (the default), largest first, or
   A–Z. Both work on the entries already read rather than re-inspecting the cache, which means
   asking every entry for its headers and is far too slow to repeat on each keystroke. Within

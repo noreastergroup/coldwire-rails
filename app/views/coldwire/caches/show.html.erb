@@ -82,8 +82,7 @@
 
   /* Safari stops drawing the native arrow once a select is given a background and a border,
      so opt out of the native look entirely and draw one. Heroicons chevron-down, to match the
-     other icons on the page; the colour is baked into the data URI, which is why the dark
-     block below swaps the whole thing rather than a currentColor. */
+     other icons on the page. */
   .coldwire-select { flex: 0 0 auto; cursor: pointer;
     appearance: none; -webkit-appearance: none;
     padding-right: 1.9rem;
@@ -119,19 +118,6 @@
     .coldwire-pulse { animation: none; }
     .coldwire-switch span,
     .coldwire-switch span::after { transition: none; }
-  }
-  @media (prefers-color-scheme: dark) {
-    .coldwire { color: #e5e7eb; }
-    .coldwire-card { background: #111827; border-color: #374151; }
-    .coldwire-button { background: #1f2937; border-color: #4b5563; color: #f9fafb; }
-    .coldwire-button--danger { color: #fca5a5; border-color: #7f1d1d; }
-    .coldwire-entry-url { color: #e5e7eb; }
-    .coldwire { --coldwire-caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m19.5 8.25-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E"); }
-    .coldwire-input, .coldwire-select { background-color: #111827; border-color: #374151; color: #f9fafb; }
-    .coldwire-input::placeholder { color: #6b7280; }
-    .coldwire-track { background: #374151; }
-    .coldwire-bar { background: #9ca3af; }
-    .coldwire-switch span { background: #4b5563; }
   }
 </style>
 

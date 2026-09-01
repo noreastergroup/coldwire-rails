@@ -17,16 +17,29 @@ module Coldwire
       # Each fragment is a self-terminated statement. `})()` followed by `(function` on the
       # next line is a single call expression, not two statements — ASI does not save you —
       # so a missing semicolon here throws and takes the registration down with it.
-      javascript_tag(nonce: true) do
+      safe_join([ coldwire_sync_interval_meta, javascript_tag(nonce: true) do
         [ coldwire_identity_script, coldwire_offline_marker_script,
           coldwire_forced_offline_script, coldwire_auto_sync_script, coldwire_register_script ]
           .compact
           .join("\n")
           .html_safe
-      end
+      end ].compact, "\n")
     end
 
     private
+
+    # The interval as a meta rather than only a constant in the script above.
+    #
+    # A head script runs once per document. Turbo visits reuse the document, so a page opened
+    # before the interval changed would keep the old one for as long as it stayed open — the
+    # markup would say five minutes while the timer underneath it still fired every fifteen
+    # seconds. Turbo *does* replace head metas on every visit, so reading it back from here
+    # each time a sync is scheduled means the next navigation picks up the new value.
+    def coldwire_sync_interval_meta
+      return unless Coldwire.config.auto_sync
+
+      tag.meta(name: "coldwire-sync-interval", content: Coldwire.config.sync_interval.to_i)
+    end
 
     def coldwire_identity_script
       <<~JS
@@ -118,7 +131,17 @@ module Coldwire
           var stampKey = "coldwire-synced-at"
           var attemptsKey = "coldwire-sync-attempts"
           var backoffKey = "coldwire-sync-backoff"
-          var interval = #{(Coldwire.config.sync_interval.to_i * 1000).to_json}
+          // Only the starting value. Read back from the meta on every use, so a document that
+          // outlives a config change follows the new interval rather than the one it was
+          // born with.
+          var fallbackInterval = #{(Coldwire.config.sync_interval.to_i * 1000).to_json}
+
+          function interval() {
+            var meta = document.querySelector('meta[name="coldwire-sync-interval"]')
+            var seconds = meta ? Number(meta.getAttribute("content")) : NaN
+
+            return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : fallbackInterval
+          }
           var maxAttempts = #{Coldwire.config.sync_max_attempts.to_i.to_json}
 
           // setTimeout holds its delay in a signed 32-bit integer and fires *immediately* on
@@ -149,7 +172,7 @@ module Coldwire
           // past, which is exactly right.
           function dueAt() {
             var last = stamp(stampKey)
-            return Math.max(last ? last + interval : 0, stamp(backoffKey))
+            return Math.max(last ? last + interval() : 0, stamp(backoffKey))
           }
 
           // Sleep exactly as long as is owed rather than waking up to ask. An overdue
@@ -207,14 +230,14 @@ module Coldwire
 
             if (attempts >= maxAttempts) {
               write(attemptsKey, 0)
-              write(backoffKey, Date.now() + interval)
+              write(backoffKey, Date.now() + interval())
               return schedule()
             }
 
             write(attemptsKey, attempts)
             // Sooner than the interval, but never instantly — the deadline is already in the
             // past, so scheduling off that alone would retry in a tight loop.
-            schedule(Math.min(interval, attempts * 2000))
+            schedule(Math.min(interval(), attempts * 2000))
           }
 
           if ("serviceWorker" in navigator) {

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- The sync interval is read from a `coldwire-sync-interval` meta rather than only baked into
+  the head script. A head script runs once per document and Turbo visits reuse the document,
+  so a page opened before the interval changed kept the old one for as long as it stayed
+  open — the markup would say five minutes while the timer under it still fired every fifteen
+  seconds. Turbo replaces head metas, so the next visit now picks up the new value.
+
 - Automatic sync works on every page, not just the debug page. Both the head snippet and the
   debug page listen for the worker with `addEventListener`, and a `ServiceWorkerContainer`'s
   message queue starts *disabled* — setting `onmessage` enables it, `addEventListener` does

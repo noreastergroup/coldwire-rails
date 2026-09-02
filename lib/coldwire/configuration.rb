@@ -11,7 +11,7 @@ module Coldwire
 
     # Scope the worker claims. The worker is served from the engine mount point, so the
     # response also sends `Service-Worker-Allowed` to widen it past that directory.
-    attr_accessor :scope
+    attr_accessor :worker_scope
 
     # Markup for the offline page's <head>, evaluated in the view.
     #
@@ -39,13 +39,13 @@ module Coldwire
     #
     # Set to nil if you are not on importmap-rails, and override the offline page template to
     # load Turbo whatever way your bundler does.
-    attr_accessor :offline_entry_point
+    attr_accessor :offline_import
 
     # Mark HTML served from cache because the network was unavailable, so the page can say
     # so. Adds `data-coldwire-offline` and `data-coldwire-cached-at` (unix seconds) to <html>,
     # plus a matching <meta> that survives Turbo's head merge. Costs a body rewrite, but only
     # on the offline path.
-    attr_accessor :offline_marker
+    attr_accessor :mark_cached_pages
 
     # Treat "/map" and "/map?lat=1&zoom=9" as the same cached page, both when matching and
     # when storing. Blunt on purpose for now: it also collapses query strings that genuinely
@@ -70,7 +70,7 @@ module Coldwire
     # Use this sparingly. An unintercepted request goes straight to the network, so offline
     # it fails outright — in Hotwire Native that means the SDK's own error screen, not your
     # offline page. If you only want to keep something out of the cache, use `cache_blocklist`.
-    attr_accessor :excluded_paths
+    attr_accessor :never_intercept
 
     # Which URLs automatic caching is allowed to store, and which it must not.
     #
@@ -98,6 +98,17 @@ module Coldwire
     # Decides whether a given request should register the worker at all. Receives the
     # ActionDispatch::Request. Defaults to registering everywhere; a Hotwire Native app
     # typically narrows this to the native user agent so browser tests stay uncached.
+    # Decides whether a page registers the worker at all — and so whether it caches, syncs,
+    # or does anything. Evaluated in the view, so both `request` and `current_user` are
+    # available:
+    #
+    #   config.register_if = lambda do
+    #     request.user_agent.to_s.include?("Hotwire Native") && current_user.present?
+    #   end
+    #
+    # This is the one gate worth narrowing. Offline caching is for people using the app: a
+    # browser session has no need of it, and a signed-out visitor's cache is dropped the
+    # moment anyone signs in, so anything cached now is thrown away.
     attr_writer :register_if
 
     # Identifies who the cache belongs to — typically the signed-in user's id. Evaluated in
@@ -114,29 +125,6 @@ module Coldwire
     # load can hand work to the service worker, which then runs independently of that page.
     # So sync is triggered on page load and throttled, rather than scheduled.
     attr_accessor :auto_sync
-
-    # Whether *this page* may start a sync, on top of the `auto_sync` switch. Evaluated in the
-    # view, so `current_user` and `controller` are available:
-    #
-    #   config.auto_sync_if = lambda do
-    #     current_user.present? && controller.class.module_parent_name == "App"
-    #   end
-    #
-    # Worth narrowing: syncing is the app filling its cache for later, and a sign-in page or an
-    # admin screen has no business kicking that off — nor does a signed-out visitor, whose
-    # cache is dropped the moment somebody signs in anyway.
-    #
-    # The answer rides in a meta rather than being baked into the head script, because that
-    # script runs once per document and Turbo visits reuse it: a page that may not sync has to
-    # be able to say so on arrival, not only on a cold boot.
-    attr_writer :auto_sync_if
-
-    def auto_sync?(view)
-      return false unless auto_sync
-      return true if @auto_sync_if.nil?
-
-      view.instance_exec(&@auto_sync_if) ? true : false
-    end
 
     # How long to leave between syncs. Checked against a localStorage stamp on the page,
     # because a worker global does not survive the worker being shut down.
@@ -169,7 +157,7 @@ module Coldwire
 
     # Refetch a manifest page once its cached copy is older than this. Set nil to only ever
     # fetch pages that are missing.
-    attr_accessor :max_age
+    attr_accessor :refetch_after
 
     # How many fetches a sync runs at once.
     #
@@ -184,29 +172,29 @@ module Coldwire
 
     def initialize
       @cache_name = "coldwire"
-      @scope = "/"
+      @worker_scope = "/"
       @probe_path = "/up"
-      @excluded_paths = [ "/up" ]
+      @never_intercept = [ "/up" ]
       @cache_allowlist = []
       @cache_blocklist = []
-      @offline_marker = true
-      @offline_entry_point = "@hotwired/turbo-rails"
+      @mark_cached_pages = true
+      @offline_import = "@hotwired/turbo-rails"
       @offline_head = nil
       @ignore_query_params = true
-      @register_if = ->(_request) { true }
+      @register_if = -> { true }
       @cache_identity = -> { nil }
       @precache_urls = -> { [] }
       @auto_sync = false
       @sync_interval = 6 * 60 * 60
-      @auto_sync_if = nil
       @cache_origins = []
       @cache_ranges = []
-      @max_age = 7 * 24 * 60 * 60
+      @refetch_after = 7 * 24 * 60 * 60
       @sync_concurrency = 4
     end
 
-    def register?(request)
-      @register_if.call(request)
+    # `view` is the view context, so a host can ask about the request and the session alike.
+    def register?(view)
+      view.instance_exec(&@register_if) ? true : false
     end
 
     # `view` is the view context, so a host can write `-> { current_user&.id }`.

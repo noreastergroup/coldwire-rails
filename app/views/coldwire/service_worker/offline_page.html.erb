@@ -24,9 +24,9 @@
         page where window.Turbo never appears — a fallback without this is not renderable in
         the app at all. Just Turbo, not the whole app entry point: every module in that graph
         would have to be cached for it to evaluate. %>
-    <% if Coldwire.config.offline_entry_point.present? && respond_to?(:javascript_inline_importmap_tag) %>
+    <% if Coldwire.config.offline_import.present? && respond_to?(:javascript_inline_importmap_tag) %>
       <%= javascript_inline_importmap_tag %>
-      <%= javascript_import_module_tag Coldwire.config.offline_entry_point %>
+      <%= javascript_import_module_tag Coldwire.config.offline_import %>
     <% end %>
   </head>
   <body>

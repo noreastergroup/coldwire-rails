@@ -16,14 +16,14 @@ module Coldwire
     #   could see, so signing out — or signing in as someone else — has to invalidate them.
     # * keeps the offline marker on <html> in step with the page Turbo just rendered.
     def coldwire_service_worker_tag
-      return unless Coldwire.config.register?(request)
+      return unless Coldwire.config.register?(self)
 
       # Each fragment is a self-terminated statement. `})()` followed by `(function` on the
       # next line is a single call expression, not two statements — ASI does not save you —
       # so a missing semicolon here throws and takes the registration down with it.
       safe_join([ coldwire_sync_interval_meta, javascript_tag(nonce: true) do
         [ coldwire_store_script, coldwire_api_script, coldwire_identity_script,
-          coldwire_offline_marker_script,
+          coldwire_cached_page_marker_script,
           coldwire_forced_offline_script, coldwire_auto_sync_script, coldwire_register_script ]
           .compact
           .join("\n")
@@ -43,13 +43,7 @@ module Coldwire
     def coldwire_sync_interval_meta
       return unless Coldwire.config.auto_sync
 
-      safe_join([
-        tag.meta(name: "coldwire-sync-interval", content: Coldwire.config.sync_interval.to_i),
-        # Whether this page in particular may start a sync. A meta for the same reason as the
-        # interval: the script runs once per document, and Turbo reuses it across pages that
-        # may not agree.
-        tag.meta(name: "coldwire-auto-sync", content: Coldwire.config.auto_sync?(self) ? "on" : "off")
-      ], "\n")
+      tag.meta(name: "coldwire-sync-interval", content: Coldwire.config.sync_interval.to_i)
     end
 
     # What the host app is allowed to ask. Small on purpose: the page already knows whether it
@@ -202,8 +196,8 @@ module Coldwire
     # the body and merges the head without ever copying <html> attributes — so after a Turbo
     # visit the marker would still describe the *previous* page. Turbo does replace head
     # metas, so mirror from the meta after each render.
-    def coldwire_offline_marker_script
-      return unless Coldwire.config.offline_marker
+    def coldwire_cached_page_marker_script
+      return unless Coldwire.config.mark_cached_pages
 
       <<~JS
         (function () {
@@ -315,16 +309,6 @@ module Coldwire
             return store.on(keys.forced)
           }
 
-          // Absent, the answer is yes: a page that says nothing is a page the host app never
-          // narrowed, and the alternative is syncing silently stopping when a meta goes
-          // missing. Last one wins, for the same mid-merge reason as the interval.
-          function syncAllowed() {
-            var metas = document.querySelectorAll('meta[name="coldwire-auto-sync"]')
-            if (!metas.length) return true
-
-            return metas[metas.length - 1].getAttribute("content") !== "off"
-          }
-
           // When a sync is next owed: an interval after the last one that ran. Zero — never
           // synced — is in the past, which is exactly right.
           function dueAt() {
@@ -368,11 +352,6 @@ module Coldwire
             // Out of sight, out of the running. The timer should already be cleared; this is
             // the belt to that braces.
             if (document.hidden) return
-
-            // This page may not be one that syncs — signed out, or somewhere the app does not
-            // want the cache filled from. Keep the timer so arriving somewhere that does sync
-            // picks straight up, without waiting for a reload.
-            if (!syncAllowed()) return schedule(interval())
 
             // Force offline asks for no network. Syncing is only network, so there is nothing
             // to do but come back at the usual cadence and see whether it is still on.
@@ -495,7 +474,7 @@ module Coldwire
       <<~JS
         if ("serviceWorker" in navigator) {
           navigator.serviceWorker
-            .register(#{coldwire.service_worker_path.to_json}, { scope: #{Coldwire.config.scope.to_json} })
+            .register(#{coldwire.service_worker_path.to_json}, { scope: #{Coldwire.config.worker_scope.to_json} })
             .catch(function (error) { console.warn("[coldwire] registration failed", error) })
         }
       JS

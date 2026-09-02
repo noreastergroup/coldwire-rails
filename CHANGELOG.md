@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+- `register_if` is evaluated in the view and decides everything. It receives no argument now;
+  `request` and `current_user` are both in scope, so one gate can say "the native app, signed
+  in" — and a page that does not register does not cache, sync, or run anything. `auto_sync_if`
+  is gone: it was a second gate answering a question this one already answers.
+
+- Config names that say what they are:
+
+  | was | now |
+  | --- | --- |
+  | `scope` | `worker_scope` |
+  | `excluded_paths` | `never_intercept` |
+  | `max_age` | `refetch_after` |
+  | `offline_marker` | `mark_cached_pages` |
+  | `offline_entry_point` | `offline_import` |
+
 - `config.auto_sync_if` — a block deciding whether *this page* may start a sync, on top of the
   `auto_sync` switch. Evaluated in the view, so `current_user` and `controller` are available:
 

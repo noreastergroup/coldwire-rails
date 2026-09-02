@@ -92,7 +92,7 @@ Register the worker from your layout:
 The worker is served from the engine's mount point, so its default scope would be
 `/coldwire/`. Coldwire sends `Service-Worker-Allowed: /` and registers with a matching
 scope, so a worker mounted anywhere still controls the whole origin. Narrow it with
-`config.scope` if you'd rather it didn't.
+`config.worker_scope` if you'd rather it didn't.
 
 ---
 
@@ -121,7 +121,9 @@ Coldwire.configure do |config|
 
   # Only register the worker where you want caching. A Hotwire Native app usually
   # limits it to the native user agent so browser tests stay uncached.
-  config.register_if = ->(request) { request.user_agent.to_s.include?("Hotwire Native") }
+  config.register_if = lambda do
+    request.user_agent.to_s.include?("Hotwire Native") && current_user.present?
+  end
 
   # Must match the data-turbo-track elements in your layout, or Turbo invalidates instead of
   # rendering and Hotwire Native sticks on a spinner going back.
@@ -130,10 +132,10 @@ Coldwire.configure do |config|
   # The importmap module the offline page loads. Hotwire Native rejects any page without
   # window.Turbo, so the fallback has to boot Turbo like a real page. Set to nil if you are
   # not on importmap-rails, and load Turbo your own way in the template.
-  config.offline_entry_point = "@hotwired/turbo-rails"
+  config.offline_import = "@hotwired/turbo-rails"
 
   # Mark HTML served from cache so the page can say it is stale. On by default.
-  config.offline_marker = true
+  config.mark_cached_pages = true
 
   # Treat "/map" and "/map?lat=1&zoom=9" as the same cached page. On by default.
   config.ignore_query_params = true
@@ -143,7 +145,7 @@ Coldwire.configure do |config|
 
   # Never intercept these path prefixes — they go straight to the network and fail outright
   # when it is down. Coldwire's own routes are excluded automatically.
-  config.excluded_paths = [ "/up", "/cable" ]
+  config.never_intercept = [ "/up", "/cable" ]
 
   # What automatic caching may and may not store. Strings are route patterns ("/sites/:id"),
   # Regexps are tested against the path. An empty allowlist allows everything; the
@@ -154,13 +156,13 @@ Coldwire.configure do |config|
   # Keep the manifest current on its own, instead of only when the button is pressed.
   config.auto_sync = true
   config.sync_interval = 6.hours
-  config.max_age = 7.days
+  config.refetch_after = 7.days
   config.sync_concurrency = 4
 
   # Bump to invalidate every cached entry at once.
   config.cache_name = "coldwire"
 
-  config.scope = "/"
+  config.worker_scope = "/"
 end
 ```
 
@@ -258,7 +260,7 @@ your app uses by wrapping the route, or override the template.
 
 To reach it offline, allowlist it like any other page — `config.cache_allowlist = [ "/coldwire" ]`
 alongside your own paths. The worker script and the manifest are never intercepted — the
-engine adds them and `probe_path` to `excluded_paths` for you, and the manifest is served
+engine adds them and `probe_path` to `never_intercept` for you, and the manifest is served
 `no-store` so no HTTP cache holds it either — so **Sync now**
 will fail while offline; the inspector, **Clear cache**, and **Force offline** are client-side
 and keep working.
@@ -280,9 +282,9 @@ it changes, so signing out clears the previous user's pages and signing in as so
 does not inherit them. Leave it unset and the cache persists across sessions — fine for a
 single-user or fully public app, wrong for anything else.
 
-**Put your auth paths in `cache_blocklist`, not `excluded_paths`.** Sign-in pages redirect on
+**Put your auth paths in `cache_blocklist`, not `never_intercept`.** Sign-in pages redirect on
 session state and must never be served stale — but the two settings fail very differently
-offline. `excluded_paths` means *never intercept*, so the request goes straight to a dead
+offline. `never_intercept` means *never intercept*, so the request goes straight to a dead
 network and Hotwire Native shows its own error screen. `cache_blocklist` means *intercept but
 never store automatically*, so the request still reaches your offline view.
 
@@ -301,7 +303,7 @@ the online flow changes.
 
 ## Telling the page it is offline
 
-With `offline_marker` on (the default), any HTML the worker serves from cache *because the
+With `mark_cached_pages` on (the default), any HTML the worker serves from cache *because the
 network was unavailable* is stamped before it reaches the page:
 
 ```html
@@ -386,8 +388,7 @@ page. Turn on `auto_sync` and Coldwire keeps it current on its own:
 ```ruby
 config.auto_sync = true
 config.sync_interval = 6.hours    # leave this long between syncs
-config.auto_sync_if = -> { current_user.present? }  # and only where it is worth doing
-config.max_age = 7.days           # refetch a page once its copy is older than this
+config.refetch_after = 7.days           # refetch a page once its copy is older than this
 config.sync_concurrency = 4       # fetches in flight at once
 ```
 
@@ -403,8 +404,8 @@ Each sync:
 | | |
 |---|---|
 | **Fetches what is missing** | a newly published record shows up in the manifest and has no cached copy |
-| **Refetches what is old** | a cached copy older than `max_age` |
-| **Skips what is fine** | anything cached and younger than `max_age` costs nothing |
+| **Refetches what is old** | a cached copy older than `refetch_after` |
+| **Skips what is fine** | anything cached and younger than `refetch_after` costs nothing |
 | **Retires what left the manifest** | an unpublished record is dropped from the cache |
 | **Retries once** | a dropped request on a phone should not strand a page until the next interval |
 
@@ -451,7 +452,7 @@ would precache 84 pages and silently get 60. The same goes for the subresources 
 page references.
 
 So the lists answer "what should we pick up as the user wanders around", not "what is allowed
-in the cache at all". `excluded_paths` is still the setting for the latter, and it is stronger
+in the cache at all". `never_intercept` is still the setting for the latter, and it is stronger
 than either: those URLs are never intercepted, so they also never reach the offline fallback.
 
 ---

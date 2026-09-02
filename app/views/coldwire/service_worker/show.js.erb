@@ -13,7 +13,7 @@
 
 const CACHE_NAME = <%= raw Coldwire.config.cache_name.to_json %>
 // Never intercepted: these go straight to the network, and fail outright when it is down.
-const EXCLUDED_PATHS = <%= raw Coldwire.excluded_paths(coldwire.service_worker_path, coldwire.pack_path, Coldwire.config.probe_path).to_json %>
+const NEVER_INTERCEPT = <%= raw Coldwire.never_intercept(coldwire.service_worker_path, coldwire.pack_path, Coldwire.config.probe_path).to_json %>
 // Govern automatic caching only — the precache manifest ignores both.
 const CACHE_ALLOWLIST = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.cache_allowlist).to_json %>)
 const CACHE_BLOCKLIST = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.cache_blocklist).to_json %>)
@@ -31,7 +31,7 @@ const RETRY_URL_TOKEN = "coldwire:retry-url"
 
 // Manifest sync.
 const PACK_PATH = <%= raw coldwire.pack_path.to_json %>
-const MAX_AGE = <%= raw Coldwire.config.max_age ? Coldwire.config.max_age.to_i.to_json : "null" %>
+const REFETCH_AFTER = <%= raw Coldwire.config.refetch_after ? Coldwire.config.refetch_after.to_i.to_json : "null" %>
 const SYNC_CONCURRENCY = <%= raw Coldwire.config.sync_concurrency.to_i.to_json %>
 // Marks entries the manifest owns, so a sync can retire the ones it dropped without
 // touching assets or pages picked up by ordinary browsing.
@@ -47,7 +47,7 @@ const SYNC_MESSAGE = "coldwire:sync"
 const IGNORE_SEARCH = <%= raw Coldwire.config.ignore_query_params.to_json %>
 const MATCH_OPTIONS = { ignoreVary: true, ignoreSearch: IGNORE_SEARCH }
 const TIMESTAMP_HEADER = "timestamp"
-const OFFLINE_MARKER = <%= raw Coldwire.config.offline_marker.to_json %>
+const MARK_CACHED_PAGES = <%= raw Coldwire.config.mark_cached_pages.to_json %>
 const OFFLINE_ATTRIBUTE = "data-coldwire-offline"
 const CACHED_AT_ATTRIBUTE = "data-coldwire-cached-at"
 
@@ -111,7 +111,7 @@ function shouldHandle(request) {
   // you want for media, and leaves ordinary requests exactly as they were.
   if (request.headers.has("Range")) return matchesRules(url, CACHE_RANGES)
 
-  return !matchesPath(url, EXCLUDED_PATHS)
+  return !matchesPath(url, NEVER_INTERCEPT)
 }
 
 // Our own origin, plus any the host app has nominated. A worker sees every request a page
@@ -302,7 +302,7 @@ async function handleFetch(request) {
 // The <meta> is for Turbo visits: Turbo swaps the body and merges the head but never copies
 // <html> attributes, so without it the marker would go stale the moment you navigate.
 async function markOffline(cache, request, cached) {
-  if (!OFFLINE_MARKER || !cached || !wantsHtml(request)) return cached
+  if (!MARK_CACHED_PAGES || !cached || !wantsHtml(request)) return cached
 
   const type = cached.headers.get("Content-Type") || ""
   if (!type.includes("text/html")) return cached
@@ -470,7 +470,7 @@ async function runSync() {
     const [ key ] = await cache.keys(new Request(href), MATCH_OPTIONS)
     const at = key ? unixTimestamp(key.headers.get(TIMESTAMP_HEADER)) : null
 
-    if (!key || !at || (MAX_AGE !== null && now - at > MAX_AGE)) pending.push(href)
+    if (!key || !at || (REFETCH_AFTER !== null && now - at > REFETCH_AFTER)) pending.push(href)
   }
 
   // Every open page hears about this, not just the one that asked. A sync outlives the page
@@ -671,7 +671,7 @@ function urlsFromHtml(html, pageUrl) {
         // comes off a CDN is not offline-ready without it: precaching the page and skipping
         // the script it cannot run without leaves a blank screen and a full cache.
         if (!cacheableOrigin(url)) return
-        if (matchesPath(url, EXCLUDED_PATHS)) return
+        if (matchesPath(url, NEVER_INTERCEPT)) return
         urls.add(url.href)
       } catch {}
     })

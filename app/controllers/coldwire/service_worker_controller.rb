@@ -14,7 +14,7 @@ module Coldwire
       # A worker's scope is capped by the directory it is served from, so an engine mounted
       # at /coldwire would only ever control /coldwire/*. This header lifts that cap; the
       # registration snippet asks for the matching scope.
-      response.headers["Service-Worker-Allowed"] = Coldwire.config.scope
+      response.headers["Service-Worker-Allowed"] = Coldwire.config.worker_scope
       response.headers["Cache-Control"] = "no-cache"
 
       render(

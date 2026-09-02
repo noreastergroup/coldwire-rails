@@ -21,8 +21,8 @@ module Coldwire
     # because caching either would strand the app on a stale copy of the thing meant to
     # refresh it. The debug page is ordinary HTML and is left interceptable, so a host that
     # wants to reach it offline can allowlist it like any other page.
-    def excluded_paths(*engine_paths)
-      normalize(config.excluded_paths + engine_paths)
+    def never_intercept(*engine_paths)
+      normalize(config.never_intercept + engine_paths)
     end
 
     # Serializes a mixed list of strings and Regexps into something the worker can rebuild.

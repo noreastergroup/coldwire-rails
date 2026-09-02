@@ -61,8 +61,34 @@ const CACHED_AT_ATTRIBUTE = "data-coldwire-cached-at"
 let forcedOffline = false
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(self.skipWaiting())
+  event.waitUntil(Promise.all([ self.skipWaiting(), cacheOfflinePage() ]))
 })
+
+// The offline page is the one page that has to render when nothing else can, and Hotwire
+// Native rejects any page where window.Turbo never appears — so it carries an importmap and
+// imports Turbo. Those assets are digested, which means a deploy changes their URLs and the
+// cache filled by the previous deploy does not have the new ones.
+//
+// Left to a sync, the fallback is broken for exactly as long as nobody has been online since
+// the deploy — which is to say, broken precisely when it is needed. Fetching them as the
+// worker installs is the moment the new URLs first become known.
+async function cacheOfflinePage() {
+  try {
+    const cache = await caches.open(CACHE_NAME)
+    const urls = urlsFromHtml(OFFLINE_PAGE, self.location.origin + "/")
+
+    await runPool(urls, SYNC_CONCURRENCY, async (href) => {
+      // One at a time and forgiving: a worker that refuses to install because a stylesheet
+      // was briefly unavailable is worse than one whose fallback is missing a stylesheet.
+      try {
+        await fetchAndCache(cache, href)
+      } catch {}
+    })
+  } catch {
+    // Installing must not fail over this. A worker with an imperfect fallback still caches
+    // pages, still syncs, and still beats no worker at all.
+  }
+}
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim())

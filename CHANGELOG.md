@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- The worker caches the offline page's own assets as it installs. That page imports Turbo,
+  because Hotwire Native rejects any page where `window.Turbo` never appears, and that import
+  is a digested URL: a deploy changes the digest, the cache from the previous deploy does not
+  have the new one, and the fallback then fails with "Turbo is not present" — broken exactly
+  when it is needed. Install is the moment the new URLs first become known. A missing asset
+  does not fail the install; an imperfect fallback still beats no worker.
+
 - `config.cache_archives` — archives that can be downloaded whole for offline use, rather than
   a slice at a time as they happen to be read. For a tile archive this is the difference
   between "the water you already looked at" and "the coast".

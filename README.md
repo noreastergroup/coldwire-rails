@@ -2,13 +2,20 @@
 
 **When your Hotwire wires go cold.**
 
-Offline page caching for Hotwire Native apps. Coldwire is a mountable Rails engine that
-serves a [Cache API](https://developer.mozilla.org/en-US/docs/Web/API/Cache) service worker,
+Offline page caching for Rails apps — whether that's a plain Hotwire app, an installable
+PWA, or a Hotwire Native app. Coldwire is a mountable Rails engine that serves a
+[Cache API](https://developer.mozilla.org/en-US/docs/Web/API/Cache) service worker,
 precaches the pages you nominate, and — when there's nothing cached and no network — falls
-back to an offline view that Turbo and Hotwire Native will actually render.
+back to an offline view that Turbo will actually render.
 
-That last part is most of the work. A service worker that returns a sensible-looking `503`
-gets you a native error screen, not your offline page. Coldwire gets the details right.
+**Built against the strictest case.** Hotwire Native is the least forgiving place to do
+this: it shows its own native error screen for anything that smells like a failed visit, so
+a service worker returning a sensible-looking `503` gets you that screen instead of your
+offline page. Meeting those rules means the same cache behaves in Safari, in Chrome, and in
+an installed PWA — the details below are why, and none of them cost a browser anything.
+
+If you are building a PWA, Coldwire is the offline layer, not the whole of it: it does not
+ship a web app manifest, an install prompt, or icons. Those stay yours.
 
 > **Status: early.** Extracted from a production app but young as a library. The API may
 > change before 1.0.
@@ -17,7 +24,11 @@ gets you a native error screen, not your offline page. Coldwire gets the details
 
 ## Why this is harder than it looks
 
-Six things break a naive Hotwire Native offline cache. Coldwire handles all six.
+Six things break a naive offline cache in a Hotwire app. Four of them are Rails, Turbo and
+the Cache API behaving exactly as specified, and bite you in any browser — those are 1, 3, 4
+and 6 below. The other two are Hotwire Native holding you to a stricter standard than a
+browser does. Coldwire handles all six, which is what lets one cache serve all three
+targets.
 
 **1. `Vary: Accept` silently defeats precaching.** Rails answers HTML with `Vary: Accept`,
 and `cache.match()` honors `Vary` by default. Precaching fetches with `Accept: */*`, but
@@ -26,7 +37,7 @@ precached page therefore only ever matches *another precache* — never a real v
 looks like it works, because on-demand caching of visited pages still does. Coldwire matches
 with `{ ignoreVary: true }`.
 
-**2. A non-2xx offline page is never shown.** Hotwire Native treats any non-2xx visit as a
+**2. A non-2xx offline page is never shown.** *(Hotwire Native.)* It treats any non-2xx visit as a
 failed request. Its adapter posts `visitRequestFailed` to the native side with only a
 location, an identifier, and a status code — **the response body never crosses into Swift**.
 So there is no iOS override that can render a `503` body. Coldwire's fallback is a `200`.
@@ -42,7 +53,7 @@ page, and the stored response keeps `redirected: true`. Serving a redirected res
 navigation is a network error by spec, so the app fails to cold launch offline instead of
 showing the cached page. Coldwire refuses to store a redirected response at all.
 
-**5. The offline page itself must boot Turbo.** Hotwire Native's adapter waits for
+**5. The offline page itself must boot Turbo.** *(Hotwire Native.)* Its adapter waits for
 `window.Turbo` and, if it never appears, reports *"The page could not be loaded because Turbo
 is not present"* — its own error screen again, no matter how good your fallback HTML is. A
 plain-HTML offline page is not renderable in the app at all. Coldwire's fallback loads Turbo
@@ -122,7 +133,8 @@ Coldwire.configure do |config|
   # out, and switching accounts, safe.
   config.cache_identity = -> { current_user&.id }
 
-  # Only register the worker where you want caching. A Hotwire Native app usually
+  # Only register the worker where you want caching. A PWA usually wants it everywhere; a
+  # Hotwire Native app usually
   # limits it to the native user agent so browser tests stay uncached.
   config.register_if = lambda do
     request.user_agent.to_s.include?("Hotwire Native") && current_user.present?
@@ -508,8 +520,11 @@ The Cache API ignores HTTP freshness headers entirely, and WebKit drops `Date` f
 ## Requirements
 
 - Rails 7.1+
-- Turbo / Hotwire Native (works in any browser with service workers, but the offline
-  fallback details are tuned for Hotwire Native)
+- Turbo — a plain Hotwire app, a PWA, or Hotwire Native
+- A browser with service workers, and HTTPS (or localhost). Service workers are same-origin,
+  so the engine has to be mounted on the app's own domain
+- Hotwire Native is optional. Nothing here requires it; the offline fallback simply satisfies
+  its rules as well, which is stricter than a browser needs
 - On iOS, service workers only run in `WKWebView` when navigation is limited to app-bound
   domains:
 

@@ -10,10 +10,12 @@ Gem::Specification.new do |spec|
   spec.authors     = [ "Noreaster Group" ]
   spec.email       = [ "stuart@noreastergroup.com" ]
 
-  spec.summary     = "Offline page caching for Hotwire Native apps."
+  spec.summary     = "Offline page caching for Hotwire, PWA, and Hotwire Native Rails apps."
   spec.description = "When your Hotwire wires go cold. A Rails engine that serves a " \
                      "Cache API service worker, precaches the pages you nominate, and " \
-                     "falls back to an offline view Turbo and Hotwire Native will render."
+                     "falls back to an offline view Turbo will actually render. Built " \
+                     "against Hotwire Native's rules, which are stricter than a browser's, " \
+                     "so the same cache works in a plain Hotwire app and an installed PWA."
   spec.homepage    = "https://github.com/noreastergroup/coldwire-rails"
   spec.license     = "MIT"
 

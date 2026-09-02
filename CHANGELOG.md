@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Clarified what this is for. Coldwire reads as a Hotwire Native library and is not one: the
+  worker, the precaching, the sync and the offline fallback are plain service worker and Cache
+  API work, and serve a plain Hotwire app or an installed PWA equally.
+
+  Hotwire Native is the strictest target rather than the only one — of the six problems the
+  README describes, four bite you in any browser and two are Native's extra rules. Meeting all
+  six costs a browser nothing, which is why one cache covers all three. Said plainly too that
+  a PWA needs a web app manifest, icons and an install prompt, and that Coldwire supplies none
+  of them.
+
 - Automatic syncing is configured as a block, because these four only mean anything together —
   a manifest with no interval is never fetched, and an interval with no manifest has nothing to
   fetch:

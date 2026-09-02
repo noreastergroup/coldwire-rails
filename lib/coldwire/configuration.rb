@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "uri"
+
 module Coldwire
   # Host apps tune Coldwire through `Coldwire.configure`. Everything here has a working
   # default except `precache_urls`, which only the host app can know.
@@ -117,6 +119,31 @@ module Coldwire
     # because a worker global does not survive the worker being shut down.
     attr_accessor :sync_interval
 
+    # Origins besides your own that the worker may cache. Empty by default: a service worker
+    # sees every request a page makes, and quietly hoarding third-party responses is not a
+    # thing to do without being asked.
+    #
+    # The origin has to send CORS headers that name your app, or the response arrives opaque —
+    # status 0, no headers, no readable body — and there is nothing useful to store. For ranged
+    # sources it also has to expose Content-Range.
+    attr_reader :cache_origins
+
+    def cache_origins=(origins)
+      @cache_origins = Array(origins).map { |origin| validate_origin(origin) }
+    end
+
+    # URLs whose Range requests are cached piece by piece, keyed by the range.
+    #
+    # For a large immutable archive read a slice at a time — a PMTiles basemap, say — this is
+    # the difference between an offline map and nothing at all: the file itself may be hundreds
+    # of megabytes, while the slices actually read for the area you looked at are a rounding
+    # error next to it. Same patterns as the allowlist: route shapes or Regexps.
+    attr_reader :cache_ranges
+
+    def cache_ranges=(patterns)
+      @cache_ranges = validate_patterns(patterns, :cache_ranges) || Array(patterns)
+    end
+
     # Refetch a manifest page once its cached copy is older than this. Set nil to only ever
     # fetch pages that are missing.
     attr_accessor :max_age
@@ -148,6 +175,8 @@ module Coldwire
       @precache_urls = -> { [] }
       @auto_sync = false
       @sync_interval = 6 * 60 * 60
+      @cache_origins = []
+      @cache_ranges = []
       @max_age = 7 * 24 * 60 * 60
       @sync_concurrency = 4
     end
@@ -192,6 +221,26 @@ module Coldwire
               "Coldwire evaluates #{setting} patterns with JavaScript's RegExp, which has no " \
               "equivalent for #{unsupported.join(' and ')}: #{pattern.inspect}"
       end
+    end
+
+    # An origin and nothing more: no path, no trailing slash. Anything else silently fails to
+    # match a request's origin, which is the same quiet failure as a malformed path pattern.
+    def validate_origin(origin)
+      value = origin.to_s
+
+      begin
+        uri = URI.parse(value)
+      rescue URI::InvalidURIError
+        uri = nil
+      end
+
+      unless uri&.scheme && uri.host && uri.path.to_s.empty? && uri.query.nil?
+        raise ArgumentError,
+              "Coldwire cache_origins takes bare origins like " \
+              "\"https://tiles.example.com\": #{origin.inspect}"
+      end
+
+      value
     end
 
     # Path patterns are route-shaped: literal segments, ":name" for exactly one segment, and a

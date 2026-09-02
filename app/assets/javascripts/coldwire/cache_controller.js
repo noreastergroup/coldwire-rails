@@ -466,6 +466,11 @@ export default class extends Controller {
     // The countdown means something different the instant this changes; do not make the user
     // wait a tick to see it.
     this.renderSyncedAt()
+    // And anything watching Coldwire.onChange — a map holding remote tile sources, say —
+    // hears about it without waiting for a navigation.
+    document.dispatchEvent(new CustomEvent("coldwire:change", {
+      detail: { offline: enabled, forced: enabled, cachedAt: null }
+    }))
 
     try {
       await this.sendToWorker("setForcedOffline", { value: enabled }, 5000)

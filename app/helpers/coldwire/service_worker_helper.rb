@@ -2,6 +2,10 @@
 
 module Coldwire
   module ServiceWorkerHelper
+    OFFLINE_ATTRIBUTE = "data-coldwire-offline"
+    CACHED_AT_ATTRIBUTE = "data-coldwire-cached-at"
+    CHANGE_EVENT = "coldwire:change"
+
     # Drop this in your layout's <head>. Emits nothing when `register_if` says this request
     # should not be caching — that check happens server side so no dead JS ships at all.
     #
@@ -18,7 +22,8 @@ module Coldwire
       # next line is a single call expression, not two statements — ASI does not save you —
       # so a missing semicolon here throws and takes the registration down with it.
       safe_join([ coldwire_sync_interval_meta, javascript_tag(nonce: true) do
-        [ coldwire_store_script, coldwire_identity_script, coldwire_offline_marker_script,
+        [ coldwire_store_script, coldwire_api_script, coldwire_identity_script,
+          coldwire_offline_marker_script,
           coldwire_forced_offline_script, coldwire_auto_sync_script, coldwire_register_script ]
           .compact
           .join("\n")
@@ -39,6 +44,53 @@ module Coldwire
       return unless Coldwire.config.auto_sync
 
       tag.meta(name: "coldwire-sync-interval", content: Coldwire.config.sync_interval.to_i)
+    end
+
+    # What the host app is allowed to ask. Small on purpose: the page already knows whether it
+    # came out of the cache — that is what `data-coldwire-offline` on <html> is for, and it is
+    # what the `offline:` CSS variant reads — but a map deciding whether to reach for a remote
+    # tile source needs to ask that in JavaScript, and needs to hear about it changing.
+    def coldwire_api_script
+      <<~JS
+        (function () {
+          if (window.Coldwire) return
+
+          var root = document.documentElement
+
+          window.Coldwire = {
+            // True when the page you are looking at did not come from the network: either it
+            // was served out of the cache, or force offline is on. Not `navigator.onLine`,
+            // which a web view reports unreliably in both directions.
+            isOffline: function () {
+              return root.hasAttribute("#{OFFLINE_ATTRIBUTE}") || this.isForcedOffline()
+            },
+
+            // The switch on the debug page. Separate because it is a choice rather than a
+            // condition: worth telling a user apart from having no signal.
+            isForcedOffline: function () {
+              return window.coldwireStore.on(window.coldwireStore.keys.forced)
+            },
+
+            // When the page in front of you was cached, or null if it came from the network.
+            cachedAt: function () {
+              var at = root.getAttribute("#{CACHED_AT_ATTRIBUTE}")
+              var seconds = at ? Number(at) : NaN
+
+              return Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1000) : null
+            },
+
+            // Fires on every Turbo visit and whenever force offline is toggled, so a map can
+            // put its remote sources back without the page being reloaded. Returns the
+            // unsubscribe, because a Stimulus controller that disconnects needs one.
+            onChange: function (handler) {
+              var listener = function (event) { handler(event.detail) }
+              document.addEventListener("#{CHANGE_EVENT}", listener)
+
+              return function () { document.removeEventListener("#{CHANGE_EVENT}", listener) }
+            }
+          }
+        })();
+      JS
     end
 
     # Every piece of Coldwire that remembers anything goes through this: the head fragments
@@ -149,6 +201,18 @@ module Coldwire
 
       <<~JS
         (function () {
+          // Anything watching Coldwire.onChange hears about it here, after the attributes are
+          // in step with the page that was just rendered.
+          function announce() {
+            document.dispatchEvent(new CustomEvent(#{CHANGE_EVENT.to_json}, {
+              detail: {
+                offline: window.Coldwire ? window.Coldwire.isOffline() : false,
+                forced: window.Coldwire ? window.Coldwire.isForcedOffline() : false,
+                cachedAt: window.Coldwire ? window.Coldwire.cachedAt() : null
+              }
+            }))
+          }
+
           function sync() {
             var meta = document.querySelector('meta[name="coldwire-offline"]')
             var root = document.documentElement
@@ -164,9 +228,12 @@ module Coldwire
               root.removeAttribute("data-coldwire-offline")
               root.removeAttribute("data-coldwire-cached-at")
             }
+
+            announce()
           }
 
           document.addEventListener("turbo:load", sync)
+          announce()
         })();
       JS
     end

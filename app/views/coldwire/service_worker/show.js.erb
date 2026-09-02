@@ -17,6 +17,14 @@ const EXCLUDED_PATHS = <%= raw Coldwire.excluded_paths(coldwire.service_worker_p
 // Govern automatic caching only — the precache manifest ignores both.
 const CACHE_ALLOWLIST = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.cache_allowlist).to_json %>)
 const CACHE_BLOCKLIST = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.cache_blocklist).to_json %>)
+// Origins besides ours that may be cached at all, and the URLs whose byte ranges are cached
+// piece by piece.
+const CACHE_ORIGINS = <%= raw Coldwire.config.cache_origins.to_json %>
+const CACHE_RANGES = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.cache_ranges).to_json %>)
+// A range entry is stored under its own key, with the range in the query and the archive's
+// total size in a header — the two things needed to rebuild a 206 that was never storable.
+const RANGE_PARAM = "__coldwire_range"
+const RANGE_TOTAL_HEADER = "coldwire-range-total"
 const OFFLINE_PAGE = <%= raw offline_page.to_json %>
 const OFFLINE_FRAME_CONTENT = <%= raw offline_frame.to_json %>
 const RETRY_URL_TOKEN = "coldwire:retry-url"
@@ -56,6 +64,11 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (!shouldHandle(event.request)) return
 
+  if (event.request.headers.has("Range")) {
+    event.respondWith(handleRange(event.request))
+    return
+  }
+
   event.respondWith(handleFetch(event.request))
 })
 
@@ -88,13 +101,23 @@ self.addEventListener("message", (event) => {
 
 function shouldHandle(request) {
   if (request.method !== "GET") return false
-  // Range requests are how map tiles and media stream; the Cache API cannot serve 206s.
-  if (request.headers.has("Range")) return false
 
   const url = new URL(request.url)
-  if (url.origin !== self.location.origin) return false
+  if (!cacheableOrigin(url)) return false
+
+  // A Range request cannot be stored as it arrives — cache.put refuses a 206 — so it is
+  // stored as a 200 under a key naming the range, and answered with a 206 built here. Only
+  // for URLs nominated for it: everything else streams straight to the network, which is what
+  // you want for media, and leaves ordinary requests exactly as they were.
+  if (request.headers.has("Range")) return matchesRules(url, CACHE_RANGES)
 
   return !matchesPath(url, EXCLUDED_PATHS)
+}
+
+// Our own origin, plus any the host app has nominated. A worker sees every request a page
+// makes, and caching other people's responses uninvited is not its business.
+function cacheableOrigin(url) {
+  return url.origin === self.location.origin || CACHE_ORIGINS.includes(url.origin)
 }
 
 function matchesPath(url, paths) {
@@ -147,6 +170,10 @@ function matchesPattern(path, pattern) {
 function isAutoCacheable(request) {
   const url = new URL(request.url)
 
+  // A nominated origin is the opt-in; the path lists describe this app's own surfaces and say
+  // nothing useful about somebody else's.
+  if (url.origin !== self.location.origin) return CACHE_ORIGINS.includes(url.origin)
+
   if (matchesRules(url, CACHE_BLOCKLIST)) return false
   if (CACHE_ALLOWLIST.length === 0) return true
 
@@ -160,6 +187,90 @@ function isAutoCacheable(request) {
 // cached page. Never store one.
 function isCacheable(request, response) {
   return request.method === "GET" && response.ok && !response.redirected
+}
+
+// Cache first, always. A byte range of an archive is immutable for as long as the archive is,
+// and the entire point of caching one is to stop asking for it.
+async function handleRange(request) {
+  const spec = parseRange(request.headers.get("Range"))
+  // A single closed range is what a tile archive asks for. Multipart, or anything unparseable,
+  // is not something to take apart and reassemble — send it and store nothing.
+  if (!spec) return fetch(request)
+
+  const cache = await caches.open(CACHE_NAME)
+  const key = rangeKey(request, spec)
+  // Deliberately not MATCH_OPTIONS: `ignore_query_params` would collapse every range of a
+  // file onto one entry, since the range lives in the query.
+  const stored = await cache.match(key, { ignoreVary: true })
+
+  if (stored) return partialResponse(stored, spec)
+  if (forcedOffline) return rangeUnavailable()
+
+  try {
+    const response = await fetch(request)
+    if (response.status !== 206) return response
+
+    // Clone before reading: the body is needed twice, once to store and once to return.
+    const body = await response.clone().arrayBuffer()
+    const headers = new Headers()
+    const type = response.headers.get("Content-Type")
+    if (type) headers.set("Content-Type", type)
+    headers.set(RANGE_TOTAL_HEADER, String(rangeTotal(response.headers.get("Content-Range")) ?? ""))
+    headers.set(TIMESTAMP_HEADER, String(Math.floor(Date.now() / 1000)))
+
+    cache.put(key, new Response(body, { status: 200, headers }))
+
+    return response
+  } catch {
+    return rangeUnavailable()
+  }
+}
+
+// The stored body *is* the range that was asked for, so this is only about the headers a
+// partial response has to carry.
+async function partialResponse(stored, spec) {
+  const body = await stored.arrayBuffer()
+  const total = stored.headers.get(RANGE_TOTAL_HEADER) || "*"
+  const headers = new Headers()
+  const type = stored.headers.get("Content-Type")
+  if (type) headers.set("Content-Type", type)
+  headers.set("Content-Length", String(body.byteLength))
+  headers.set("Content-Range", `bytes ${spec.start}-${spec.start + body.byteLength - 1}/${total}`)
+  headers.set("Accept-Ranges", "bytes")
+
+  return new Response(body, { status: 206, statusText: "Partial Content", headers })
+}
+
+// 504 rather than the offline page: whatever asked for a byte range wants bytes, and handing
+// it HTML would be answered with a parse error instead of a failure it can report.
+function rangeUnavailable() {
+  return new Response(null, { status: 504, statusText: "Offline" })
+}
+
+function parseRange(value) {
+  const match = /^bytes=(\d+)-(\d*)$/.exec(String(value || "").trim())
+  if (!match) return null
+
+  const start = Number(match[1])
+  const end = match[2] === "" ? null : Number(match[2])
+  if (end !== null && end < start) return null
+
+  return { start, end }
+}
+
+function rangeTotal(contentRange) {
+  const match = /\/(\d+)\s*$/.exec(String(contentRange || ""))
+
+  return match ? Number(match[1]) : null
+}
+
+// The range goes in the query so it is part of the cache key, and the request is never sent
+// anywhere, so the extra parameter cannot confuse a server.
+function rangeKey(request, spec) {
+  const url = new URL(request.url)
+  url.searchParams.set(RANGE_PARAM, `${spec.start}-${spec.end ?? ""}`)
+
+  return new Request(url.href, { method: "GET" })
 }
 
 async function handleFetch(request) {

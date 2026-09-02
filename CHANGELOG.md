@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+- `config.cache_origins` — origins besides your own that the worker may cache. Empty by
+  default: a worker sees every request a page makes, and hoarding third-party responses
+  uninvited is not its business. The origin has to send CORS headers naming your app, or the
+  response arrives opaque and there is nothing worth storing.
+
+- `config.cache_ranges` — URLs whose Range requests are cached piece by piece, keyed by the
+  range. For a large immutable archive read a slice at a time — a PMTiles basemap — this is the
+  difference between an offline map and nothing: the file may be hundreds of megabytes while
+  the slices behind the area you actually looked at are a rounding error next to it.
+
+  `cache.put` refuses a 206, so a range is stored as a 200 under a key naming the range and
+  answered with a 206 the worker builds. Cache-first, because a byte range of an archive is
+  immutable for as long as the archive is. A range nobody nominated streams straight to the
+  network, so media is untouched; a range asked for offline and never fetched gets a 504, not
+  an HTML offline page it would only fail to parse.
+
+- `window.Coldwire` — `isOffline()`, `isForcedOffline()`, `cachedAt()` and `onChange()`. The
+  page already knows through the `<html>` attribute and the `offline:` CSS variant, but a map
+  deciding whether to reach for a remote tile source has to ask in JavaScript, and has to hear
+  about it changing. `onChange` fires on every Turbo visit and when force offline is toggled.
+
 - Cached entries with no `Content-Length` are measured from their body rather than reported as
   0 bytes. `headers.get` answers null for a header that is not there, and `Number(null)` is 0,
   which passed the "is it a sane number" guard and skipped the fallback that was already

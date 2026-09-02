@@ -120,7 +120,7 @@ module Coldwire
     # Everything about keeping the cache current on its own.
     #
     #   config.auto_sync do |sync|
-    #     sync.enable = true
+    #     sync.enabled = true
     #     sync.precache_urls = -> { Site.published.map { |site| site_path(site) } }
     #     sync.interval = 6.hours
     #     sync.max_age = 7.days
@@ -128,7 +128,7 @@ module Coldwire
     #
     # Grouped because these four only mean anything together: a manifest with no interval is
     # never fetched, and an interval with no manifest has nothing to fetch. Reachable as
-    # `config.auto_sync.enable = true` as well, for setting one thing.
+    # `config.auto_sync.enabled = true` as well, for setting one thing.
     def auto_sync
       @auto_sync ||= AutoSync.new
       yield(@auto_sync) if block_given?
@@ -142,7 +142,7 @@ module Coldwire
     # syncing is triggered by an open page and paced, rather than scheduled.
     class AutoSync
       # Off unless asked for. Background fetching is a decision about somebody's data plan.
-      attr_accessor :enable
+      attr_accessor :enabled
 
       # The pages to keep cached. Evaluated in the controller, so route helpers and the
       # current user are both available.
@@ -164,7 +164,7 @@ module Coldwire
       attr_accessor :concurrency
 
       def initialize
-        @enable = false
+        @enabled = false
         @precache_urls = -> { [] }
         @interval = 6 * 60 * 60
         @max_age = 7 * 24 * 60 * 60

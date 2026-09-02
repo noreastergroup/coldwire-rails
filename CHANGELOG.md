@@ -8,7 +8,7 @@
 
   ```ruby
   config.auto_sync do |sync|
-    sync.enable = true          # off by default
+    sync.enabled = true          # off by default
     sync.precache_urls = -> { ... }
     sync.interval = 6.hours
     sync.max_age = 7.days
@@ -19,7 +19,7 @@
   `auto_sync` was a boolean and `precache_urls`, `sync_interval`, `refetch_after` and
   `sync_concurrency` were loose beside it. `max_age` keeps its name now that it sits next to
   the interval it is measured against; `refetch_after` was a worse answer to the same problem.
-  `enable` defaults to **false**: background fetching is a decision about somebody's data
+  `enabled` defaults to **false**: background fetching is a decision about somebody's data
   plan, not something to inherit.
 
 - `register_if` takes `->() { }`, `-> { }`, or `->(request) { }`. A block that declares a

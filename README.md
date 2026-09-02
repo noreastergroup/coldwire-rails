@@ -104,7 +104,7 @@ Coldwire.configure do |config|
   # Which pages to precache, and how often to freshen them. Evaluated against your app's URL
   # helpers, so `article_path` means your route rather than one of Coldwire's.
   config.auto_sync do |sync|
-    sync.enable = true
+    sync.enabled = true
     sync.precache_urls = -> {
       Article.published.flat_map { |article| [ article_path(article), card_article_path(article) ] }
     }
@@ -158,7 +158,7 @@ Coldwire.configure do |config|
 
   # Keep the manifest current on its own, instead of only when the button is pressed.
   config.auto_sync do |sync|
-    sync.enable = true
+    sync.enabled = true
     sync.interval = 6.hours
     sync.max_age = 7.days
     sync.concurrency = 4
@@ -388,11 +388,11 @@ means *only* these. The **blocklist always wins**.
 ### Keeping the manifest current
 
 By default the manifest is only fetched when something asks for it — the button on the debug
-page. Turn on `auto_sync.enable` and Coldwire keeps it current on its own:
+page. Turn on `auto_sync.enabled` and Coldwire keeps it current on its own:
 
 ```ruby
 config.auto_sync do |sync|
-  sync.enable = true
+  sync.enabled = true
   sync.precache_urls = -> { Site.published.map { |site| site_path(site) } }
   sync.interval = 6.hours     # leave this long between syncs
   sync.max_age = 7.days       # and refetch a page once its copy is older than this

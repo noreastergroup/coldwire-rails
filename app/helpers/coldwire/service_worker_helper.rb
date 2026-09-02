@@ -41,7 +41,7 @@ module Coldwire
     # seconds. Turbo *does* replace head metas on every visit, so reading it back from here
     # each time a sync is scheduled means the next navigation picks up the new value.
     def coldwire_sync_interval_meta
-      return unless Coldwire.config.auto_sync.enable
+      return unless Coldwire.config.auto_sync.enabled
 
       tag.meta(name: "coldwire-sync-interval", content: Coldwire.config.auto_sync.interval.to_i)
     end
@@ -252,7 +252,7 @@ module Coldwire
     # localStorage rather than the worker, because a worker global does not survive being
     # shut down, which is precisely the case this has to withstand.
     def coldwire_auto_sync_script
-      return unless Coldwire.config.auto_sync.enable
+      return unless Coldwire.config.auto_sync.enabled
 
       <<~JS
         (function () {
@@ -407,7 +407,7 @@ module Coldwire
           if ("serviceWorker" in navigator) {
             // A ServiceWorkerContainer starts with its message queue disabled. Setting
             // onmessage enables it; addEventListener alone does not, and this call is the
-            // documented way to enable it for a listener registered this way. Without it a
+            // documented way to enabled it for a listener registered this way. Without it a
             // page can sit and never hear a word the worker says.
             if (navigator.serviceWorker.startMessages) navigator.serviceWorker.startMessages()
 

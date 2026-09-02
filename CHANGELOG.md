@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Dropped the offline page's dark palette too, so the gem now ships no theme queries at all.
+  The reduced-motion query stays: that is an accessibility preference, not a theme.
+
 - Precaching follows subresources onto any origin in `cache_origins`, not just your own. It
   used to drop every cross-origin `<script>`, `<link>` and image, so a page whose map library
   comes off a CDN precached perfectly and then could not boot offline: the library was never

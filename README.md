@@ -2,66 +2,33 @@
 
 **When your Hotwire wires go cold.**
 
-Offline page caching for Rails apps — whether that's a plain Hotwire app, an installable
-PWA, or a Hotwire Native app. Coldwire is a mountable Rails engine that serves a
-[Cache API](https://developer.mozilla.org/en-US/docs/Web/API/Cache) service worker,
-precaches the pages you nominate, and — when there's nothing cached and no network — falls
-back to an offline view that Turbo will actually render.
+Offline caching for Rails. A mountable engine serves a
+[Cache API](https://developer.mozilla.org/en-US/docs/Web/API/Cache) service worker, precaches
+the pages you nominate, and — when there is nothing cached and no network — falls back to an
+offline view Turbo will actually render.
 
-**Built against the strictest case.** Hotwire Native is the least forgiving place to do
-this: it shows its own native error screen for anything that smells like a failed visit, so
-a service worker returning a sensible-looking `503` gets you that screen instead of your
-offline page. Meeting those rules means the same cache behaves in Safari, in Chrome, and in
-an installed PWA — the details below are why, and none of them cost a browser anything.
-
-If you are building a PWA, Coldwire is the offline layer, not the whole of it: it does not
-ship a web app manifest, an install prompt, or icons. Those stay yours.
+Works the same in a plain Hotwire app, an installed PWA, or Hotwire Native. If you are
+building a PWA, this is the offline layer and not the whole of it: no web app manifest, no
+install prompt, no icons.
 
 > **Status: early.** Extracted from a production app but young as a library. The API may
 > change before 1.0.
 
 ---
 
-## Why this is harder than it looks
+## What you get
 
-Six things break a naive offline cache in a Hotwire app. Four of them are Rails, Turbo and
-the Cache API behaving exactly as specified, and bite you in any browser — those are 1, 3, 4
-and 6 below. The other two are Hotwire Native holding you to a stricter standard than a
-browser does. Coldwire handles all six, which is what lets one cache serve all three
-targets.
-
-**1. `Vary: Accept` silently defeats precaching.** Rails answers HTML with `Vary: Accept`,
-and `cache.match()` honors `Vary` by default. Precaching fetches with `Accept: */*`, but
-Turbo Drive and Turbo Frames request `Accept: text/html, application/xhtml+xml`. A
-precached page therefore only ever matches *another precache* — never a real visit. It
-looks like it works, because on-demand caching of visited pages still does. Coldwire matches
-with `{ ignoreVary: true }`.
-
-**2. A non-2xx offline page is never shown.** *(Hotwire Native.)* It treats any non-2xx visit as a
-failed request. Its adapter posts `visitRequestFailed` to the native side with only a
-location, an identifier, and a status code — **the response body never crosses into Swift**.
-So there is no iOS override that can render a `503` body. Coldwire's fallback is a `200`.
-
-**3. Turbo Frames need a frame.** A frame request discards any response that doesn't contain
-a matching `<turbo-frame>`, leaving the frame on its loading state forever. Coldwire reads
-the `Turbo-Frame` request header and answers with a matching frame.
-
-**4. A followed redirect poisons the cache.** When a signed-out request hits `/`, Rails
-answers `302 -> /users/sign_in` and `fetch` follows it. The result looks fine — `ok: true`,
-`status: 200` — and **`cache.put()` stores it without complaint**. Now `/` holds the sign-in
-page, and the stored response keeps `redirected: true`. Serving a redirected response for a
-navigation is a network error by spec, so the app fails to cold launch offline instead of
-showing the cached page. Coldwire refuses to store a redirected response at all.
-
-**5. The offline page itself must boot Turbo.** *(Hotwire Native.)* Its adapter waits for
-`window.Turbo` and, if it never appears, reports *"The page could not be loaded because Turbo
-is not present"* — its own error screen again, no matter how good your fallback HTML is. A
-plain-HTML offline page is not renderable in the app at all. Coldwire's fallback loads Turbo
-through your importmap.
-
-**6. Assets must not receive HTML.** A stylesheet or `<img>` handed an HTML offline page is
-just a broken asset. Coldwire serves the HTML fallback only to requests that want HTML, and
-gives everything else an empty `504`.
+| | |
+|---|---|
+| **Precaching** | A list of URLs you compute in Ruby, fetched with the subresources those pages reference |
+| **Automatic sync** | Kept current on an interval, resuming where it left off when a run is cut short |
+| **Offline fallback** | A page and a `<turbo-frame>`, both overridable, that Turbo renders rather than rejects |
+| **A debug page** | Status, force offline, sync with a countdown and progress, and every cached entry with search, sort and delete |
+| **Allow and block lists** | Route patterns — `"/sites/:id/card"` — or Regexps |
+| **Cache identity** | The cache is dropped when the signed-in user changes |
+| **Cross-origin and `Range`** | Nominate other origins, and cache tiles and media the Cache API otherwise refuses |
+| **Downloadable archives** | Large files somebody can opt into, fetched in chunks so an interrupted download resumes |
+| **A JS API** | `Coldwire.isOffline()` and friends, plus `data-coldwire-offline` on anything served from cache |
 
 ---
 
@@ -73,17 +40,13 @@ gem "coldwire-rails"
 ```
 
 The gem is `coldwire-rails`; everything in it lives under `Coldwire`, the way `turbo-rails`
-provides `Turbo`.
-
-Mount the engine:
+provides `Turbo`. Mount the engine, register the Stimulus controller, and add the tag to your
+layout:
 
 ```ruby
 # config/routes.rb
 mount Coldwire::Engine => "/coldwire"
 ```
-
-Register the Stimulus controller. Coldwire pins `"coldwire"` into your importmap itself, so
-there is nothing to add to `config/importmap.rb`:
 
 ```js
 // app/javascript/controllers/index.js
@@ -91,396 +54,179 @@ import ColdwireCacheController from "coldwire"
 application.register("coldwire-cache", ColdwireCacheController)
 ```
 
-Register the worker from your layout:
-
 ```erb
 <%# app/views/layouts/application.html.erb, inside <head> %>
 <%= coldwire_service_worker_tag %>
 ```
 
-### Scope
-
-The worker is served from the engine's mount point, so its default scope would be
-`/coldwire/`. Coldwire sends `Service-Worker-Allowed: /` and registers with a matching
-scope, so a worker mounted anywhere still controls the whole origin. Narrow it with
-`config.worker_scope` if you'd rather it didn't.
+Coldwire pins `"coldwire"` into your importmap itself, so there is nothing to add to
+`config/importmap.rb`. The worker is served from the mount point, but sends
+`Service-Worker-Allowed: /` and registers at `/`, so it controls the whole origin wherever you
+mount it — narrow that with `config.worker_scope`.
 
 ---
 
 ## Configuration
 
+Everything, with its default. Only `auto_sync` and `offline_head` really need your attention.
+
 ```ruby
 # config/initializers/coldwire.rb
 Coldwire.configure do |config|
-  # Which pages to precache, and how often to freshen them. Evaluated against your app's URL
-  # helpers, so `article_path` means your route rather than one of Coldwire's.
+  # What to precache and how often. Evaluated against your app's URL helpers.
   config.auto_sync do |sync|
-    sync.enabled = true
-    sync.precache_urls = -> {
-      Article.published.flat_map { |article| [ article_path(article), card_article_path(article) ] }
-    }
+    sync.enabled = false          # off by default: background fetching is somebody's data plan
+    sync.precache_urls = -> { [] }
+    sync.interval = 6.hours       # leave this long between syncs
+    sync.max_age = 7.days         # refetch a cached page once its copy is older than this
+    sync.concurrency = 4          # fetches in flight at once
   end
 
-  # Give the lambda an argument and it receives the controller, for `current_user` and
-  # anything else request-scoped:
-  #
-  #   sync.precache_urls = ->(controller) {
-  #     controller.current_user.articles.map { |article| article_path(article) }
-  #   }
+  # Who the cache belongs to. Evaluated in the view. When it changes, the cache is dropped —
+  # which is what makes signing out, and switching accounts, safe.
+  config.cache_identity = -> { nil }
 
-  # Who the cache belongs to. Evaluated in the view, so `current_user` is available. When
-  # this changes between page loads Coldwire drops the cache — which is what makes signing
-  # out, and switching accounts, safe.
-  config.cache_identity = -> { current_user&.id }
+  # Where the worker registers at all. Evaluated in the view, so `request` and `current_user`
+  # are both in scope. A page that does not register does not cache or sync.
+  config.register_if = -> { true }
 
-  # Only register the worker where you want caching. A PWA usually wants it everywhere; a
-  # Hotwire Native app usually
-  # limits it to the native user agent so browser tests stay uncached.
-  config.register_if = lambda do
-    request.user_agent.to_s.include?("Hotwire Native") && current_user.present?
-  end
+  # Must match the data-turbo-track elements in your layout. See "The offline page" below.
+  config.offline_head = nil
 
-  # Must match the data-turbo-track elements in your layout, or Turbo invalidates instead of
-  # rendering and Hotwire Native sticks on a spinner going back.
-  config.offline_head = -> { stylesheet_link_tag "application", "data-turbo-track": "reload" }
-
-  # The importmap module the offline page loads. Hotwire Native rejects any page without
-  # window.Turbo, so the fallback has to boot Turbo like a real page. Set to nil if you are
-  # not on importmap-rails, and load Turbo your own way in the template.
+  # The importmap module the offline page loads to boot Turbo. nil if you are not on
+  # importmap-rails; load Turbo your own way in the template instead.
   config.offline_import = "@hotwired/turbo-rails"
 
-  # Mark HTML served from cache so the page can say it is stale. On by default.
-  config.mark_cached_pages = true
-
-  # Treat "/map" and "/map?lat=1&zoom=9" as the same cached page. On by default.
-  config.ignore_query_params = true
-
-  # What the debug page pings to tell online from offline. Always excluded from the cache.
-  config.probe_path = "/up"
-
-  # Never intercept these path prefixes — they go straight to the network and fail outright
-  # when it is down. Coldwire's own routes are excluded automatically.
-  config.never_intercept = [ "/up", "/cable" ]
-
-  # What automatic caching may and may not store. Strings are route patterns ("/sites/:id"),
-  # Regexps are tested against the path. An empty allowlist allows everything; the
-  # blocklist always wins. Neither applies to the precache manifest.
+  # What automatic caching may store. Strings are route patterns, Regexps are tested against
+  # the path. An empty allowlist allows everything; the blocklist always wins.
   config.cache_allowlist = []
-  config.cache_blocklist = [ "/users", %r{^/admin(/|$)} ]
+  config.cache_blocklist = []
 
-  # Keep the manifest current on its own, instead of only when the button is pressed.
-  config.auto_sync do |sync|
-    sync.enabled = true
-    sync.interval = 6.hours
-    sync.max_age = 7.days
-    sync.concurrency = 4
-  end
+  # Never intercepted, so these fail outright offline. Coldwire's own routes are added for you.
+  config.never_intercept = [ "/up" ]  # probe_path is added for you
 
-  # Bump to invalidate every cached entry at once.
-  config.cache_name = "coldwire"
+  # Origins besides your own the worker may cache, and URLs whose Range requests it caches.
+  config.cache_origins = []
+  config.cache_ranges = []
 
+  # Large files somebody can download for offline use. See "Large files" below.
+  config.cache_archives = []
+
+  config.probe_path = "/up"          # pinged to tell online from offline
+  config.mark_cached_pages = true    # stamp HTML served from cache
+  config.ignore_query_params = true  # treat "/map" and "/map?zoom=9" as one page
+  config.cache_name = "coldwire"     # bump to invalidate every entry at once
   config.worker_scope = "/"
 end
 ```
 
-### Rendering inside your layout
-
-The debug page inherits your `ApplicationController`, so it picks up your layout,
-authentication, and helpers. The engine is namespace-isolated, which would normally point
-bare route helpers in that layout at Coldwire's routes — so Coldwire re-exposes your app's
-URL helpers to anything it renders. A layout calling `root_path` keeps working.
-
-### Overriding the offline views
-
-Create either file in your own app to replace Coldwire's:
-
-| Path | Renders |
-|---|---|
-| `app/views/coldwire/service_worker/offline_page.html.erb` | The full-page fallback |
-| `app/views/coldwire/service_worker/offline_frame.html.erb` | The inside of the fallback `<turbo-frame>` |
-| `app/views/coldwire/caches/show.html.erb` | The debug page |
-
-Both offline templates are rendered at worker-build time and embedded in the script, so they
-are plain markup — no request context, no helpers that need a current user.
-
-### Match your layout's tracked elements
-
-**Set `offline_head`.** Turbo will not render a page whose `data-turbo-track="reload"`
-elements differ from the current page's — it invalidates instead. Hotwire Native answers an
-invalidation by showing a spinner and reloading, which survives going forward but can leave
-the spinner up for good when it happens mid-pop on a back navigation.
-
-So the offline page has to carry the same tracked elements as your real pages, in the same
-order. Whatever your layout tracks goes here:
+`precache_urls` and `cache_identity` are evaluated where your helpers are, so `article_path`
+means your route rather than one of Coldwire's. Give `precache_urls` an argument and it
+receives the controller:
 
 ```ruby
-config.offline_head = -> { stylesheet_link_tag "application", "data-turbo-track": "reload" }
+sync.precache_urls = ->(controller) { controller.current_user.articles.map { |a| article_path(a) } }
 ```
 
-Coldwire emits its importmap after this, matching the usual stylesheets-then-scripts order.
-Note that this pulls your stylesheet into the offline page, so a CSS reset there applies to
-it — Coldwire's own styles state everything explicitly rather than relying on UA defaults,
-and yours should too if you override the template.
+`register_if` takes no argument, or the request:
 
-### Overriding the templates
-
-Three things to keep if you override the page template:
-
-- **CSS in the body, scoped.** Turbo's head merge copies new `<style>` elements into the app
-  and never removes them, so a `<style>` in the head — or any unscoped selector — outlives the
-  offline page and restyles everything after it until a full reload.
-
-- **The Turbo import.** Hotwire Native shows its own error screen for any page where
-  `window.Turbo` never appears. Import Turbo alone rather than your app entry point — offline,
-  every module in that graph would have to be cached for it to evaluate, and one miss means
-  no Turbo.
-- **`<meta name="turbo-cache-control" content="no-cache">`.** Without it Turbo snapshots the
-  offline page and can restore it after you are back online.
-
-The frame template needs neither: a frame response is a fragment inserted into a page that
-already has Turbo running.
-
-Both templates ship a **Try again** link, and each retries differently because a template
-baked at worker-build time cannot know the URL it will stand in for:
-
-- **The page** uses `href=""`, which resolves to whatever URL it was served for, plus
-  `data-turbo="false"` — a Turbo visit to the identical URL can be treated as same-page and
-  do nothing at all.
-- **The frame** uses `href="coldwire:retry-url"`, which the worker substitutes with the
-  frame's own URL. An empty href here would resolve to the *page* and load the whole document
-  into the card. A link inside a frame targets that frame, so this reloads just the card.
+```ruby
+config.register_if = -> { request.user_agent.to_s.include?("Hotwire Native") && current_user.present? }
+```
 
 ---
 
-## The debug page
+## What gets cached
 
-Mounted at the engine root — `/coldwire` with the mount above. It gives you:
+| Request | Behavior |
+|---|---|
+| HTML page | Network-first. Recached on every view; falls back to cache when the network fails |
+| Assets (CSS, JS, images) | Cache-first |
+| Cross-origin | Passed through, unless the origin is in `cache_origins` |
+| `Range` (tiles, media) | Passed through, unless the URL matches `cache_ranges` |
+| Non-GET | Passed through |
+| Redirected response | Never stored |
+| Blocklisted, or not allowlisted | Not stored automatically; still cacheable via the manifest |
+| Query strings | Ignored by default, when matching *and* when storing |
 
-- **Status** — a light and one word for the connection (green online, amber forced offline,
-  red unreachable), how much is cached, and when it last synced. Reload and Clear sit beside
-  it. The connection is decided by pinging `probe_path`, never by `navigator.onLine`.
-- **Force offline** — serve only from cache even with a connection. Holds across the app.
-- **Sync** — whether automatic sync is on and how often, when it last ran and a live
-  countdown to the next one, and what it is doing right now with a progress bar. **Sync now**
-  runs that same pass immediately instead of waiting out the countdown — there is no second
-  mechanism. It listens for the worker's broadcasts, and asks the worker what it missed when
-  it connects, so it shows syncs it did not start — including one already running, or already
-  finished, before the page had loaded.
-- **Cached** — every cached URL with size and how long ago it was stored, with a filter box
-  and a sort (most recent, largest, A–Z). Both work on the list already read, so typing does
-  not re-inspect the cache. Tapping a row shows the whole URL — rows can only ellipsise — with
-  its size and age and a Delete button. Each row also has a trash icon that deletes just that
-  entry; anything the manifest lists comes back on the next sync.
-
-It's styled with plain CSS and assumes no framework. Put it behind whatever authentication
-your app uses by wrapping the route, or override the template.
-
-To reach it offline, allowlist it like any other page — `config.cache_allowlist = [ "/coldwire" ]`
-alongside your own paths. The worker script and the manifest are never intercepted — the
-engine adds them and `probe_path` to `never_intercept` for you, and the manifest is served
-`no-store` so no HTTP cache holds it either — so **Sync now**
-will fail while offline; the inspector, **Clear cache**, and **Force offline** are client-side
-and keep working.
-
-**Force offline** holds across the whole app: the flag lives in a worker variable and browsers
-terminate idle workers, so every page load re-asserts it from `localStorage`. The network row
-pings `probe_path` rather than reading `navigator.onLine`, which only reports whether an
-interface is up and stays `true` with the server stopped.
-
----
-
-## Signed-in and signed-out
-
-Cached pages contain whatever the session that fetched them could see, so authentication
-needs handling on two fronts.
-
-**Set `cache_identity`.** Coldwire records it in `localStorage` and drops the cache whenever
-it changes, so signing out clears the previous user's pages and signing in as someone else
-does not inherit them. Leave it unset and the cache persists across sessions — fine for a
-single-user or fully public app, wrong for anything else.
-
-**Put your auth paths in `cache_blocklist`, not `never_intercept`.** Sign-in pages redirect on
-session state and must never be served stale — but the two settings fail very differently
-offline. `never_intercept` means *never intercept*, so the request goes straight to a dead
-network and Hotwire Native shows its own error screen. `cache_blocklist` means *intercept but
-never store automatically*, so the request still reaches your offline view.
-
-### Your cold-boot URL must be cacheable
-
-This is the one that will bite you. Whatever URL your app loads at launch has to be
-something the cache can actually hold, and a login path usually is not: signed in, it is a
-`302` to the app root, and a redirect is never cached. A cold launch offline then has
-nothing to serve and falls through to the SDK's error screen — even though the page it would
-have redirected to is sitting in the cache.
-
-Boot into a real page instead. Signed out it still redirects to your login, so nothing about
-the online flow changes.
-
----
-
-## Telling the page it is offline
-
-With `mark_cached_pages` on (the default), any HTML the worker serves from cache *because the
-network was unavailable* is stamped before it reaches the page:
-
-```html
-<html data-coldwire-offline data-coldwire-cached-at="1756400000">
-  <head><meta name="coldwire-offline" content="1756400000">
-```
-
-`data-coldwire-cached-at` is unix seconds — when that copy was stored. A page served fresh
-carries none of this, so the marker is a reliable "you are looking at cached content".
-
-Two markers rather than one, because they are read at different moments. The `<html>`
-attributes are there for the first paint of a cold boot, before any JS runs, so a banner
-does not flash in. The `<meta>` is for Turbo visits: Turbo swaps the body and merges the
-head but **never copies `<html>` attributes**, so on its own the attribute would still
-describe the previous page. `coldwire_service_worker_tag` mirrors the meta onto `<html>` on
-each `turbo:load`.
-
-### Styling against it
-
-Any CSS can key off the attribute. With Tailwind v4, two custom variants give you
-`offline:` and `online:`:
-
-```css
-@custom-variant offline (html[data-coldwire-offline] &);
-@custom-variant online (html:not([data-coldwire-offline]) &);
-```
-
-```erb
-<div class="hidden offline:block">
-  You're offline. This information may be out of date.
-</div>
-```
-
-Rendering the age needs the client, since only it knows the timestamp — read
-`document.documentElement.dataset.coldwireCachedAt` and format it with
-`Intl.RelativeTimeFormat`.
-
----
-
-## Choosing what gets cached
-
-Automatic caching — anything the worker sees you visit — is governed by two lists:
+### Allow and block lists
 
 ```ruby
 config.cache_allowlist = [ "/sites", "/sites/:id", "/sites/:id/card" ]
 config.cache_blocklist = [ "/users/:id/edit", %r{^/admin(/|$)} ]
 ```
 
-Both take **strings or Regexps**:
+A **string** is a route pattern, and matches that shape and nothing else:
 
-- A **string** is a **route pattern**, and matches that shape and nothing else:
+| Pattern | Matches | Does not match |
+| --- | --- | --- |
+| `/sites` | `/sites` | `/sites/1`, `/sites/search` |
+| `/sites/:id` | `/sites/1` | `/sites`, `/sites/1/card` |
+| `/sites/:id/card` | `/sites/1/card` | `/sites/1/notices` |
+| `/sites/*` | `/sites/1`, `/sites/1/card` | `/sites` |
 
-  | Pattern | Matches | Does not match |
-  | --- | --- | --- |
-  | `/sites` | `/sites` | `/sites/1`, `/sites/search` |
-  | `/sites/:id` | `/sites/1` | `/sites`, `/sites/1/card` |
-  | `/sites/:id/card` | `/sites/1/card` | `/sites/1/notices` |
-  | `/sites/*` | `/sites/1`, `/sites/1/card` | `/sites` |
+`:name` is exactly one segment; `*` takes everything remaining and may only be last. Coldwire
+raises at boot on anything else, because every mistake of this shape fails the same silent way
+— the rule never matches, and you find out when a page you expected offline is not there.
 
-  `:name` is exactly one segment; `*` takes everything remaining and may only be the last
-  segment. Coldwire raises at boot on anything else, because every mistake in this shape fails
-  the same silent way — the rule never matches, and you find out when a page you expected
-  offline is not there.
+Prefer the explicit shapes over `*`. A prefix reads as "this section of the app" but takes
+everything underneath with it, and with `ignore_query_params` on a single `/sites/search`
+entry ends up answering every search.
 
-  Prefer the explicit shapes over `*`. A prefix reads as "this section of the app", but it
-  takes everything underneath with it: search results, `new` and `edit` forms, nested
-  collections. With `ignore_query_params` on, a single `/sites/search` entry ends up answering
-  every search.
-- A **Regexp** is tested against the path. It is evaluated by JavaScript's `RegExp`, so write
-  JS-compatible syntax: `^` and `$`, not `\A` and `\z`. Coldwire raises at boot if you use
-  `\A`/`\z`/`\Z` or the `x`/`m` flags, rather than letting a rule silently never match.
-  The `i` flag works.
+A **Regexp** is tested against the path by JavaScript's `RegExp`, so write JS syntax — `^` and
+`$`, not `\A` and `\z`. Coldwire raises on `\A`/`\z`/`\Z` and the `x`/`m` flags rather than
+letting a rule silently never match.
 
-An **empty allowlist means everything is allowed** — that's the default. A non-empty one
-means *only* these. The **blocklist always wins**.
+An **empty allowlist allows everything**. A non-empty one means *only* these. The **blocklist
+always wins**. Neither applies to the precache manifest: listing a URL there is an explicit
+instruction, and quietly declining it would mean precaching 84 pages and silently getting 60.
 
-### Keeping the manifest current
+### Query strings
 
-By default the manifest is only fetched when something asks for it — the button on the debug
-page. Turn on `auto_sync.enabled` and Coldwire keeps it current on its own:
+With `ignore_query_params` on, `/map` and `/map?lat=44.1&zoom=9` are one cached page — the
+query is dropped both when matching and in the key an entry is stored under. Matching alone
+would still let a map that rewrites `lat`/`lng`/`zoom` on every pan write hundreds of
+near-duplicate entries.
 
-```ruby
-config.auto_sync do |sync|
-  sync.enabled = true
-  sync.precache_urls = -> { Site.published.map { |site| site_path(site) } }
-  sync.interval = 6.hours     # leave this long between syncs
-  sync.max_age = 7.days       # and refetch a page once its copy is older than this
-  sync.concurrency = 4        # fetches in flight at once
-end
-```
+> This is blunt, deliberately. It also collapses query strings that genuinely select content:
+> `/search?q=otters` and `/search?q=puffins` become one entry. Set
+> `config.ignore_query_params = false` if your app caches pages whose content depends on the
+> query.
+
+---
+
+## Syncing
+
+Turn on `auto_sync.enabled` and Coldwire keeps the manifest current on its own. Each pass:
+
+| | |
+|---|---|
+| **Fetches what is missing** | a newly published record with no cached copy |
+| **Refetches what is old** | a cached copy older than `max_age` |
+| **Skips what is fine** | anything younger than `max_age` costs nothing |
+| **Retires what left the manifest** | an unpublished record is dropped from the cache |
+
+Retiring only touches entries the manifest owns. Assets, and pages you cached by visiting
+them, are never retired.
 
 **There is no true background scheduling to use.** WebKit ships neither Background Sync,
 Periodic Background Sync, nor Background Fetch, so nothing can wake a worker in a Hotwire
 Native web view. What a page load *can* do is hand work to the worker, which then runs
-independently of the page that started it. So sync is triggered on load and throttled — the
-stamp lives in `localStorage`, because a worker global does not survive the browser shutting
-the worker down.
+independently of the page that started it. So an open page works out when a sync is next owed
+and sleeps exactly that long — five seconds or five weeks — rather than polling.
 
-Each sync:
-
-| | |
-|---|---|
-| **Fetches what is missing** | a newly published record shows up in the manifest and has no cached copy |
-| **Refetches what is old** | a cached copy older than `auto_sync.max_age` |
-| **Skips what is fine** | anything cached and younger than `auto_sync.max_age` costs nothing |
-| **Retires what left the manifest** | an unpublished record is dropped from the cache |
-| **Retries once** | a dropped request on a phone should not strand a page until the next interval |
-
-### Interrupted syncs resume
-
-A sync outlives the page that started it, but not necessarily the browser's patience — the
-worker can be shut down mid-run, the app backgrounded, the signal lost. So the clock is only
-restarted when the worker reports the manifest **fully** in sync. Anything short of that
-leaves no stamp, and the next page load carries on.
-
-Resuming needs no bookmark. Each pass recomputes what is missing from what is actually in the
-cache, so an interruption costs only the requests that were in flight:
-
-```
-page 1   84 pending   fetched 61, cut short   (worker shut down)
-page 2   23 pending   fetched 23              done -> stamped
-```
-
-Completion is announced to **every open page**, not just the one that asked, because by then
-the user is usually somewhere else and that page can no longer record anything. Navigating
-during a sync nudges the worker rather than starting a second one.
-
-A sync records that it ran as soon as it has been through the whole manifest, whether or not
-every URL came back. A single bad entry among hundreds would otherwise stop the clock for
-good: the app would say "never synced" for as long as that URL stayed broken, and retry as
-fast as it could, because a deadline in the past is always due. What failed simply stays
-missing from the cache, so the next pass finds it and tries again.
-
-A run that was refused outright — no connection, or force offline — is the one case that does
-not count. It leaves the clock alone, so it keeps saying when the cache was genuinely last
-brought up to date, and waits an interval before trying again.
-
-Retiring only touches entries the manifest owns — they are marked when stored. Assets, and
-pages you cached by simply visiting them, are never retired by a sync, because the manifest
-page that happened to reference an asset is not its owner.
-
-A sync also skips itself when `navigator.onLine` is false, and only one runs at a time.
-
-### The precache manifest ignores both
-
-`auto_sync.precache_urls` stores whatever you list, blocklist or not. Putting a URL in the manifest is
-an explicit instruction, and quietly declining it would make the manifest unpredictable — you
-would precache 84 pages and silently get 60. The same goes for the subresources a manifest
-page references.
-
-So the lists answer "what should we pick up as the user wanders around", not "what is allowed
-in the cache at all". `never_intercept` is still the setting for the latter, and it is stronger
-than either: those URLs are never intercepted, so they also never reach the offline fallback.
+A sync outlives the page that started it, but not necessarily the browser's patience. So the
+clock is restarted only when the worker reports a full pass; anything short of that leaves no
+stamp and the next page load carries on. Resuming needs no bookmark — each pass recomputes
+what is missing from what is actually in the cache, so an interruption costs only the requests
+that were in flight.
 
 ---
 
-### Large files people opt into
+## Large files
 
 Some things are too big to cache as a matter of course but worth keeping if somebody asks — a
-tile archive, an audio guide, a reference PDF. List them, and the debug page offers each one:
+tile archive, an audio guide, a reference PDF:
 
 ```ruby
 config.cache_archives = [
@@ -493,57 +239,178 @@ config.cache_archives = [
 A bare URL string works too, and the filename becomes the title.
 
 **Nothing downloads on its own.** Hundreds of megabytes over somebody's connection is their
-decision, so this only makes a file offerable. The page shows Download, then **Download again**
-and **Delete** once it is on the device — or **Resume**, with a count of pieces, where a
-download stopped part way.
+decision, so this only makes a file offerable — the debug page shows Download, then **Download
+again** and **Delete** once it is on the device, or **Resume** where a download stopped part
+way.
 
-Files arrive in 8 MB chunks rather than one enormous request, which is what makes a dropped
-connection cost seconds instead of the whole download: chunks already stored are skipped, so
-asking again resumes. Nothing has to be re-fetched to serve from it either — a `Range` request
-is answered by slicing the chunks and stitching across boundaries, and a Blob slice references
-bytes rather than copying them, so reading a tile out of a downloaded 300 MB archive costs
-about what reading it out of a single stored range does.
+Files arrive in 8 MB chunks, which is what makes a dropped connection cost seconds instead of
+the whole download. Serving from them is cheap too: a `Range` request is answered by slicing
+the chunks and stitching across boundaries, and a Blob slice references bytes rather than
+copying them, so reading a tile out of a downloaded 300 MB archive costs about what reading it
+out of a single stored range does.
 
-This pairs with `cache_ranges`: that caches the slices actually read, so the places you have
-already opened work offline. Downloading the archive is how the rest does.
+This pairs with `cache_ranges`, which caches the slices actually read — so the places you have
+already opened work offline, and downloading the archive is how the rest does.
 
-## How caching behaves
+---
 
-| Request | Behavior |
+## Telling the page it is offline
+
+With `mark_cached_pages` on, any HTML the worker serves from cache *because the network was
+unavailable* is stamped before it reaches the page:
+
+```html
+<html data-coldwire-offline data-coldwire-cached-at="1756400000">
+```
+
+Two markers, because they are read at different moments: the `<html>` attributes are there for
+the first paint of a cold boot, before any JS runs, and a `<meta name="coldwire-offline">` for
+Turbo visits, since Turbo merges the head but never copies `<html>` attributes.
+`coldwire_service_worker_tag` mirrors the meta onto `<html>` on each `turbo:load`.
+
+Any CSS can key off the attribute. With Tailwind v4, two custom variants give you `offline:`
+and `online:`:
+
+```css
+@custom-variant offline (html[data-coldwire-offline] &);
+@custom-variant online (html:not([data-coldwire-offline]) &);
+```
+
+From JavaScript, `window.Coldwire`:
+
+```js
+Coldwire.isOffline()        // this page did not come from the network
+Coldwire.isForcedOffline()  // …because the switch is on, rather than for want of a signal
+Coldwire.cachedAt()         // a Date, or null if it came from the network
+Coldwire.onChange((state) => { … })  // fires on every Turbo visit and on toggling force
+                                     // offline; returns its own unsubscribe
+```
+
+`isOffline()` reads the marker rather than `navigator.onLine`, which a web view reports
+unreliably in both directions. `onChange` is what lets a map put its remote sources back
+without a reload.
+
+---
+
+## Signed in and signed out
+
+Cached pages contain whatever the session that fetched them could see.
+
+**Set `cache_identity`.** It is recorded in `localStorage`, and the cache is dropped whenever
+it changes — so signing out clears the previous user's pages, and signing in as someone else
+does not inherit them. Leave it unset and the cache persists across sessions: fine for a
+single-user or fully public app, wrong for anything else.
+
+**Put auth paths in `cache_blocklist`, not `never_intercept`.** The two fail very differently
+offline. `never_intercept` means *never intercept*, so the request goes to a dead network and
+Hotwire Native shows its own error screen. `cache_blocklist` means *intercept but never store
+automatically*, so the request still reaches your offline view.
+
+**Your cold-boot URL must be cacheable.** This is the one that will bite you. Whatever URL
+your app loads at launch has to be something the cache can hold, and a login path usually is
+not: signed in, it is a `302` to the app root, and a redirect is never cached. A cold launch
+offline then has nothing to serve — even though the page it would have redirected to is
+sitting in the cache. Boot into a real page instead; signed out it still redirects to your
+login, so nothing about the online flow changes.
+
+---
+
+## The debug page
+
+Mounted at the engine root — `/coldwire` with the mount above. It inherits your
+`ApplicationController`, so it picks up your layout, authentication and helpers, and is styled
+with plain CSS assuming no framework. Put it behind whatever authentication you use by
+wrapping the route, or override `app/views/coldwire/caches/show.html.erb`.
+
+- **Status** — a light and a word for the connection, how much is cached, when it last synced.
+  Decided by pinging `probe_path`, never by `navigator.onLine`.
+- **Force offline** — serve only from cache even with a connection. Holds across the app: the
+  flag lives in a worker variable and browsers terminate idle workers, so every page load
+  re-asserts it from `localStorage`.
+- **Sync** — whether automatic sync is on and how often, a live countdown, and progress.
+  **Sync now** runs that same pass immediately rather than waiting out the countdown.
+- **Downloads** — anything in `cache_archives`.
+- **Cached** — every entry with size and age, a filter box, and a sort. Tapping a row shows
+  the whole URL; each row has a trash icon.
+
+To reach it offline, allowlist it like any other page. The worker script and the manifest are
+never intercepted, so **Sync now** will fail while offline; the inspector, **Clear cache** and
+**Force offline** are client-side and keep working.
+
+---
+
+## The offline page
+
+**Set `offline_head`.** Turbo will not render a page whose `data-turbo-track="reload"` elements
+differ from the current page's — it invalidates instead, and Hotwire Native answers an
+invalidation with a spinner and a reload, which can leave the spinner up for good mid-pop on a
+back navigation. So the offline page must carry the same tracked elements as your real pages,
+in the same order:
+
+```ruby
+config.offline_head = -> { stylesheet_link_tag "application", "data-turbo-track": "reload" }
+```
+
+Coldwire emits its importmap after this. Note that this pulls your stylesheet into the offline
+page, so a CSS reset there applies to it.
+
+Override either template by creating it in your own app:
+
+| Path | Renders |
 |---|---|
-| HTML page | Network-first. Recaches on every view so the copy stays fresh; falls back to cache when the network fails. |
-| Assets (CSS, JS, images) | Cache-first. |
-| `Range` requests (map tiles, media) | Never intercepted — the Cache API can't serve `206`. |
-| Cross-origin | Never intercepted. |
-| Non-GET | Never intercepted. |
-| Redirected response | Never stored — see #4 above. |
-| Blocklisted / not allowlisted | Not stored automatically; still cacheable via the manifest. |
-| Query strings | Ignored by default, when matching *and* when storing. See below. |
-| HTML served from cache offline | Stamped with `data-coldwire-offline`. See above. |
+| `app/views/coldwire/service_worker/offline_page.html.erb` | The full-page fallback |
+| `app/views/coldwire/service_worker/offline_frame.html.erb` | The inside of the fallback `<turbo-frame>` |
 
-### Query strings
+Both are rendered at worker-build time and embedded in the script, so they are plain markup —
+no request context, no helpers that need a current user. Three things to keep in the page:
 
-With `ignore_query_params` on (the default), `/map` and `/map?lat=44.1&zoom=9` are one
-cached page. The query is dropped both in `cache.match()` and in the key an entry is stored
-under — matching alone would still let a map that rewrites `lat`/`lng`/`zoom` on every pan
-write hundreds of near-duplicate entries for the same page.
+- **CSS in the body, scoped.** Turbo's head merge copies new `<style>` elements into the app
+  and never removes them, so a `<style>` in the head outlives the offline page and restyles
+  everything after it.
+- **The Turbo import**, alone rather than your app entry point — offline, every module in that
+  graph would have to be cached for it to evaluate, and one miss means no Turbo.
+- **`<meta name="turbo-cache-control" content="no-cache">`**, or Turbo snapshots the offline
+  page and can restore it after you are back online.
 
-> **This is blunt, and deliberately so for now.** It also collapses query strings that
-> genuinely select content: `/search?q=otters` and `/search?q=puffins` become one entry, and
-> whichever was cached last is what you get offline. If your app caches pages whose content
-> depends on the query, set `config.ignore_query_params = false` and cache the distinct URLs
-> instead. A finer-grained rule — ignoring only nominated params — is the obvious next step.
+Each template's **Try again** retries differently, because a template baked at build time
+cannot know the URL it stands in for. The page uses `href=""` plus `data-turbo="false"`; the
+frame uses `href="coldwire:retry-url"`, which the worker substitutes with the frame's own URL.
 
-Precaching walks each manifest URL, then the same-origin subresources those pages
-reference — stylesheets, scripts, images, `srcset` candidates, and importmap entries. It
-deliberately does **not** follow `<a href>`, which would turn it into a site crawler.
+---
 
-### Cache timestamps
+## Why this is harder than it looks
 
-The Cache API ignores HTTP freshness headers entirely, and WebKit drops `Date` from
-`match()`. So Coldwire stamps unix seconds onto the *request key* it stores under —
-`keys()` hands it back, and URL matching still finds the entry. That's what the inspector's
-"2 hours ago" is reading.
+Six things break a naive offline cache in a Hotwire app. Four bite you in any browser; two are
+Hotwire Native holding you to a stricter standard. Coldwire handles all six, which is what
+lets one cache serve all three targets — and none of them cost a browser anything.
+
+1. **`Vary: Accept` silently defeats precaching.** Rails answers HTML with `Vary: Accept` and
+   `cache.match()` honors it. Precaching fetches with `Accept: */*`; Turbo asks for
+   `text/html`. So a precached page only ever matches *another precache*, never a real visit —
+   and it looks like it works, because caching pages as you visit them still does. Coldwire
+   matches with `{ ignoreVary: true }`.
+2. **A non-2xx offline page is never shown.** *(Native.)* Its adapter posts
+   `visitRequestFailed` with a location, an identifier and a status — the response body never
+   crosses into Swift, so no iOS override can render a `503`. Coldwire's fallback is a `200`.
+3. **Turbo Frames need a frame.** A frame request discards any response without a matching
+   `<turbo-frame>`, leaving the frame loading forever. Coldwire reads the `Turbo-Frame` header
+   and answers with one.
+4. **A followed redirect poisons the cache.** A signed-out request to `/` gets a `302` that
+   `fetch` follows; the result looks fine and `cache.put()` stores it without complaint. Now
+   `/` holds the sign-in page and keeps `redirected: true` — and serving a redirected response
+   for a navigation is a network error by spec, so the app fails to cold launch offline.
+   Coldwire refuses to store one.
+5. **The offline page itself must boot Turbo.** *(Native.)* Its adapter waits for
+   `window.Turbo` and reports *"The page could not be loaded because Turbo is not present"* if
+   it never appears. Plain-HTML offline pages are not renderable in the app at all.
+6. **Assets must not receive HTML.** A stylesheet handed an HTML offline page is just a broken
+   asset. Coldwire serves the fallback only to requests that want HTML, and everything else an
+   empty `504`.
+
+The Cache API also ignores HTTP freshness headers entirely, and WebKit drops `Date` from
+`match()`. So Coldwire stamps unix seconds onto the *request key* it stores under — `keys()`
+hands it back, and URL matching still finds the entry. That is what the inspector's "2 hours
+ago" reads.
 
 ---
 
@@ -551,23 +418,22 @@ The Cache API ignores HTTP freshness headers entirely, and WebKit drops `Date` f
 
 - Rails 7.1+
 - Turbo — a plain Hotwire app, a PWA, or Hotwire Native
-- A browser with service workers, and HTTPS (or localhost). Service workers are same-origin,
-  so the engine has to be mounted on the app's own domain
-- Hotwire Native is optional. Nothing here requires it; the offline fallback simply satisfies
-  its rules as well, which is stricter than a browser needs
+- Service workers, and HTTPS (or localhost). They are same-origin, so the engine has to be
+  mounted on the app's own domain
+- Hotwire Native is optional. Nothing here requires it
 - On iOS, service workers only run in `WKWebView` when navigation is limited to app-bound
   domains:
 
-```swift
-Hotwire.config.makeCustomWebView = { config in
-    config.limitsNavigationsToAppBoundDomains = true
-    return WKWebView(frame: .zero, configuration: config)
-}
-```
+  ```swift
+  Hotwire.config.makeCustomWebView = { config in
+      config.limitsNavigationsToAppBoundDomains = true
+      return WKWebView(frame: .zero, configuration: config)
+  }
+  ```
 
-with every domain you navigate to listed under `WKAppBoundDomains` in `Info.plist`. **Apple
-caps that list at 10 entries**, and an eleventh is silently dropped — which disables app-bound
-mode and takes service workers with it.
+  with every domain you navigate to listed under `WKAppBoundDomains` in `Info.plist`. **Apple
+  caps that list at 10 entries**, and an eleventh is silently dropped — which disables
+  app-bound mode and takes service workers with it.
 
 ---
 

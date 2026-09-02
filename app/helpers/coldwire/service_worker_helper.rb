@@ -41,9 +41,9 @@ module Coldwire
     # seconds. Turbo *does* replace head metas on every visit, so reading it back from here
     # each time a sync is scheduled means the next navigation picks up the new value.
     def coldwire_sync_interval_meta
-      return unless Coldwire.config.auto_sync
+      return unless Coldwire.config.auto_sync.enable
 
-      tag.meta(name: "coldwire-sync-interval", content: Coldwire.config.sync_interval.to_i)
+      tag.meta(name: "coldwire-sync-interval", content: Coldwire.config.auto_sync.interval.to_i)
     end
 
     # What the host app is allowed to ask. Small on purpose: the page already knows whether it
@@ -252,7 +252,7 @@ module Coldwire
     # localStorage rather than the worker, because a worker global does not survive being
     # shut down, which is precisely the case this has to withstand.
     def coldwire_auto_sync_script
-      return unless Coldwire.config.auto_sync
+      return unless Coldwire.config.auto_sync.enable
 
       <<~JS
         (function () {
@@ -267,7 +267,7 @@ module Coldwire
           // Only the starting value. Read back from the meta on every use, so a document that
           // outlives a config change follows the new interval rather than the one it was
           // born with.
-          var fallbackInterval = #{(Coldwire.config.sync_interval.to_i * 1000).to_json}
+          var fallbackInterval = #{(Coldwire.config.auto_sync.interval.to_i * 1000).to_json}
 
           function interval() {
             // The last one, not the first. Turbo appends what a visit brought and clears the

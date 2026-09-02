@@ -31,8 +31,8 @@ const RETRY_URL_TOKEN = "coldwire:retry-url"
 
 // Manifest sync.
 const PACK_PATH = <%= raw coldwire.pack_path.to_json %>
-const REFETCH_AFTER = <%= raw Coldwire.config.refetch_after ? Coldwire.config.refetch_after.to_i.to_json : "null" %>
-const SYNC_CONCURRENCY = <%= raw Coldwire.config.sync_concurrency.to_i.to_json %>
+const REFETCH_AFTER = <%= raw Coldwire.config.auto_sync.max_age ? Coldwire.config.auto_sync.max_age.to_i.to_json : "null" %>
+const SYNC_CONCURRENCY = <%= raw Coldwire.config.auto_sync.concurrency.to_i.to_json %>
 // Marks entries the manifest owns, so a sync can retire the ones it dropped without
 // touching assets or pages picked up by ordinary browsing.
 const MANAGED_HEADER = "coldwire-managed"

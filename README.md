@@ -101,16 +101,19 @@ scope, so a worker mounted anywhere still controls the whole origin. Narrow it w
 ```ruby
 # config/initializers/coldwire.rb
 Coldwire.configure do |config|
-  # Which pages to precache. Evaluated against your app's URL helpers, so `article_path`
-  # means your route rather than one of Coldwire's.
-  config.precache_urls = -> {
-    Article.published.flat_map { |article| [ article_path(article), card_article_path(article) ] }
-  }
+  # Which pages to precache, and how often to freshen them. Evaluated against your app's URL
+  # helpers, so `article_path` means your route rather than one of Coldwire's.
+  config.auto_sync do |sync|
+    sync.enable = true
+    sync.precache_urls = -> {
+      Article.published.flat_map { |article| [ article_path(article), card_article_path(article) ] }
+    }
+  end
 
   # Give the lambda an argument and it receives the controller, for `current_user` and
   # anything else request-scoped:
   #
-  #   config.precache_urls = ->(controller) {
+  #   sync.precache_urls = ->(controller) {
   #     controller.current_user.articles.map { |article| article_path(article) }
   #   }
 
@@ -154,10 +157,12 @@ Coldwire.configure do |config|
   config.cache_blocklist = [ "/users", %r{^/admin(/|$)} ]
 
   # Keep the manifest current on its own, instead of only when the button is pressed.
-  config.auto_sync = true
-  config.sync_interval = 6.hours
-  config.refetch_after = 7.days
-  config.sync_concurrency = 4
+  config.auto_sync do |sync|
+    sync.enable = true
+    sync.interval = 6.hours
+    sync.max_age = 7.days
+    sync.concurrency = 4
+  end
 
   # Bump to invalidate every cached entry at once.
   config.cache_name = "coldwire"
@@ -383,13 +388,16 @@ means *only* these. The **blocklist always wins**.
 ### Keeping the manifest current
 
 By default the manifest is only fetched when something asks for it — the button on the debug
-page. Turn on `auto_sync` and Coldwire keeps it current on its own:
+page. Turn on `auto_sync.enable` and Coldwire keeps it current on its own:
 
 ```ruby
-config.auto_sync = true
-config.sync_interval = 6.hours    # leave this long between syncs
-config.refetch_after = 7.days           # refetch a page once its copy is older than this
-config.sync_concurrency = 4       # fetches in flight at once
+config.auto_sync do |sync|
+  sync.enable = true
+  sync.precache_urls = -> { Site.published.map { |site| site_path(site) } }
+  sync.interval = 6.hours     # leave this long between syncs
+  sync.max_age = 7.days       # and refetch a page once its copy is older than this
+  sync.concurrency = 4        # fetches in flight at once
+end
 ```
 
 **There is no true background scheduling to use.** WebKit ships neither Background Sync,
@@ -404,8 +412,8 @@ Each sync:
 | | |
 |---|---|
 | **Fetches what is missing** | a newly published record shows up in the manifest and has no cached copy |
-| **Refetches what is old** | a cached copy older than `refetch_after` |
-| **Skips what is fine** | anything cached and younger than `refetch_after` costs nothing |
+| **Refetches what is old** | a cached copy older than `auto_sync.max_age` |
+| **Skips what is fine** | anything cached and younger than `auto_sync.max_age` costs nothing |
 | **Retires what left the manifest** | an unpublished record is dropped from the cache |
 | **Retries once** | a dropped request on a phone should not strand a page until the next interval |
 
@@ -446,7 +454,7 @@ A sync also skips itself when `navigator.onLine` is false, and only one runs at 
 
 ### The precache manifest ignores both
 
-`precache_urls` stores whatever you list, blocklist or not. Putting a URL in the manifest is
+`auto_sync.precache_urls` stores whatever you list, blocklist or not. Putting a URL in the manifest is
 an explicit instruction, and quietly declining it would make the manifest unpredictable — you
 would precache 84 pages and silently get 60. The same goes for the subresources a manifest
 page references.

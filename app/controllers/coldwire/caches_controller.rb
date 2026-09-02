@@ -21,12 +21,12 @@ module Coldwire
 
     private
 
-    # Evaluated against the host application's URL helpers, so `config.precache_urls` can
+    # Evaluated against the host application's URL helpers, so `config.auto_sync.precache_urls` can
     # say `site_path(site)` and mean the host's route rather than one of Coldwire's. A
     # lambda that takes an argument is handed this controller, for `current_user` and the
     # like.
     def precache_urls
-      manifest = Coldwire.config.precache_urls
+      manifest = Coldwire.config.auto_sync.precache_urls
       helpers = ::Rails.application.routes.url_helpers
 
       if manifest.arity.zero?

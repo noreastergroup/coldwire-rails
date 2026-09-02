@@ -117,58 +117,60 @@ module Coldwire
     # pages hold whatever the previous session could see.
     attr_writer :cache_identity
 
-    # Keep the precache manifest current on its own, rather than only when someone presses
-    # the button.
+    # Everything about keeping the cache current on its own.
     #
+    #   config.auto_sync do |sync|
+    #     sync.enable = true
+    #     sync.precache_urls = -> { Site.published.map { |site| site_path(site) } }
+    #     sync.interval = 6.hours
+    #     sync.max_age = 7.days
+    #   end
+    #
+    # Grouped because these four only mean anything together: a manifest with no interval is
+    # never fetched, and an interval with no manifest has nothing to fetch. Reachable as
+    # `config.auto_sync.enable = true` as well, for setting one thing.
+    def auto_sync
+      @auto_sync ||= AutoSync.new
+      yield(@auto_sync) if block_given?
+
+      @auto_sync
+    end
+
     # WebKit has no Background Sync, Periodic Background Sync, or Background Fetch, so there
     # is no true "wake up later" primitive in a Hotwire Native web view. What there is: a page
-    # load can hand work to the service worker, which then runs independently of that page.
-    # So sync is triggered on page load and throttled, rather than scheduled.
-    attr_accessor :auto_sync
+    # load can hand work to the service worker, which then runs independently of that page. So
+    # syncing is triggered by an open page and paced, rather than scheduled.
+    class AutoSync
+      # Off unless asked for. Background fetching is a decision about somebody's data plan.
+      attr_accessor :enable
 
-    # How long to leave between syncs. Checked against a localStorage stamp on the page,
-    # because a worker global does not survive the worker being shut down.
-    attr_accessor :sync_interval
+      # The pages to keep cached. Evaluated in the controller, so route helpers and the
+      # current user are both available.
+      attr_accessor :precache_urls
 
-    # Origins besides your own that the worker may cache. Empty by default: a service worker
-    # sees every request a page makes, and quietly hoarding third-party responses is not a
-    # thing to do without being asked.
-    #
-    # The origin has to send CORS headers that name your app, or the response arrives opaque —
-    # status 0, no headers, no readable body — and there is nothing useful to store. For ranged
-    # sources it also has to expose Content-Range.
-    attr_reader :cache_origins
+      # How long to leave between syncs.
+      attr_accessor :interval
 
-    def cache_origins=(origins)
-      @cache_origins = Array(origins).map { |origin| validate_origin(origin) }
+      # Refetch a page from the manifest once its cached copy is older than this. Without it a
+      # sync only ever fetches what is missing: new pages appear, and the ones already cached
+      # are never noticed to have changed. Set nil to do exactly that.
+      attr_accessor :max_age
+
+      # How many fetches run at once.
+      #
+      # A sync works through the whole manifest in one pass. Sequential would take as many
+      # round trips as there are URLs, and all-at-once would open a connection per URL and
+      # stall the app's own requests behind them — so a fixed number of lanes share a queue.
+      attr_accessor :concurrency
+
+      def initialize
+        @enable = false
+        @precache_urls = -> { [] }
+        @interval = 6 * 60 * 60
+        @max_age = 7 * 24 * 60 * 60
+        @concurrency = 4
+      end
     end
-
-    # URLs whose Range requests are cached piece by piece, keyed by the range.
-    #
-    # For a large immutable archive read a slice at a time — a PMTiles basemap, say — this is
-    # the difference between an offline map and nothing at all: the file itself may be hundreds
-    # of megabytes, while the slices actually read for the area you looked at are a rounding
-    # error next to it. Same patterns as the allowlist: route shapes or Regexps.
-    attr_reader :cache_ranges
-
-    def cache_ranges=(patterns)
-      @cache_ranges = validate_patterns(patterns, :cache_ranges) || Array(patterns)
-    end
-
-    # Refetch a manifest page once its cached copy is older than this. Set nil to only ever
-    # fetch pages that are missing.
-    attr_accessor :refetch_after
-
-    # How many fetches a sync runs at once.
-    #
-    # A sync works through the whole manifest in one pass. Sequential would take as many round
-    # trips as there are URLs, and all-at-once would open a connection per URL and stall the
-    # app's own requests behind them — so a fixed number of lanes pull from one queue.
-    attr_accessor :sync_concurrency
-
-    # Returns the list of paths to precache. Evaluated in the controller, so route helpers
-    # and the current user are both available.
-    attr_accessor :precache_urls
 
     def initialize
       @cache_name = "coldwire"
@@ -183,18 +185,21 @@ module Coldwire
       @ignore_query_params = true
       @register_if = -> { true }
       @cache_identity = -> { nil }
-      @precache_urls = -> { [] }
-      @auto_sync = false
-      @sync_interval = 6 * 60 * 60
       @cache_origins = []
       @cache_ranges = []
-      @refetch_after = 7 * 24 * 60 * 60
-      @sync_concurrency = 4
     end
 
-    # `view` is the view context, so a host can ask about the request and the session alike.
+    # Evaluated in the view, so `request` and `current_user` are both in scope. A block that
+    # declares a parameter is handed the request as well, which keeps `->(request) { ... }`
+    # working for anyone who only cares about the headers.
     def register?(view)
-      view.instance_exec(&@register_if) ? true : false
+      result = if @register_if.arity.zero?
+        view.instance_exec(&@register_if)
+      else
+        view.instance_exec(view.request, &@register_if)
+      end
+
+      result ? true : false
     end
 
     # `view` is the view context, so a host can write `-> { current_user&.id }`.

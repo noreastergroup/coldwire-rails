@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+- Automatic syncing is configured as a block, because these four only mean anything together —
+  a manifest with no interval is never fetched, and an interval with no manifest has nothing to
+  fetch:
+
+  ```ruby
+  config.auto_sync do |sync|
+    sync.enable = true          # off by default
+    sync.precache_urls = -> { ... }
+    sync.interval = 6.hours
+    sync.max_age = 7.days
+    sync.concurrency = 4
+  end
+  ```
+
+  `auto_sync` was a boolean and `precache_urls`, `sync_interval`, `refetch_after` and
+  `sync_concurrency` were loose beside it. `max_age` keeps its name now that it sits next to
+  the interval it is measured against; `refetch_after` was a worse answer to the same problem.
+  `enable` defaults to **false**: background fetching is a decision about somebody's data
+  plan, not something to inherit.
+
+- `register_if` takes `->() { }`, `-> { }`, or `->(request) { }`. A block that declares a
+  parameter is handed the request, so caring only about headers stays a one-liner.
+
 - `register_if` is evaluated in the view and decides everything. It receives no argument now;
   `request` and `current_user` are both in scope, so one gate can say "the native app, signed
   in" — and a page that does not register does not cache, sync, or run anything. `auto_sync_if`

@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+- Cached entries with no `Content-Length` are measured from their body rather than reported as
+  0 bytes. `headers.get` answers null for a header that is not there, and `Number(null)` is 0,
+  which passed the "is it a sane number" guard and skipped the fallback that was already
+  written for exactly this case. Active Storage proxies blobs with `send_stream`, so it sends
+  no `Content-Length`, and every proxied image showed as empty.
+
+  Listing the cache now reads entries in lanes rather than one at a time, since measuring a
+  body is real I/O and this makes it actually happen.
+
 - Allowlist and blocklist strings are route patterns rather than prefixes. `"/sites"` now
   matches `/sites` and nothing beneath it; `"/sites/:id"` takes exactly one segment; `"/sites/*"`
   restores the old greedy behaviour where it is really wanted.

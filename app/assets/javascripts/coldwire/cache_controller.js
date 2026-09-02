@@ -2,13 +2,19 @@ import { Controller } from "@hotwired/stimulus"
 
 // Ask the headers before reading the body. A real cache is hundreds of entries and tens of
 // megabytes; blob() on every one of them turns listing the cache into a multi-second job that
-// makes the refresh button look broken. Content-Length is present on nearly everything Rails
+// makes the refresh button look broken. Content-Length is present on most of what Rails
 // serves, and the body is only read when it is not.
+//
+// `get` answers null for a header that is not there, and Number(null) is 0 — which sailed
+// straight through the guard below and reported the entry as empty rather than falling back to
+// the body. Active Storage's proxy streams its blobs with `send_stream`, so it sends no
+// Content-Length at all, and every proxied image measured 0 bytes.
 async function entrySize(response) {
   if (!response) return 0
 
-  const declared = Number(response.headers.get("Content-Length"))
-  if (Number.isFinite(declared) && declared >= 0) return declared
+  const declared = response.headers.get("Content-Length")
+  const bytes = declared === null ? NaN : Number(declared)
+  if (Number.isFinite(bytes) && bytes >= 0) return bytes
 
   return (await response.clone().blob()).size
 }
@@ -758,10 +764,22 @@ export default class extends Controller {
       for (const name of names) {
         const cache = await caches.open(name)
         const keys = await cache.keys()
-        const entries = []
-        for (const request of keys) {
-          entries.push(await this.describeCached(request, await cache.match(request, { ignoreVary: true })))
-        }
+
+        // In lanes rather than one at a time. Every entry costs a `match`, and the ones with
+        // no Content-Length — proxied images, anything streamed — cost a body read on top, so
+        // a cache of a few hundred spent that serially and the list sat there empty.
+        const entries = new Array(keys.length)
+        const queue = keys.map((request, index) => ({ request, index }))
+        const lanes = Math.min(8, Math.max(1, queue.length))
+
+        await Promise.all(Array.from({ length: lanes }, async () => {
+          while (queue.length) {
+            const { request, index } = queue.shift()
+            const response = await cache.match(request, { ignoreVary: true })
+            entries[index] = await this.describeCached(request, response)
+          }
+        }))
+
         result.push({ name, entries })
       }
       return result

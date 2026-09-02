@@ -165,7 +165,10 @@
 <div class="coldwire"
      data-controller="coldwire-cache"
      data-coldwire-cache-probe-url-value="<%= Coldwire.config.probe_path %>"
-     data-coldwire-cache-auto-sync-value="<%= Coldwire.config.auto_sync %>"
+     <%# The per-page answer, not just the global switch: if this page may not start a sync,
+         a countdown to one would be describing something that is never going to happen.
+         "Sync now" is unaffected — asking by hand is not automatic syncing. %>
+     data-coldwire-cache-auto-sync-value="<%= Coldwire.config.auto_sync?(self) %>"
      data-coldwire-cache-sync-interval-value="<%= Coldwire.config.sync_interval.to_i %>">
   <h1>Offline settings</h1>
 

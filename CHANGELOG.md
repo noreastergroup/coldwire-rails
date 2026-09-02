@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+- `config.auto_sync_if` — a block deciding whether *this page* may start a sync, on top of the
+  `auto_sync` switch. Evaluated in the view, so `current_user` and `controller` are available:
+
+  ```ruby
+  config.auto_sync_if = -> { current_user.present? && controller.class.module_parent_name == "App" }
+  ```
+
+  The answer rides in a `coldwire-auto-sync` meta rather than being baked into the head script,
+  because that script runs once per document and Turbo visits reuse it — a page that may not
+  sync has to be able to say so on arrival, not only on a cold boot. A page that says nothing
+  may sync, so a missing meta cannot silently stop it. The debug page reports the per-page
+  answer, so it says automatic sync is off rather than counting down to something that will
+  never happen; "Sync now" is unaffected, since asking by hand is not automatic syncing.
+
 - Dropped the offline page's dark palette too, so the gem now ships no theme queries at all.
   The reduced-motion query stays: that is an accessibility preference, not a theme.
 

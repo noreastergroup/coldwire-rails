@@ -115,6 +115,29 @@ module Coldwire
     # So sync is triggered on page load and throttled, rather than scheduled.
     attr_accessor :auto_sync
 
+    # Whether *this page* may start a sync, on top of the `auto_sync` switch. Evaluated in the
+    # view, so `current_user` and `controller` are available:
+    #
+    #   config.auto_sync_if = lambda do
+    #     current_user.present? && controller.class.module_parent_name == "App"
+    #   end
+    #
+    # Worth narrowing: syncing is the app filling its cache for later, and a sign-in page or an
+    # admin screen has no business kicking that off — nor does a signed-out visitor, whose
+    # cache is dropped the moment somebody signs in anyway.
+    #
+    # The answer rides in a meta rather than being baked into the head script, because that
+    # script runs once per document and Turbo visits reuse it: a page that may not sync has to
+    # be able to say so on arrival, not only on a cold boot.
+    attr_writer :auto_sync_if
+
+    def auto_sync?(view)
+      return false unless auto_sync
+      return true if @auto_sync_if.nil?
+
+      view.instance_exec(&@auto_sync_if) ? true : false
+    end
+
     # How long to leave between syncs. Checked against a localStorage stamp on the page,
     # because a worker global does not survive the worker being shut down.
     attr_accessor :sync_interval
@@ -175,6 +198,7 @@ module Coldwire
       @precache_urls = -> { [] }
       @auto_sync = false
       @sync_interval = 6 * 60 * 60
+      @auto_sync_if = nil
       @cache_origins = []
       @cache_ranges = []
       @max_age = 7 * 24 * 60 * 60

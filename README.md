@@ -386,6 +386,7 @@ page. Turn on `auto_sync` and Coldwire keeps it current on its own:
 ```ruby
 config.auto_sync = true
 config.sync_interval = 6.hours    # leave this long between syncs
+config.auto_sync_if = -> { current_user.present? }  # and only where it is worth doing
 config.max_age = 7.days           # refetch a page once its copy is older than this
 config.sync_concurrency = 4       # fetches in flight at once
 ```

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# Defines Coldwire::VERSION by reading the VERSION file, so the number lives in exactly one
+# place. VERSION has to ship in spec.files below, or requiring this in an installed gem fails.
 require_relative "lib/coldwire/version"
 
 Gem::Specification.new do |spec|
@@ -26,6 +28,7 @@ Gem::Specification.new do |spec|
     "config/**/*",
     "lib/**/*",
     "LICENSE",
+    "VERSION",
     "README.md",
     "CHANGELOG.md"
   ]

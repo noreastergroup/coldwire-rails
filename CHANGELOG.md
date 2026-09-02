@@ -2,10 +2,9 @@
 
 ## [Unreleased]
 
-- The offline page has a Back button beside Try again, both with icons. Back is a `<button>`
-  wired by a listener rather than an inline `onclick`, which a host app's CSP would be within
-  its rights to refuse; Try again keeps its empty `href` and `data-turbo="false"`, which are
-  what make it reload the URL the page was served for.
+- Try again on the offline page carries a refresh icon. It keeps its empty `href` and
+  `data-turbo="false"`, which are what make it reload the URL the page was served for, and the
+  page still ships no script of its own.
 
 - The debug page says "Offline is off for this device" and shows nothing else when
   `register_if` returns false. No worker was registered, so there is no cache to list, no

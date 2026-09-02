@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Precaching follows subresources onto any origin in `cache_origins`, not just your own. It
+  used to drop every cross-origin `<script>`, `<link>` and image, so a page whose map library
+  comes off a CDN precached perfectly and then could not boot offline: the library was never
+  stored, nothing constructed the map, and the tiles sat in the cache with nothing able to
+  read them.
+
 - `config.cache_origins` — origins besides your own that the worker may cache. Empty by
   default: a worker sees every request a page makes, and hoarding third-party responses
   uninvited is not its business. The origin has to send CORS headers naming your app, or the

@@ -667,7 +667,10 @@ function urlsFromHtml(html, pageUrl) {
       if (!token || token.startsWith("data:")) return
       try {
         const url = new URL(token, base)
-        if (url.origin !== self.location.origin) return
+        // Any origin we are allowed to cache, not just our own. A page whose map library
+        // comes off a CDN is not offline-ready without it: precaching the page and skipping
+        // the script it cannot run without leaves a blank screen and a full cache.
+        if (!cacheableOrigin(url)) return
         if (matchesPath(url, EXCLUDED_PATHS)) return
         urls.add(url.href)
       } catch {}

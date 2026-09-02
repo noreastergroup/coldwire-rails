@@ -18,7 +18,7 @@ install prompt, no icons.
 
 ## What you get
 
-| | |
+|---|---|
 | **Precaching** | A list of URLs you compute in Ruby, fetched with the subresources those pages reference |
 | **Automatic sync** | Kept current on an interval, resuming where it left off when a run is cut short |
 | **Offline fallback** | A page and a `<turbo-frame>`, both overridable, that Turbo renders rather than rejects |

@@ -68,16 +68,42 @@
          (Tailwind's preflight, say) strips the UA defaults this would otherwise rely on. */
       .coldwire-offline h1 { font-size: 1.5rem; font-weight: 700; line-height: 1.25; margin: 0 0 0.5rem; }
       .coldwire-offline p { font-size: 1rem; line-height: 1.5; margin: 0; }
-      .coldwire-offline a {
-        display: inline-block;
+
+      /* Wraps rather than shrinks: two labelled buttons do not fit a narrow phone beside a
+         safe-area inset, and a squeezed row reads worse than a stacked one. */
+      .coldwire-offline-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
         margin-top: 1.5rem;
+      }
+      .coldwire-offline-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border: 1px solid #1f2937;
         border-radius: 0.5rem;
         background: #1f2937;
         color: #ffffff;
         padding: 0.625rem 1.25rem;
+        font-family: inherit;
         font-size: 1rem;
         font-weight: 600;
+        line-height: 1.5;
         text-decoration: none;
+        cursor: pointer;
+      }
+      /* Going back is the lesser action — reconnecting is what the page is asking for. */
+      .coldwire-offline-button--secondary { background: transparent; color: #1f2937; }
+      .coldwire-offline-button svg {
+        width: 1.15rem;
+        height: 1.15rem;
+        flex-shrink: 0;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
       }
     </style>
 
@@ -85,11 +111,38 @@
       <h1>You're offline</h1>
       <p>This page isn't available offline. Reconnect and try again.</p>
 
-      <%# An empty href resolves to whatever URL this page was served for, which is the one
-          thing this template cannot know — it is baked when the worker script is built.
-          data-turbo="false" forces a real navigation: a Turbo visit to the identical URL can
-          be treated as same-page and do nothing at all. %>
-      <a href="" data-turbo="false">Try again</a>
+      <div class="coldwire-offline-actions">
+        <%# A button, not a link: there is nowhere to point an href, and history.back() is the
+            only thing that knows where "back" is. Wired below rather than with an inline
+            onclick, which a host app's CSP would be within its rights to refuse. %>
+        <button type="button"
+                class="coldwire-offline-button coldwire-offline-button--secondary"
+                data-coldwire-offline-back>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M15.75 19.5 8.25 12l7.5-7.5" />
+          </svg>
+          Back
+        </button>
+
+        <%# An empty href resolves to whatever URL this page was served for, which is the one
+            thing this template cannot know — it is baked when the worker script is built.
+            data-turbo="false" forces a real navigation: a Turbo visit to the identical URL can
+            be treated as same-page and do nothing at all. %>
+        <a href="" data-turbo="false" class="coldwire-offline-button">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+          </svg>
+          Try again
+        </a>
+      </div>
     </div>
+
+    <script>
+      // Scoped to this page's own button, and attached rather than inlined on the element so
+      // a CSP that forbids inline handlers does not leave a dead button behind.
+      document.querySelector("[data-coldwire-offline-back]").addEventListener("click", function () {
+        history.back()
+      })
+    </script>
   </body>
 </html>

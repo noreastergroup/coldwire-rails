@@ -25,6 +25,9 @@
   .coldwire-light[data-state="online"] { background: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18); }
   .coldwire-light[data-state="forced"] { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.20); }
   .coldwire-light[data-state="offline"] { background: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18); }
+  /* Grey, not red: switched off is not a fault. */
+  .coldwire-light[data-state="disabled"] { background: #9ca3af; box-shadow: 0 0 0 3px rgba(156, 163, 175, 0.18); }
+  .coldwire-facts code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8125rem; }
   .coldwire-facts { margin: 0.5rem 0 0; font-size: 0.875rem; color: #6b7280; line-height: 1.5; }
 
   .coldwire-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
@@ -162,6 +165,26 @@
   }
 </style>
 
+<% unless Coldwire.config.register?(self) %>
+  <%# `register_if` said no for this request, so no worker was ever registered here: nothing
+      is cached, nothing syncs, and force offline has nothing to force. Showing an empty cache
+      and a countdown would read as a broken page rather than a switched-off one. %>
+  <div class="coldwire">
+    <h1>Offline settings</h1>
+
+    <div class="coldwire-card">
+      <p class="coldwire-headline">
+        <span class="coldwire-light" data-state="disabled" aria-hidden="true"></span>
+        Offline is off for this device
+      </p>
+      <p class="coldwire-facts">
+        Coldwire is not running here, so nothing is being cached and nothing will be available
+        without a connection. Whether it runs is decided per request by
+        <code>config.register_if</code> — typically the native app, signed in.
+      </p>
+    </div>
+  </div>
+<% else %>
 <div class="coldwire"
      data-controller="coldwire-cache"
      data-coldwire-cache-probe-url-value="<%= Coldwire.config.probe_path %>"
@@ -323,3 +346,4 @@
     </div>
   </dialog>
 </div>
+<% end %>

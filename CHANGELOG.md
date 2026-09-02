@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- The offline page has a Back button beside Try again, both with icons. Back is a `<button>`
+  wired by a listener rather than an inline `onclick`, which a host app's CSP would be within
+  its rights to refuse; Try again keeps its empty `href` and `data-turbo="false"`, which are
+  what make it reload the URL the page was served for.
+
+- The debug page says "Offline is off for this device" and shows nothing else when
+  `register_if` returns false. No worker was registered, so there is no cache to list, no
+  clock to count down and nothing for force offline to force — an empty cache and a running
+  countdown read as a broken page rather than a switched-off one.
+
 - Clarified what this is for. Coldwire reads as a Hotwire Native library and is not one: the
   worker, the precaching, the sync and the offline fallback are plain service worker and Cache
   API work, and serve a plain Hotwire app or an installed PWA equally.

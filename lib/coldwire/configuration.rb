@@ -142,6 +142,20 @@ module Coldwire
       @cache_ranges = validate_patterns(patterns, :cache_ranges) || Array(patterns)
     end
 
+    # Archives that can be downloaded whole, for offline use, rather than a slice at a time as
+    # they happen to be read. Absolute URLs — you cannot download a pattern.
+    #
+    #   config.cache_archives = [ "https://tiles.example.com/basemap.pmtiles" ]
+    #
+    # For a tile archive this is the difference between "the water you already looked at" and
+    # "the coast". It is also hundreds of megabytes over somebody's connection, so nothing
+    # downloads on its own: this only makes the archive offerable, and something has to ask.
+    #
+    # Fetched in chunks, so a dropped connection resumes instead of starting again, and no
+    # single cache entry is enormous. Ranges are then served by slicing the chunks, which is
+    # cheap — a Blob slice references bytes rather than copying them.
+    attr_accessor :cache_archives
+
     # Everything about keeping the cache current on its own.
     #
     #   config.auto_sync do |sync|
@@ -212,6 +226,7 @@ module Coldwire
       @cache_identity = -> { nil }
       @cache_origins = []
       @cache_ranges = []
+      @cache_archives = []
     end
 
     # Evaluated in the view, so `request` and `current_user` are both in scope. A block that

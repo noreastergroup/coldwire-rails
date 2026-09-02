@@ -24,6 +24,13 @@ const CACHE_RANGES = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.c
 // A range entry is stored under its own key, with the range in the query and the archive's
 // total size in a header — the two things needed to rebuild a 206 that was never storable.
 const RANGE_PARAM = "__coldwire_range"
+// Archives offered for download in full, and the size of the pieces they arrive in. 8 MB is
+// small enough that a dropped connection loses seconds rather than minutes, and large enough
+// that a 300 MB archive is tens of requests rather than thousands.
+const CACHE_ARCHIVES = <%= raw Coldwire.config.cache_archives.to_json %>
+const ARCHIVE_CHUNK = 8 * 1024 * 1024
+const CHUNK_PARAM = "__coldwire_chunk"
+const ARCHIVE_MESSAGE = "coldwire:archive"
 const RANGE_TOTAL_HEADER = "coldwire-range-total"
 const OFFLINE_PAGE = <%= raw offline_page.to_json %>
 const OFFLINE_FRAME_CONTENT = <%= raw offline_frame.to_json %>
@@ -97,6 +104,10 @@ self.addEventListener("message", (event) => {
 
   // What a page missed by not listening yet, and whether it is still going on.
   if (type === "syncState") return reply({ ok: true, running: Boolean(syncing), last: lastSyncMessage })
+
+  if (type === "archiveStatus") return reply(archiveStatus(event.data.url))
+  if (type === "archiveDownload") return reply(downloadArchive(event.data.url))
+  if (type === "archiveRemove") return reply(removeArchive(event.data.url))
 })
 
 function shouldHandle(request) {
@@ -189,6 +200,206 @@ function isCacheable(request, response) {
   return request.method === "GET" && response.ok && !response.redirected
 }
 
+// The facts about a chunk go on the key, not only on the response. cache.keys() hands back
+// Requests, so anything read while counting up what is stored has to live there — the same
+// reason the timestamp does. Matching ignores headers, so a lookup built without them still
+// finds the entry.
+function chunkKey(url, index, facts = null) {
+  const target = new URL(url)
+  target.searchParams.set(CHUNK_PARAM, String(index))
+  if (!facts) return new Request(target.href, { method: "GET" })
+
+  const headers = new Headers()
+  headers.set("coldwire-archive-total", String(facts.total))
+  headers.set("coldwire-chunk-size", String(facts.size))
+  headers.set(TIMESTAMP_HEADER, String(Math.floor(Date.now() / 1000)))
+
+  return new Request(target.href, { method: "GET", headers })
+}
+
+function chunkCount(total) {
+  return Math.ceil(total / ARCHIVE_CHUNK)
+}
+
+// How big the thing is, asked for in the cheapest way there is: one byte, and read the total
+// off the Content-Range that comes back.
+async function archiveTotal(url) {
+  const response = await fetch(url, { headers: { Range: "bytes=0-0" } })
+  if (response.status !== 206) throw new Error(`HTTP ${response.status}`)
+
+  const total = rangeTotal(response.headers.get("Content-Range"))
+  if (!total) throw new Error("No Content-Range")
+
+  return total
+}
+
+// Counted from what is actually stored rather than from a note written when the download ran.
+// A cache can be evicted piecemeal, and a status that disagrees with the cache is worse than
+// no status at all.
+async function archiveStatus(url) {
+  if (!CACHE_ARCHIVES.includes(url)) return { ok: false, error: "Not a listed archive" }
+
+  const cache = await caches.open(CACHE_NAME)
+  const stored = await cache.keys()
+  const prefix = new URL(url)
+  prefix.search = ""
+
+  let bytes = 0
+  let chunks = 0
+  let total = null
+
+  for (const key of stored) {
+    const keyUrl = new URL(key.url)
+    keyUrl.search = ""
+    if (keyUrl.href !== prefix.href) continue
+    if (!new URL(key.url).searchParams.has(CHUNK_PARAM)) continue
+
+    chunks += 1
+    const size = Number(key.headers.get("coldwire-chunk-size"))
+    if (Number.isFinite(size)) bytes += size
+    const declared = Number(key.headers.get("coldwire-archive-total"))
+    if (Number.isFinite(declared) && declared > 0) total = declared
+  }
+
+  return {
+    ok: true,
+    url,
+    chunks,
+    bytes,
+    total,
+    expected: total ? chunkCount(total) : null,
+    complete: Boolean(total) && chunks === chunkCount(total)
+  }
+}
+
+// Resumable by construction: every chunk already stored is skipped, so an interrupted download
+// picks up where it stopped rather than starting again. Sequential on purpose — this is a
+// large download over somebody's connection, and running it in parallel lanes would take the
+// bandwidth the app itself is using.
+async function downloadArchive(url) {
+  if (!CACHE_ARCHIVES.includes(url)) return { ok: false, error: "Not a listed archive" }
+  if (forcedOffline) return { ok: false, offline: true, reason: "forced" }
+
+  const cache = await caches.open(CACHE_NAME)
+
+  let total
+  try {
+    total = await archiveTotal(url)
+  } catch (error) {
+    return { ok: false, offline: true, error: error.message }
+  }
+
+  const count = chunkCount(total)
+  let stored = 0
+
+  for (let index = 0; index < count; index++) {
+    const key = chunkKey(url, index)
+
+    if (await cache.match(key)) {
+      stored += 1
+      notifyClients({ type: ARCHIVE_MESSAGE, url, state: "progress", done: stored, total: count })
+      continue
+    }
+
+    const start = index * ARCHIVE_CHUNK
+    const end = Math.min(start + ARCHIVE_CHUNK, total) - 1
+
+    try {
+      const response = await fetch(url, { headers: { Range: `bytes=${start}-${end}` } })
+      if (response.status !== 206) throw new Error(`HTTP ${response.status}`)
+
+      const body = await response.arrayBuffer()
+      const headers = new Headers()
+      headers.set("Content-Type", response.headers.get("Content-Type") || "application/octet-stream")
+      // On the response as well, because serving a range reads the total from here.
+      headers.set("coldwire-archive-total", String(total))
+
+      await cache.put(chunkKey(url, index, { total, size: body.byteLength }),
+                      new Response(body, { status: 200, headers }))
+    } catch (error) {
+      // Everything already stored stays stored, so asking again resumes from here.
+      const failure = { ok: false, url, error: error.message, done: stored, total: count }
+      await notifyClients({ type: ARCHIVE_MESSAGE, state: "finished", ...failure })
+
+      return failure
+    }
+
+    stored += 1
+    notifyClients({ type: ARCHIVE_MESSAGE, url, state: "progress", done: stored, total: count })
+  }
+
+  const finished = { ok: true, url, done: stored, total: count, bytes: total, complete: true }
+  await notifyClients({ type: ARCHIVE_MESSAGE, state: "finished", ...finished })
+
+  return finished
+}
+
+async function removeArchive(url) {
+  const cache = await caches.open(CACHE_NAME)
+  const prefix = new URL(url)
+  prefix.search = ""
+
+  let removed = 0
+  for (const key of await cache.keys()) {
+    const keyUrl = new URL(key.url)
+    const bare = new URL(key.url)
+    bare.search = ""
+    if (bare.href !== prefix.href) continue
+    if (!keyUrl.searchParams.has(CHUNK_PARAM)) continue
+    if (await cache.delete(key)) removed += 1
+  }
+
+  return { ok: true, url, removed }
+}
+
+// Stitched out of whatever chunks are stored. Blob slices reference bytes rather than copying
+// them, so answering a tile request out of a 300 MB archive costs about as much as answering
+// it out of a single stored range.
+async function rangeFromChunks(cache, request, spec) {
+  const bare = new URL(request.url)
+  bare.search = ""
+  if (!CACHE_ARCHIVES.includes(bare.href)) return null
+
+  const first = Math.floor(spec.start / ARCHIVE_CHUNK)
+  const parts = []
+  let total = null
+  let index = first
+  let wanted = spec.end === null ? Infinity : spec.end - spec.start + 1
+  let taken = 0
+
+  while (taken < wanted) {
+    const stored = await cache.match(chunkKey(bare.href, index))
+    // A gap: fall back rather than answer with a hole in the middle.
+    if (!stored) return null
+
+    total = total || Number(stored.headers.get("coldwire-archive-total")) || null
+    const blob = await stored.blob()
+    const offset = index * ARCHIVE_CHUNK
+    const from = Math.max(spec.start - offset, 0)
+    const to = wanted === Infinity ? blob.size : Math.min(from + (wanted - taken), blob.size)
+
+    parts.push(blob.slice(from, to))
+    taken += to - from
+    index += 1
+
+    // Ran off the end of the archive, which is a legitimate end to an open-ended range.
+    if (total && offset + blob.size >= total) break
+    if (to < blob.size) break
+  }
+
+  if (!parts.length) return null
+
+  const body = new Blob(parts)
+  const headers = new Headers()
+  const type = "application/octet-stream"
+  headers.set("Content-Type", type)
+  headers.set("Content-Length", String(body.size))
+  headers.set("Content-Range", `bytes ${spec.start}-${spec.start + body.size - 1}/${total || "*"}`)
+  headers.set("Accept-Ranges", "bytes")
+
+  return new Response(body, { status: 206, statusText: "Partial Content", headers })
+}
+
 // Cache first, always. A byte range of an archive is immutable for as long as the archive is,
 // and the entire point of caching one is to stop asking for it.
 async function handleRange(request) {
@@ -198,6 +409,11 @@ async function handleRange(request) {
   if (!spec) return fetch(request)
 
   const cache = await caches.open(CACHE_NAME)
+
+  // A fully downloaded archive answers everything, so try it before anything else.
+  const fromChunks = await rangeFromChunks(cache, request, spec)
+  if (fromChunks) return fromChunks
+
   const key = rangeKey(request, spec)
   // Deliberately not MATCH_OPTIONS: `ignore_query_params` would collapse every range of a
   // file onto one entry, since the range lives in the query.

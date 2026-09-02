@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+- `config.cache_archives` — archives that can be downloaded whole for offline use, rather than
+  a slice at a time as they happen to be read. For a tile archive this is the difference
+  between "the water you already looked at" and "the coast".
+
+  Fetched in 8 MB chunks, so an interrupted download resumes from where it stopped instead of
+  starting again, and no single cache entry is enormous. Ranges are then answered by slicing
+  those chunks and stitching across boundaries where a request spans them — cheap, because a
+  Blob slice references bytes rather than copying them: reading a tile out of a downloaded
+  300 MB archive costs about what reading it out of a single stored range does.
+
+  Nothing downloads on its own. Hundreds of megabytes over somebody's connection is a decision
+  for them, so this only makes an archive offerable; the debug page offers it, with progress,
+  a resume button when it stopped part way, and a remove.
+
 - Try again on the offline page carries a refresh icon. It keeps its empty `href` and
   `data-turbo="false"`, which are what make it reload the URL the page was served for, and the
   page still ships no script of its own.

@@ -61,7 +61,9 @@ export default class extends Controller {
     "detail",
     "detailUrl",
     "detailMeta",
-    "detailForget"
+    "detailForget",
+    "archives",
+    "archiveTemplate"
   ]
 
   get store() {
@@ -85,7 +87,14 @@ export default class extends Controller {
     }
 
     this.restoreForced()
+    this.renderArchives()
     this.refresh()
+
+    // A download outlives the page that started it, and reports itself as it goes.
+    this.onArchiveMessage = (event) => this.handleArchiveMessage(event)
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", this.onArchiveMessage)
+    }
 
     // Recomputed from the same clock the head snippet reads, rather than counted down from a
     // number held here — a web view freezes timers when backgrounded, and a countdown that
@@ -100,6 +109,9 @@ export default class extends Controller {
 
   disconnect() {
     window.clearInterval(this.ticker)
+    if ("serviceWorker" in navigator && this.onArchiveMessage) {
+      navigator.serviceWorker.removeEventListener("message", this.onArchiveMessage)
+    }
     delete window.__coldwireSyncOwnedByPage
     window.removeEventListener("online", this.onOnline)
     window.removeEventListener("offline", this.onOnline)
@@ -285,6 +297,148 @@ export default class extends Controller {
 
     this.syncedAtTarget.textContent = next ? `${synced} · ${next}` : synced
     this.syncedAtTarget.title = stamp ? new Date(stamp).toLocaleString() : ""
+  }
+
+  // MARK: whole archives
+
+  archiveUrls() {
+    if (!this.hasArchivesTarget) return []
+
+    try {
+      return JSON.parse(this.archivesTarget.dataset.archives || "[]")
+    } catch {
+      return []
+    }
+  }
+
+  async renderArchives() {
+    if (!this.hasArchivesTarget || !this.hasArchiveTemplateTarget) return
+
+    for (const url of this.archiveUrls()) {
+      const row = this.archiveRow(url)
+      let status = null
+
+      try {
+        status = await this.sendToWorker("archiveStatus", { url }, 15000)
+      } catch {
+        // No worker yet. The row still names the archive and offers the button.
+      }
+
+      this.renderArchiveStatus(row, status)
+    }
+  }
+
+  // One row per archive, made once and then updated in place — rebuilding it on every progress
+  // tick would restart the spinner and lose the button you are pressing.
+  archiveRow(url) {
+    const existing = this.archivesTarget.querySelector(`[data-archive-url="${CSS.escape(url)}"]`)
+    if (existing) return existing
+
+    const row = this.archiveTemplateTarget.content.firstElementChild.cloneNode(true)
+    row.dataset.archiveUrl = url
+    row.querySelector("[data-archive-name]").textContent = this.displayUrl(url)
+    row.querySelector("[data-archive-name]").title = url
+    row.querySelectorAll("button").forEach((button) => { button.dataset.url = url })
+    this.archivesTarget.append(row)
+
+    return row
+  }
+
+  renderArchiveStatus(row, status) {
+    const label = row.querySelector("[data-archive-status]")
+    const download = row.querySelector("[data-archive-download-label]")
+    const remove = row.querySelector("[data-archive-remove]")
+
+    if (!status || !status.ok) {
+      label.textContent = "Not downloaded"
+      remove.hidden = true
+      return
+    }
+
+    remove.hidden = status.chunks === 0
+    download.textContent = status.complete ? "Download again" : status.chunks ? "Resume" : "Download"
+
+    if (status.complete) {
+      label.textContent = `${this.formatBytes(status.bytes)} · ready offline`
+    } else if (status.chunks) {
+      // Partial is worth saying plainly: it is not broken, it stopped, and it will carry on.
+      const share = status.expected ? Math.round((status.chunks / status.expected) * 100) : null
+      label.textContent = share
+        ? `${this.formatBytes(status.bytes)} of ${this.formatBytes(status.total)} · ${share}% — not finished`
+        : `${this.formatBytes(status.bytes)} downloaded · not finished`
+    } else {
+      label.textContent = "Not downloaded"
+    }
+  }
+
+  async downloadArchive(event) {
+    event.preventDefault()
+
+    const url = event.currentTarget.dataset.url
+    const row = this.archiveRow(url)
+    this.toggleArchiveBusy(row, true)
+
+    try {
+      const result = await this.sendToWorker("archiveDownload", { url }, 60 * 60 * 1000)
+      if (result && result.ok === false) {
+        this.setStatus(result.offline ? "No connection — the download will resume when there is one." : (result.error || "Download failed"))
+      }
+    } catch (error) {
+      this.setStatus(error.message || "Download failed")
+    } finally {
+      this.toggleArchiveBusy(row, false)
+      await this.renderArchives()
+      await this.renderCache()
+    }
+  }
+
+  async removeArchive(event) {
+    event.preventDefault()
+
+    const url = event.currentTarget.dataset.url
+    if (!window.confirm("Remove the downloaded map? The area you have looked at will still work offline, but the rest will not.")) return
+
+    try {
+      await this.sendToWorker("archiveRemove", { url }, 60000)
+      this.setStatus("Removed the downloaded map.")
+    } catch (error) {
+      this.setStatus(error.message || "Could not remove it")
+    } finally {
+      await this.renderArchives()
+      await this.renderCache()
+    }
+  }
+
+  handleArchiveMessage(event) {
+    const data = event.data
+    if (!data || data.type !== "coldwire:archive") return
+
+    const row = this.archiveRow(data.url)
+    if (data.state === "progress") {
+      this.renderArchiveProgress(row, data.done, data.total)
+    } else if (data.state === "finished") {
+      this.toggleArchiveBusy(row, false)
+      this.renderArchives()
+    }
+  }
+
+  renderArchiveProgress(row, done, total) {
+    const progress = row.querySelector("[data-archive-progress]")
+    const bar = row.querySelector("[data-archive-bar]")
+    const label = row.querySelector("[data-archive-progress-label]")
+
+    progress.hidden = false
+    const percent = total ? Math.round((done / total) * 100) : 0
+    bar.style.width = `${percent}%`
+    bar.classList.remove("coldwire-pulse")
+    progress.setAttribute("aria-valuenow", String(percent))
+    label.textContent = `${done} of ${total} pieces`
+  }
+
+  toggleArchiveBusy(row, busy) {
+    row.querySelector("[data-archive-spinner]").hidden = !busy
+    row.querySelectorAll("button").forEach((button) => { button.disabled = busy })
+    if (!busy) row.querySelector("[data-archive-progress]").hidden = true
   }
 
   // A page that shows a countdown had better act on it. The head snippet keeps its own timer

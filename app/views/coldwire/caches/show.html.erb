@@ -102,6 +102,7 @@
   .coldwire-input:focus-visible, .coldwire-select:focus-visible { outline: 2px solid #6b7280;
     outline-offset: 1px; }
 
+  .coldwire-archive + .coldwire-archive { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; }
   .coldwire-entries { list-style: none; margin: 0; padding: 0; max-height: 16rem; overflow-y: auto; }
   .coldwire-entries li + li { margin-top: 0.5rem; }
   .coldwire-entry { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
@@ -281,6 +282,18 @@
     </div>
   </div>
 
+  <% if Coldwire.config.cache_archives.any? %>
+    <div class="coldwire-card"
+         data-coldwire-cache-target="archives"
+         data-archives="<%= Coldwire.config.cache_archives.to_json %>">
+      <h2>Offline map</h2>
+      <p class="coldwire-facts" style="margin-top: 0;">
+        A map archive is hundreds of megabytes and is normally read a slice at a time, so only
+        the places you have looked at work offline. Download it once and the whole area does.
+      </p>
+    </div>
+  <% end %>
+
   <div class="coldwire-card">
     <h2>Cached</h2>
 
@@ -307,6 +320,29 @@
     <ul class="coldwire-entries" data-coldwire-cache-target="entries">
       <li class="coldwire-empty">Nothing cached yet.</li>
     </ul>
+
+    <%# Cloned for each archive, for the same reason as the row button below. %>
+    <template data-coldwire-cache-target="archiveTemplate">
+      <div class="coldwire-archive">
+        <div class="coldwire-entry-url" data-archive-name></div>
+        <div class="coldwire-entry-meta" data-archive-status></div>
+        <div class="coldwire-actions coldwire-actions--spaced">
+          <button type="button" class="coldwire-button" data-action="click->coldwire-cache#downloadArchive">
+            <span class="coldwire-spinner" data-archive-spinner aria-hidden="true" hidden></span>
+            <span data-archive-download-label>Download</span>
+          </button>
+          <button type="button" class="coldwire-button coldwire-button--danger"
+                  data-action="click->coldwire-cache#removeArchive" data-archive-remove>
+            Remove
+          </button>
+        </div>
+        <div style="margin-top: 0.75rem;" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+             data-archive-progress hidden>
+          <div class="coldwire-track"><div class="coldwire-bar" data-archive-bar></div></div>
+          <div class="coldwire-progress-label" data-archive-progress-label></div>
+        </div>
+      </div>
+    </template>
 
     <%# Cloned for each row. Keeping the markup here rather than assembling it in JavaScript
         means the icon and its wrapper are described once, in the place you would look. %>

@@ -62,8 +62,7 @@ export default class extends Controller {
     "detailUrl",
     "detailMeta",
     "detailForget",
-    "archives",
-    "archiveTemplate"
+    "archives"
   ]
 
   get store() {
@@ -301,47 +300,24 @@ export default class extends Controller {
 
   // MARK: whole archives
 
-  archiveUrls() {
+  archiveRows() {
     if (!this.hasArchivesTarget) return []
 
-    try {
-      return JSON.parse(this.archivesTarget.dataset.archives || "[]")
-    } catch {
-      return []
-    }
+    return [ ...this.archivesTarget.querySelectorAll("[data-archive-url]") ]
   }
 
   async renderArchives() {
-    if (!this.hasArchivesTarget || !this.hasArchiveTemplateTarget) return
-
-    for (const url of this.archiveUrls()) {
-      const row = this.archiveRow(url)
+    for (const row of this.archiveRows()) {
       let status = null
 
       try {
-        status = await this.sendToWorker("archiveStatus", { url }, 15000)
+        status = await this.sendToWorker("archiveStatus", { url: row.dataset.archiveUrl }, 15000)
       } catch {
-        // No worker yet. The row still names the archive and offers the button.
+        // No worker yet. The row still names the file and offers the button.
       }
 
       this.renderArchiveStatus(row, status)
     }
-  }
-
-  // One row per archive, made once and then updated in place — rebuilding it on every progress
-  // tick would restart the spinner and lose the button you are pressing.
-  archiveRow(url) {
-    const existing = this.archivesTarget.querySelector(`[data-archive-url="${CSS.escape(url)}"]`)
-    if (existing) return existing
-
-    const row = this.archiveTemplateTarget.content.firstElementChild.cloneNode(true)
-    row.dataset.archiveUrl = url
-    row.querySelector("[data-archive-name]").textContent = this.displayUrl(url)
-    row.querySelector("[data-archive-name]").title = url
-    row.querySelectorAll("button").forEach((button) => { button.dataset.url = url })
-    this.archivesTarget.append(row)
-
-    return row
   }
 
   renderArchiveStatus(row, status) {
@@ -352,6 +328,7 @@ export default class extends Controller {
     if (!status || !status.ok) {
       label.textContent = "Not downloaded"
       remove.hidden = true
+      download.textContent = "Download"
       return
     }
 
@@ -359,16 +336,21 @@ export default class extends Controller {
     download.textContent = status.complete ? "Download again" : status.chunks ? "Resume" : "Download"
 
     if (status.complete) {
-      label.textContent = `${this.formatBytes(status.bytes)} · ready offline`
+      label.textContent = `${this.formatBytes(status.bytes)} · on this device`
     } else if (status.chunks) {
-      // Partial is worth saying plainly: it is not broken, it stopped, and it will carry on.
+      // Partly downloaded is worth saying plainly: it is not broken, it stopped, and asking
+      // again carries on from there.
       const share = status.expected ? Math.round((status.chunks / status.expected) * 100) : null
       label.textContent = share
-        ? `${this.formatBytes(status.bytes)} of ${this.formatBytes(status.total)} · ${share}% — not finished`
+        ? `${this.formatBytes(status.bytes)} of ${this.formatBytes(status.total)} · ${share}%, not finished`
         : `${this.formatBytes(status.bytes)} downloaded · not finished`
     } else {
       label.textContent = "Not downloaded"
     }
+  }
+
+  archiveRow(url) {
+    return this.archiveRows().find((row) => row.dataset.archiveUrl === url)
   }
 
   async downloadArchive(event) {
@@ -396,11 +378,11 @@ export default class extends Controller {
     event.preventDefault()
 
     const url = event.currentTarget.dataset.url
-    if (!window.confirm("Remove the downloaded map? The area you have looked at will still work offline, but the rest will not.")) return
+    if (!window.confirm("Delete this download? It will have to be downloaded again to work offline.")) return
 
     try {
       await this.sendToWorker("archiveRemove", { url }, 60000)
-      this.setStatus("Removed the downloaded map.")
+      this.setStatus("Deleted.")
     } catch (error) {
       this.setStatus(error.message || "Could not remove it")
     } finally {
@@ -414,6 +396,8 @@ export default class extends Controller {
     if (!data || data.type !== "coldwire:archive") return
 
     const row = this.archiveRow(data.url)
+    if (!row) return
+
     if (data.state === "progress") {
       this.renderArchiveProgress(row, data.done, data.total)
     } else if (data.state === "finished") {

@@ -142,19 +142,34 @@ module Coldwire
       @cache_ranges = validate_patterns(patterns, :cache_ranges) || Array(patterns)
     end
 
-    # Archives that can be downloaded whole, for offline use, rather than a slice at a time as
-    # they happen to be read. Absolute URLs — you cannot download a pattern.
+    # Large files somebody can choose to keep on their device — a tile archive, an audio guide,
+    # a reference PDF. Each is described well enough for the debug page to offer it without
+    # knowing what it is:
     #
-    #   config.cache_archives = [ "https://tiles.example.com/basemap.pmtiles" ]
+    #   config.cache_archives = [
+    #     { url: "https://tiles.example.com/basemap.pmtiles",
+    #       title: "Offline map",
+    #       description: "The whole coast, rather than only the places you have opened." }
+    #   ]
     #
-    # For a tile archive this is the difference between "the water you already looked at" and
-    # "the coast". It is also hundreds of megabytes over somebody's connection, so nothing
-    # downloads on its own: this only makes the archive offerable, and something has to ask.
+    # A bare URL works too; the title then falls back to the filename.
+    #
+    # Nothing downloads on its own. Hundreds of megabytes over somebody's connection is their
+    # decision, so this only makes a file offerable and something has to ask for it.
     #
     # Fetched in chunks, so a dropped connection resumes instead of starting again, and no
     # single cache entry is enormous. Ranges are then served by slicing the chunks, which is
     # cheap — a Blob slice references bytes rather than copying them.
-    attr_accessor :cache_archives
+    attr_reader :cache_archives
+
+    def cache_archives=(archives)
+      @cache_archives = Array(archives).map { |archive| normalize_archive(archive) }
+    end
+
+    # Just the URLs, for the worker — it downloads and serves; the words are the page's job.
+    def cache_archive_urls
+      cache_archives.map { |archive| archive[:url] }
+    end
 
     # Everything about keeping the cache current on its own.
     #
@@ -298,6 +313,31 @@ module Coldwire
       end
 
       value
+    end
+
+    # A Hash with a url, or a bare URL string. Title falls back to the filename, which is a
+    # poor title but a better one than a blank card.
+    def normalize_archive(archive)
+      archive = { url: archive } unless archive.is_a?(Hash)
+      archive = archive.transform_keys(&:to_sym)
+      url = archive[:url].to_s
+
+      begin
+        uri = URI.parse(url)
+      rescue URI::InvalidURIError
+        uri = nil
+      end
+
+      unless uri&.scheme && uri.host
+        raise ArgumentError,
+              "Coldwire cache_archives needs an absolute url for each entry: #{archive.inspect}"
+      end
+
+      {
+        url: url,
+        title: archive[:title].presence || File.basename(uri.path.to_s).presence || url,
+        description: archive[:description].presence
+      }
     end
 
     # Path patterns are route-shaped: literal segments, ":name" for exactly one segment, and a

@@ -9,9 +9,21 @@
   when it is needed. Install is the moment the new URLs first become known. A missing asset
   does not fail the install; an imperfect fallback still beats no worker.
 
-- `config.cache_archives` — archives that can be downloaded whole for offline use, rather than
-  a slice at a time as they happen to be read. For a tile archive this is the difference
-  between "the water you already looked at" and "the coast".
+- `config.cache_archives` — large files somebody can choose to keep on their device, each with
+  a title and a description:
+
+  ```ruby
+  config.cache_archives = [
+    { url: "https://tiles.example.com/basemap.pmtiles",
+      title: "Offline map",
+      description: "The whole coast, rather than only the places you have opened." }
+  ]
+  ```
+
+  The debug page lists them with Download, then Download again and Delete once one is on the
+  device, and Resume where a download stopped part way. It knows only that these are large and
+  optional — the words are the app's, so nothing about a map is baked into the gem. A bare URL
+  works too, with the filename as the title.
 
   Fetched in 8 MB chunks, so an interrupted download resumes from where it stopped instead of
   starting again, and no single cache entry is enormous. Ranges are then answered by slicing

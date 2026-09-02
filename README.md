@@ -477,6 +477,36 @@ than either: those URLs are never intercepted, so they also never reach the offl
 
 ---
 
+### Large files people opt into
+
+Some things are too big to cache as a matter of course but worth keeping if somebody asks — a
+tile archive, an audio guide, a reference PDF. List them, and the debug page offers each one:
+
+```ruby
+config.cache_archives = [
+  { url: "https://tiles.example.com/basemap.pmtiles",
+    title: "Offline map",
+    description: "The whole coast, rather than only the places you have opened." }
+]
+```
+
+A bare URL string works too, and the filename becomes the title.
+
+**Nothing downloads on its own.** Hundreds of megabytes over somebody's connection is their
+decision, so this only makes a file offerable. The page shows Download, then **Download again**
+and **Delete** once it is on the device — or **Resume**, with a count of pieces, where a
+download stopped part way.
+
+Files arrive in 8 MB chunks rather than one enormous request, which is what makes a dropped
+connection cost seconds instead of the whole download: chunks already stored are skipped, so
+asking again resumes. Nothing has to be re-fetched to serve from it either — a `Range` request
+is answered by slicing the chunks and stitching across boundaries, and a Blob slice references
+bytes rather than copying them, so reading a tile out of a downloaded 300 MB archive costs
+about what reading it out of a single stored range does.
+
+This pairs with `cache_ranges`: that caches the slices actually read, so the places you have
+already opened work offline. Downloading the archive is how the rest does.
+
 ## How caching behaves
 
 | Request | Behavior |

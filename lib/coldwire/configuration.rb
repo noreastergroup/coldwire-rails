@@ -117,6 +117,31 @@ module Coldwire
     # pages hold whatever the previous session could see.
     attr_writer :cache_identity
 
+    # Origins besides your own that the worker may cache. Empty by default: a service worker
+    # sees every request a page makes, and quietly hoarding third-party responses is not a
+    # thing to do without being asked.
+    #
+    # The origin has to send CORS headers that name your app, or the response arrives opaque —
+    # status 0, no headers, no readable body — and there is nothing useful to store. For ranged
+    # sources it also has to expose Content-Range.
+    attr_reader :cache_origins
+
+    def cache_origins=(origins)
+      @cache_origins = Array(origins).map { |origin| validate_origin(origin) }
+    end
+
+    # URLs whose Range requests are cached piece by piece, keyed by the range.
+    #
+    # For a large immutable archive read a slice at a time — a PMTiles basemap, say — this is
+    # the difference between an offline map and nothing at all: the file itself may be hundreds
+    # of megabytes, while the slices actually read for the area you looked at are a rounding
+    # error next to it. Same patterns as the allowlist: route shapes or Regexps.
+    attr_reader :cache_ranges
+
+    def cache_ranges=(patterns)
+      @cache_ranges = validate_patterns(patterns, :cache_ranges) || Array(patterns)
+    end
+
     # Everything about keeping the cache current on its own.
     #
     #   config.auto_sync do |sync|

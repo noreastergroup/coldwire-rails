@@ -392,7 +392,10 @@ module Coldwire
               // where the cache left off.
               var channel = new MessageChannel()
               channel.port1.onmessage = function (event) { settle(event.data) }
-              worker.postMessage({ type: "sync" }, [ channel.port2 ])
+              // The worker's own fetches do not carry the user agent this web view was given,
+              // so hand it over: without it the server renders the precached pages for a
+              // browser, and the app caches somebody else's markup.
+              worker.postMessage({ type: "sync", userAgent: navigator.userAgent }, [ channel.port2 ])
             })
           }
 

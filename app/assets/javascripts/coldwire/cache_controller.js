@@ -1069,7 +1069,10 @@ export default class extends Controller {
         resolve(event.data)
       }
 
-      registration.active.postMessage({ type, ...payload }, [ port2 ])
+      // Every message carries the user agent: a worker's own fetches do not inherit the one
+      // this web view was given, and a worker is shut down often enough that it cannot be
+      // told once.
+      registration.active.postMessage({ type, userAgent: navigator.userAgent, ...payload }, [ port2 ])
     })
   }
 

@@ -37,6 +37,14 @@ const OFFLINE_PAGE = untrack(<%= raw offline_page.to_json %>)
 const OFFLINE_FRAME_CONTENT = <%= raw offline_frame.to_json %>
 const RETRY_URL_TOKEN = "coldwire:retry-url"
 
+// What the page told us it is. A worker's own fetches do not carry the user agent the app
+// set on its web view — on Android they arrive as a plain browser — so a precached page comes
+// back rendered for the wrong client: navigation chrome a native app hides, and none of the
+// markup that depends on knowing it is the app. The header carries it; Coldwire's middleware
+// puts it back where the server looks.
+const CLIENT_UA_HEADER = "Coldwire-User-Agent"
+let clientUserAgent = null
+
 // Manifest sync.
 const PACK_PATH = <%= raw coldwire.pack_path.to_json %>
 const REFETCH_AFTER = <%= raw Coldwire.config.auto_sync.max_age ? Coldwire.config.auto_sync.max_age.to_i.to_json : "null" %>
@@ -108,6 +116,9 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("message", (event) => {
   const type = event.data?.type
+  // Kept from whichever page spoke last. A worker is shut down whenever the browser feels
+  // like it, so this cannot be established once — every message brings it back.
+  if (event.data?.userAgent) clientUserAgent = event.data.userAgent
   const reply = (promise) => {
     event.waitUntil(
       Promise.resolve(promise)
@@ -231,6 +242,15 @@ function isCacheable(request, response) {
 // Requests, so anything read while counting up what is stored has to live there — the same
 // reason the timestamp does. Matching ignores headers, so a lookup built without them still
 // finds the entry.
+// The headers a worker-initiated fetch needs so the server renders for the app rather than
+// for whatever the platform says a service worker is.
+function clientHeaders(extra = {}) {
+  const headers = new Headers(extra)
+  if (clientUserAgent) headers.set(CLIENT_UA_HEADER, clientUserAgent)
+
+  return headers
+}
+
 function chunkKey(url, index, facts = null) {
   const target = new URL(url)
   target.searchParams.set(CHUNK_PARAM, String(index))
@@ -810,7 +830,7 @@ async function fetchManifest() {
       // browser may serve a heuristically-fresh copy without asking, and a sync would then
       // faithfully fetch an old list, missing the pages it exists to pick up.
       cache: "no-store",
-      headers: { Accept: "application/json" }
+      headers: clientHeaders({ Accept: "application/json" })
     })
   } catch (error) {
     // The fetch never completed at all: no connection, rather than a server saying no.
@@ -931,7 +951,7 @@ async function precacheUrls(inputUrls, onProgress = () => {}) {
 }
 
 async function fetchAndCache(cache, href, { managed = false } = {}) {
-  const request = new Request(href, { credentials: "same-origin" })
+  const request = new Request(href, { credentials: "same-origin", headers: clientHeaders() })
   const response = await fetch(request)
   if (!isCacheable(request, response)) {
     throw new Error(response.redirected ? `Redirected to ${response.url}` : `HTTP ${response.status}`)

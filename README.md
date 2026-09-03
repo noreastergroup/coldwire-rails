@@ -220,6 +220,22 @@ that were in flight.
 
 ---
 
+## What the worker looks like to your server
+
+A service worker's own fetches — the manifest, and every page in it — do not carry the user
+agent an app set on its web view. On Android they arrive as a plain browser, so a precached
+page comes back rendered for the wrong client: navigation chrome a native app hides, and none
+of the markup that depends on knowing it is the app. The app then shows that cached copy and
+looks like it forgot what it is.
+
+`fetch` cannot fix this — Chromium drops a `User-Agent` set on a request. So the page tells
+the worker what it is, the worker sends that in a `Coldwire-User-Agent` header, and a
+middleware puts it back where Rails looks before anything else runs. `hotwire_native_app?`,
+your layout and `register_if` all see the client the cache is being filled for.
+
+Nothing to configure, and no new trust: the user agent was always the client's to state, and
+this only lets a client state its own by another name.
+
 ## Large files
 
 Some things are too big to cache as a matter of course but worth keeping if somebody asks — a

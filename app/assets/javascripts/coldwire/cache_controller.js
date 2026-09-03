@@ -348,14 +348,17 @@ export default class extends Controller {
     download.textContent = status.complete ? "Download again" : status.chunks ? "Resume" : "Download"
 
     if (status.complete) {
-      label.textContent = `${this.formatBytes(status.bytes)} · on this device`
+      label.textContent = status.cachedAt
+        ? `${this.formatBytes(status.bytes)} · downloaded ${this.formatCachedAt(status.cachedAt)}`
+        : `${this.formatBytes(status.bytes)} · on this device`
     } else if (status.chunks) {
       // Partly downloaded is worth saying plainly: it is not broken, it stopped, and asking
       // again carries on from there.
       const share = status.expected ? Math.round((status.chunks / status.expected) * 100) : null
+      const stopped = status.cachedAt ? `, stopped ${this.formatCachedAt(status.cachedAt)}` : ""
       label.textContent = share
-        ? `${this.formatBytes(status.bytes)} of ${this.formatBytes(status.total)} · ${share}%, not finished`
-        : `${this.formatBytes(status.bytes)} downloaded · not finished`
+        ? `${this.formatBytes(status.bytes)} of ${this.formatBytes(status.total)} · ${share}%${stopped}`
+        : `${this.formatBytes(status.bytes)} downloaded · not finished${stopped}`
     } else {
       label.textContent = "Not downloaded"
     }

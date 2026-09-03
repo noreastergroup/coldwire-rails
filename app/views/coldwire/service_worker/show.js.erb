@@ -274,6 +274,10 @@ async function archiveStatus(url) {
   let bytes = 0
   let chunks = 0
   let total = null
+  // The newest chunk: when this last got any of itself, which for a finished download is
+  // when it finished. Chunks already held are skipped on a later pass, so an older one
+  // would date the archive from an attempt that may have stopped in the first megabyte.
+  let cachedAt = null
 
   for (const key of stored) {
     const keyUrl = new URL(key.url)
@@ -286,6 +290,8 @@ async function archiveStatus(url) {
     if (Number.isFinite(size)) bytes += size
     const declared = Number(key.headers.get("coldwire-archive-total"))
     if (Number.isFinite(declared) && declared > 0) total = declared
+    const stamp = unixTimestamp(key.headers.get(TIMESTAMP_HEADER))
+    if (stamp && (!cachedAt || stamp > cachedAt)) cachedAt = stamp
   }
 
   return {
@@ -294,6 +300,7 @@ async function archiveStatus(url) {
     chunks,
     bytes,
     total,
+    cachedAt,
     expected: total ? chunkCount(total) : null,
     complete: Boolean(total) && chunks === chunkCount(total)
   }

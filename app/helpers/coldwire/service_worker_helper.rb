@@ -114,7 +114,10 @@ module Coldwire
               identity: "coldwire-identity",
               forced: "coldwire-forced",
               syncedAt: "coldwire-synced-at",
-              claim: "coldwire-sync-claim"
+              claim: "coldwire-sync-claim",
+              // Set only when somebody turns automatic syncing off, so an unset store — a
+              // fresh device, a cleared one — means on, which is what the app configured.
+              syncOff: "coldwire-sync-off"
             },
 
             get: function (key) {
@@ -328,6 +331,11 @@ module Coldwire
             // the moment the web view was frozen.
             if (document.hidden) return
 
+            // Switched off on this device. Holding no timer is the whole point; turning it
+            // back on re-arms on the next visit, and the page that did the turning is
+            // already driving its own.
+            if (store.on(keys.syncOff)) return
+
             if (typeof delay !== "number") delay = Math.max(0, dueAt() - Date.now())
             timer = window.setTimeout(fire, Math.min(delay, maxDelay))
           }
@@ -352,6 +360,9 @@ module Coldwire
             // Out of sight, out of the running. The timer should already be cleared; this is
             // the belt to that braces.
             if (document.hidden) return
+
+            // Switched off since this timer was armed.
+            if (store.on(keys.syncOff)) return
 
             // Force offline asks for no network. Syncing is only network, so there is nothing
             // to do but come back at the usual cadence and see whether it is still on.

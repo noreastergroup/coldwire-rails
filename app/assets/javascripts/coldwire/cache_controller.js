@@ -44,6 +44,7 @@ export default class extends Controller {
     "summary",
     "entries",
     "forcedToggle",
+    "autoSyncToggle",
     "spinner",
     "progress",
     "progressBar",
@@ -86,6 +87,7 @@ export default class extends Controller {
     }
 
     this.restoreForced()
+    this.restoreAutoSync()
     this.renderArchives()
     this.refresh()
 
@@ -280,6 +282,11 @@ export default class extends Controller {
       return
     }
 
+    if (!this.autoSyncOn()) {
+      this.autoSyncTarget.textContent = "Automatic sync is off for this device"
+      return
+    }
+
     this.autoSyncTarget.textContent = this.syncIntervalValue > 0
       ? `Automatic sync is on — every ${this.formatDuration(this.syncIntervalValue)}`
       : "Automatic sync is on"
@@ -434,7 +441,7 @@ export default class extends Controller {
   tick() {
     this.renderSyncedAt()
 
-    if (!this.autoSyncValue || this.syncIntervalValue <= 0) return
+    if (!this.autoSyncOn() || this.syncIntervalValue <= 0) return
     if (this.syncRunning || this.syncStarting) return
     // Nothing to do out of sight, and nothing worth doing with no network.
     if (document.hidden || this.syncPaused()) return
@@ -473,7 +480,7 @@ export default class extends Controller {
   }
 
   describeNextSync() {
-    if (!this.autoSyncValue || this.syncIntervalValue <= 0) return ""
+    if (!this.autoSyncOn() || this.syncIntervalValue <= 0) return ""
     if (this.syncRunning) return "syncing now"
 
     const paused = this.syncPaused()
@@ -621,6 +628,33 @@ export default class extends Controller {
   restoreForced() {
     if (!this.hasForcedToggleTarget) return
     this.forcedToggleTarget.checked = this.store.on(this.store.keys.forced)
+  }
+
+  // Automatic syncing, as this device has it. The config decides whether it is on offer at
+  // all; this decides whether it happens, and is remembered per device rather than per page.
+  autoSyncOn() {
+    return this.autoSyncValue && !this.store.on(this.store.keys.syncOff)
+  }
+
+  restoreAutoSync() {
+    if (!this.hasAutoSyncToggleTarget) return
+    this.autoSyncToggleTarget.checked = this.autoSyncOn()
+  }
+
+  toggleAutoSync(event) {
+    this.store.toggle(this.store.keys.syncOff, !event.currentTarget.checked)
+
+    // Say so at once rather than on the next tick: the line above the switch and the
+    // countdown beside it both mean something different now.
+    this.renderAutoSync()
+    this.renderSyncedAt()
+    this.setStatus(this.autoSyncOn()
+      ? "Automatic syncing is on for this device."
+      : "Automatic syncing is off for this device. Sync now still works.")
+
+    // Turning it back on with the clock already past due should sync, not wait out an
+    // interval that expired while it was off.
+    if (this.autoSyncOn()) this.tick()
   }
 
   async syncForcedToWorker() {

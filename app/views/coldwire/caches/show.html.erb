@@ -66,6 +66,9 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: transform 160ms ease; }
   /* Amber, matching the forced-offline light — the two say the same thing. */
   .coldwire-switch input:checked + span { background: #f59e0b; }
+  /* Except where being on is the ordinary state rather than a deliberate degradation; green,
+     matching the online light. Same switch otherwise. */
+  .coldwire-switch--on input:checked + span { background: #16a34a; }
   .coldwire-switch input:checked + span::after { transform: translateX(1.05rem); }
   .coldwire-switch input:focus-visible + span { outline: 2px solid #2563eb; outline-offset: 2px; }
 
@@ -249,11 +252,32 @@
   </div>
 
   <div class="coldwire-card">
-    <h2>Sync</h2>
+    <h2>Auto Sync</h2>
     <p class="coldwire-facts" style="margin-top: 0;">
       Downloads the pages you need offline and drops the ones no longer listed. It runs on its
       own in the background; <strong>Sync now</strong> runs that same pass immediately.
     </p>
+
+    <% if Coldwire.config.auto_sync.enabled %>
+      <%# Only offered where the app has configured automatic syncing at all — a switch for
+          something that was never going to happen is a switch that lies. %>
+      <label class="coldwire-setting" style="margin: 0.9rem 0;">
+        <span class="coldwire-switch coldwire-switch--on">
+          <input type="checkbox"
+                 data-coldwire-cache-target="autoSyncToggle"
+                 data-action="change->coldwire-cache#toggleAutoSync">
+          <span aria-hidden="true"></span>
+        </span>
+        <span>
+          <span class="coldwire-setting-title">Sync on its own</span>
+          <span class="coldwire-setting-note">
+            Turn this off to decide for yourself when to download. Nothing is fetched in the
+            background until you turn it back on, and <strong>Sync now</strong> still works.
+          </span>
+        </span>
+      </label>
+    <% end %>
+
     <p class="coldwire-facts">
       <span data-coldwire-cache-target="autoSync">Checking…</span><br>
       <span data-coldwire-cache-target="syncedAt">Never synced</span><br>

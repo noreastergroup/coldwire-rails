@@ -324,8 +324,9 @@ wrapping the route, or override `app/views/coldwire/caches/show.html.erb`.
 - **Force offline** — serve only from cache even with a connection. Holds across the app: the
   flag lives in a worker variable and browsers terminate idle workers, so every page load
   re-asserts it from `localStorage`.
-- **Sync** — whether automatic sync is on and how often, a live countdown, and progress.
-  **Sync now** runs that same pass immediately rather than waiting out the countdown.
+- **Auto Sync** — a switch to turn automatic syncing off for this device, remembered in
+  `localStorage`, plus how often it runs, a live countdown, and progress. Switched off, no
+  page in the app holds a sync timer; **Sync now** still runs a pass on demand.
 - **Downloads** — anything in `cache_archives`.
 - **Cached** — every entry with size and age, a filter box, and a sort. Tapping a row shows
   the whole URL; each row has a trash icon.

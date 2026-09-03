@@ -73,6 +73,9 @@
   .coldwire-switch input:focus-visible + span { outline: 2px solid #2563eb; outline-offset: 2px; }
 
   .coldwire-setting { display: flex; align-items: flex-start; gap: 0.85rem; cursor: pointer; }
+  /* A switch the card has already explained: the row is the control and its name, nothing
+     else, so the card keeps one left edge instead of three. */
+  .coldwire-setting--compact { align-items: center; margin: 0.9rem 0; }
   .coldwire-setting-title { display: block; font-weight: 600; }
   .coldwire-setting-note { display: block; margin-top: 0.15rem; font-size: 0.875rem; color: #6b7280; }
 
@@ -253,36 +256,39 @@
 
   <div class="coldwire-card">
     <h2>Auto Sync</h2>
-    <p class="coldwire-facts" style="margin-top: 0;">
-      Downloads the pages you need offline and drops the ones no longer listed. It runs on its
-      own in the background; <strong>Sync now</strong> runs that same pass immediately.
-    </p>
 
     <% if Coldwire.config.auto_sync.enabled %>
-      <%# Only offered where the app has configured automatic syncing at all — a switch for
-          something that was never going to happen is a switch that lies. %>
-      <label class="coldwire-setting" style="margin: 0.9rem 0;">
+      <p class="coldwire-facts" style="margin-top: 0;">
+        Downloads the pages you need offline and drops the ones no longer listed. Turn it off
+        to decide for yourself when to download — <strong>Sync now</strong> always works.
+      </p>
+
+      <%# Only where the app configured automatic syncing at all: a switch for something that
+          was never going to happen is a switch that lies. %>
+      <label class="coldwire-setting coldwire-setting--compact">
         <span class="coldwire-switch coldwire-switch--on">
           <input type="checkbox"
                  data-coldwire-cache-target="autoSyncToggle"
                  data-action="change->coldwire-cache#toggleAutoSync">
           <span aria-hidden="true"></span>
         </span>
-        <span>
-          <span class="coldwire-setting-title">Sync on its own</span>
-          <span class="coldwire-setting-note">
-            Turn this off to decide for yourself when to download. Nothing is fetched in the
-            background until you turn it back on, and <strong>Sync now</strong> still works.
-          </span>
-        </span>
+        <span class="coldwire-setting-title">Sync on its own</span>
       </label>
+    <% else %>
+      <p class="coldwire-facts" style="margin-top: 0;">
+        Downloads the pages you need offline and drops the ones no longer listed.
+        <strong>Sync now</strong> runs that pass immediately.
+      </p>
     <% end %>
 
     <p class="coldwire-facts">
       <span data-coldwire-cache-target="autoSync">Checking…</span><br>
-      <span data-coldwire-cache-target="syncedAt">Never synced</span><br>
-      <span data-coldwire-cache-target="syncStatus">Idle</span>
+      <span data-coldwire-cache-target="syncedAt">Never synced</span>
     </p>
+
+    <%# Empty until a sync has something to say, so the card does not carry a permanent
+        "Idle" that reads like debug output left in by accident. %>
+    <p class="coldwire-facts" data-coldwire-cache-target="syncStatus" hidden></p>
 
     <div class="coldwire-actions coldwire-actions--spaced">
       <button type="button"

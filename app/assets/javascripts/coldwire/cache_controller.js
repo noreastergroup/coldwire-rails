@@ -271,25 +271,30 @@ export default class extends Controller {
   }
 
   setSyncStatus(text) {
-    if (this.hasSyncStatusTarget) this.syncStatusTarget.textContent = text
+    if (!this.hasSyncStatusTarget) return
+
+    this.syncStatusTarget.textContent = text || ""
+    this.syncStatusTarget.hidden = !text
   }
 
   renderAutoSync() {
     if (!this.hasAutoSyncTarget) return
 
+    // The switch beside this already says whether it is on, so this line carries the one
+    // thing the switch cannot: how often.
     if (!this.autoSyncValue) {
-      this.autoSyncTarget.textContent = "Automatic sync is off"
+      this.autoSyncTarget.textContent = "Automatic syncing is off"
       return
     }
 
     if (!this.autoSyncOn()) {
-      this.autoSyncTarget.textContent = "Automatic sync is off for this device"
+      this.autoSyncTarget.textContent = "Off for this device"
       return
     }
 
     this.autoSyncTarget.textContent = this.syncIntervalValue > 0
-      ? `Automatic sync is on — every ${this.formatDuration(this.syncIntervalValue)}`
-      : "Automatic sync is on"
+      ? `Every ${this.formatInterval(this.syncIntervalValue)}`
+      : "On"
   }
 
   renderSyncedAt() {
@@ -493,11 +498,25 @@ export default class extends Controller {
     return seconds > 0 ? `next in ${this.formatDuration(seconds)}` : "due now"
   }
 
+  // Whole words. "every 1 d" reads like a typo, and the cadence is the one number on this
+  // card somebody is meant to act on.
   formatDuration(seconds) {
-    if (seconds < 60) return `${seconds}s`
-    if (seconds < 3600) return `${Math.round(seconds / 60)} min`
-    if (seconds < 86400) return `${Math.round(seconds / 3600)} h`
-    return `${Math.round(seconds / 86400)} d`
+    if (seconds < 60) return `${seconds} sec`
+    if (seconds < 3600) return this.plural(Math.round(seconds / 60), "min", "min")
+    if (seconds < 86400) return this.plural(Math.round(seconds / 3600), "hour")
+
+    return this.plural(Math.round(seconds / 86400), "day")
+  }
+
+  plural(count, one, many = `${one}s`) {
+    return `${count} ${count === 1 ? one : many}`
+  }
+
+  // "Every day", not "Every 1 day".
+  formatInterval(seconds) {
+    const text = this.formatDuration(seconds)
+
+    return text.startsWith("1 ") ? text.slice(2) : text
   }
 
   async refresh(event) {

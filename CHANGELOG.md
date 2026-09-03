@@ -9,12 +9,6 @@ First release. The API may still change before 1.0.
   in. Built to satisfy Hotwire Native, which is stricter than a browser.
 - **Precaching.** `auto_sync.precache_urls` is a list of URLs computed in Ruby, fetched along
   with the subresources those pages reference.
-- **Precached pages are rendered for the app, not for the worker.** A service worker's own
-  fetches do not carry the user agent an app set on its web view — on Android they arrive as a
-  plain browser — so everything precached came back with the navigation chrome a native app
-  hides and without its own offline markup. The page hands its user agent to the worker, which
-  sends it in a `Coldwire-User-Agent` header, and a middleware restores it before the app sees
-  the request.
 - **Automatic syncing** on an interval, refetching anything older than `max_age`, resuming
   across page loads when a run is cut short.
 - **Debug page** at the mount point: connection status, force offline, an Auto Sync switch

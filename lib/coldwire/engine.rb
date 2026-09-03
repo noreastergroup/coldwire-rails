@@ -19,12 +19,6 @@ module Coldwire
       end
     end
 
-    # Ahead of the app, so anything asking `hotwire_native_app?` — the layout, the helpers,
-    # `register_if` — sees the client the worker is fetching on behalf of.
-    initializer "coldwire.client_user_agent" do |app|
-      app.config.middleware.insert_before 0, Coldwire::ClientUserAgent
-    end
-
     initializer "coldwire.helpers" do
       ActiveSupport.on_load(:action_controller_base) do
         helper Coldwire::ServiceWorkerHelper

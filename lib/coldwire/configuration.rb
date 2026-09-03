@@ -13,22 +13,6 @@ module Coldwire
     # response also sends `Service-Worker-Allowed` to widen it past that directory.
     attr_accessor :worker_scope
 
-    # Markup for the offline page's <head>, evaluated in the view.
-    #
-    # This exists for one reason: Turbo refuses to render a page whose `data-turbo-track`
-    # elements differ from the current page's, and instead invalidates. Hotwire Native answers
-    # an invalidation by showing a spinner and reloading — survivable going forward, but going
-    # *back* it runs while the visit stack is mid-pop and can leave the spinner up for good.
-    #
-    # So the offline page has to carry the same tracked elements as your real pages, in the
-    # same order. Whatever your layout tracks, put it here:
-    #
-    #   config.offline_head = -> { stylesheet_link_tag "application", "data-turbo-track": "reload" }
-    #
-    # Coldwire's own importmap tag is emitted after this, matching the usual layout order of
-    # stylesheets before scripts.
-    attr_writer :offline_head
-
     # The importmap module the offline page loads.
     #
     # Hotwire Native rejects any page where `window.Turbo` never appears — its adapter waits,
@@ -235,7 +219,6 @@ module Coldwire
       @cache_blocklist = []
       @mark_cached_pages = true
       @offline_import = "@hotwired/turbo-rails"
-      @offline_head = nil
       @ignore_query_params = true
       @register_if = -> { true }
       @cache_identity = -> { nil }
@@ -260,12 +243,6 @@ module Coldwire
     # `view` is the view context, so a host can write `-> { current_user&.id }`.
     def cache_identity(view)
       view.instance_exec(&@cache_identity).to_s
-    end
-
-    def offline_head(view)
-      return if @offline_head.nil?
-
-      view.instance_exec(&@offline_head)
     end
 
     private

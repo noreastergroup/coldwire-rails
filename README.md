@@ -68,7 +68,7 @@ mount it — narrow that with `config.worker_scope`.
 
 ## Configuration
 
-Everything, with its default. Only `auto_sync` and `offline_head` really need your attention.
+Everything, with its default. Only `auto_sync` really needs your attention.
 
 ```ruby
 # config/initializers/coldwire.rb
@@ -89,9 +89,6 @@ Coldwire.configure do |config|
   # Where the worker registers at all. Evaluated in the view, so `request` and `current_user`
   # are both in scope. A page that does not register does not cache or sync.
   config.register_if = -> { true }
-
-  # Must match the data-turbo-track elements in your layout. See "The offline page" below.
-  config.offline_head = nil
 
   # The importmap module the offline page loads to boot Turbo. nil if you are not on
   # importmap-rails; load Turbo your own way in the template instead.
@@ -341,18 +338,22 @@ never intercepted, so **Sync now** will fail while offline; the inspector, **Cle
 
 ## The offline page
 
-**Set `offline_head`.** Turbo will not render a page whose `data-turbo-track="reload"` elements
-differ from the current page's — it invalidates instead, and Hotwire Native answers an
-invalidation with a spinner and a reload, which can leave the spinner up for good mid-pop on a
-back navigation. So the offline page must carry the same tracked elements as your real pages,
-in the same order:
+The offline page carries its own styles and needs no configuration. It deliberately does not
+pull in your stylesheet: everything it needs would then have to be cached for it to render,
+and a fallback that depends on the cache being healthy is a fallback that fails when it is
+needed. Override the template if you want it to look like the rest of the app.
 
-```ruby
-config.offline_head = -> { stylesheet_link_tag "application", "data-turbo-track": "reload" }
-```
+**`data-turbo-track="reload"` is stripped from everything served offline** — the offline page,
+and every page answered from the cache. Turbo refuses to render a page whose tracked elements
+differ from the current page's, and does a full reload instead to pick up the new assets;
+Hotwire Native shows that as a spinner, which going back can leave up for good. Offline there
+are no new assets to pick up and the reload is answered from the same cache, so the mismatch
+costs a document load and buys nothing.
 
-Coldwire emits its importmap after this. Note that this pulls your stylesheet into the offline
-page, so a CSS reset there applies to it.
+Configuration could not have fixed this. Asset digests change with every deploy, so a page
+cached before the current one was built disagrees with it no matter what the fallback carries.
+A live page keeps its tracked elements, so the first fresh page after the connection returns
+still mismatches — which is the reload you wanted, at the one moment it can succeed.
 
 Override either template by creating it in your own app:
 

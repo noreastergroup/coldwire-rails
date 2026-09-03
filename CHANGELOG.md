@@ -13,6 +13,12 @@ First release. The API may still change before 1.0.
   across page loads when a run is cut short.
 - **Debug page** at the mount point: connection status, force offline, sync with a countdown
   and live progress, and every cached entry with search, sort, and per-row delete.
+- **Nothing served from the cache is `data-turbo-track="reload"`.** Turbo will not render a
+  page whose tracked elements differ from the current page's; it reloads instead, which
+  offline buys nothing and which Hotwire Native can hang on. Asset digests change with every
+  deploy, so any page cached before the current one was built disagrees with it — no
+  configuration could have reconciled that. This replaced the `offline_head` setting, whose
+  whole job was keeping the fallback's tracked elements in step with the layout by hand.
 - **Allow and block lists** written as route patterns (`"/sites/:id/card"`) or Regexps.
 - **Cache identity.** The cache is dropped when the signed-in user changes.
 - **Cross-origin caching** for origins you nominate, and **`Range` caching** for tiles and

@@ -32,7 +32,7 @@ const ARCHIVE_CHUNK = 8 * 1024 * 1024
 const CHUNK_PARAM = "__coldwire_chunk"
 const ARCHIVE_MESSAGE = "coldwire:archive"
 const RANGE_TOTAL_HEADER = "coldwire-range-total"
-const OFFLINE_PAGE = <%= raw offline_page.to_json %>
+const OFFLINE_PAGE = untrack(<%= raw offline_page.to_json %>)
 const OFFLINE_FRAME_CONTENT = <%= raw offline_frame.to_json %>
 const RETRY_URL_TOKEN = "coldwire:retry-url"
 
@@ -519,7 +519,7 @@ async function handleFetch(request) {
   const cache = await caches.open(CACHE_NAME)
   const cached = await cache.match(request, MATCH_OPTIONS)
 
-  if (forcedOffline) return (await markOffline(cache, request, cached)) || offlineResponse(request)
+  if (forcedOffline) return (await cachedPageResponse(cache, request, cached)) || offlineResponse(request)
 
   // Pages recache on every view so the timestamp moves and the copy stays fresh.
   // Assets stay cache-first — recaching every stylesheet on a visit would bury
@@ -533,18 +533,37 @@ async function handleFetch(request) {
     }
     return response
   } catch {
-    return (await markOffline(cache, request, cached)) || offlineResponse(request)
+    return (await cachedPageResponse(cache, request, cached)) || offlineResponse(request)
   }
 }
 
-// Tell the page it is looking at cached content, and when that content was stored.
+// Turbo refuses to render a page whose data-turbo-track="reload" elements differ from the
+// current page's; it does a full reload instead, to pick up the new assets. Offline there
+// are no new assets to pick up, and the reload is answered from this same cache — so the
+// mismatch buys nothing and costs a document load, which Hotwire Native shows as a spinner
+// and can hang on entirely.
+//
+// A mismatch is not an edge case offline: asset digests change with every deploy, so any
+// page cached before the current one was built disagrees with it. No configuration can
+// reconcile that, because the two copies were built at different times.
+//
+// So nothing served from this cache is tracked. Offline documents then agree with each
+// other and render as Turbo visits. A live page still carries its tracked elements, so the
+// first fresh page after the connection returns still mismatches — which is exactly the
+// reload that was wanted, at the one moment it can succeed.
+function untrack(html) {
+  return html.replace(/\sdata-turbo-track\s*=\s*(?:"reload"|'reload'|reload)(?=[\s>/])/gi, "")
+}
+
+// Everything the worker answers from the cache comes through here: untracked always, and
+// marked as cached content when mark_cached_pages is on.
 //
 // Two markers, because they are read at different moments. The <html> attributes are there
 // for the first paint of a cold boot, before any JS runs, so a banner does not flash in.
 // The <meta> is for Turbo visits: Turbo swaps the body and merges the head but never copies
 // <html> attributes, so without it the marker would go stale the moment you navigate.
-async function markOffline(cache, request, cached) {
-  if (!MARK_CACHED_PAGES || !cached || !wantsHtml(request)) return cached
+async function cachedPageResponse(cache, request, cached) {
+  if (!cached || !wantsHtml(request)) return cached
 
   const type = cached.headers.get("Content-Type") || ""
   if (!type.includes("text/html")) return cached
@@ -552,22 +571,26 @@ async function markOffline(cache, request, cached) {
   const html = await cached.clone().text()
   if (!/<html\b/i.test(html)) return cached
 
-  // The timestamp rides on the stored key, so ask the cache for the key that matched.
-  const [ key ] = await cache.keys(request, MATCH_OPTIONS)
-  const cachedAt = key ? key.headers.get(TIMESTAMP_HEADER) : null
-  const stamp = cachedAt ? ` ${CACHED_AT_ATTRIBUTE}="${escapeHtml(cachedAt)}"` : ""
+  let body = untrack(html)
 
-  const marked = html
-    .replace(/<html\b([^>]*)>/i, `<html$1 ${OFFLINE_ATTRIBUTE}${stamp}>`)
-    .replace(/<head\b([^>]*)>/i, `<head$1><meta name="coldwire-offline" content="${escapeHtml(cachedAt || "")}">`)
+  if (MARK_CACHED_PAGES) {
+    // The timestamp rides on the stored key, so ask the cache for the key that matched.
+    const [ key ] = await cache.keys(request, MATCH_OPTIONS)
+    const cachedAt = key ? key.headers.get(TIMESTAMP_HEADER) : null
+    const stamp = cachedAt ? ` ${CACHED_AT_ATTRIBUTE}="${escapeHtml(cachedAt)}"` : ""
 
-  // Injecting made the body longer, so the stored Content-Length now understates it —
-  // carrying it over invites the consumer to truncate the page. Drop it and let the
+    body = body
+      .replace(/<html\b([^>]*)>/i, `<html$1 ${OFFLINE_ATTRIBUTE}${stamp}>`)
+      .replace(/<head\b([^>]*)>/i, `<head$1><meta name="coldwire-offline" content="${escapeHtml(cachedAt || "")}">`)
+  }
+
+  // Rewriting changed the length, so the stored Content-Length no longer describes the
+  // body — carrying it over invites the consumer to truncate the page. Drop it and let the
   // response report its own length.
   const headers = new Headers(cached.headers)
   headers.delete("Content-Length")
 
-  return new Response(marked, {
+  return new Response(body, {
     status: cached.status,
     statusText: cached.statusText,
     headers

@@ -14,12 +14,6 @@
     <meta name="turbo-cache-control" content="no-cache">
     <title>Offline</title>
 
-    <%# Whatever your layout marks with data-turbo-track. Turbo will not render a page whose
-        tracked elements differ from the current one's — it invalidates instead, and Hotwire
-        Native answers that by showing a spinner and reloading, which can stick going back.
-        Emitted before the importmap, matching the usual stylesheets-then-scripts order. %>
-    <%= Coldwire.config.offline_head(self) %>
-
     <%# Hotwire Native reports "Turbo is not present" and shows its own error screen for any
         page where window.Turbo never appears — a fallback without this is not renderable in
         the app at all. Just Turbo, not the whole app entry point: every module in that graph
@@ -64,8 +58,8 @@
           calc(2rem + env(safe-area-inset-bottom, 0px))
           calc(2rem + env(safe-area-inset-left, 0px));
       }
-      /* State everything: `offline_head` pulls in the host's stylesheet, and a CSS reset there
-         (Tailwind's preflight, say) strips the UA defaults this would otherwise rely on. */
+      /* State everything rather than leaning on UA defaults. This page carries its own
+         styles and nothing else, so anything left unsaid is simply missing. */
       .coldwire-offline h1 { font-size: 1.5rem; font-weight: 700; line-height: 1.25; margin: 0 0 0.5rem; }
       .coldwire-offline p { font-size: 1rem; line-height: 1.5; margin: 0; }
 

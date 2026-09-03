@@ -3,9 +3,10 @@
 //
 // Built on the Cache API: https://developer.mozilla.org/en-US/docs/Web/API/Cache
 //
-// HTML visits recache with cache.put(cacheKey(request), response.clone()) even
-// when a copy already exists, then fall back to cache.match() when offline. Assets stay
-// cache-first. Precaching uses the same put/match path.
+// HTML visits recache through putFresh() even when a copy already exists — it retires the
+// entry for that URL before writing, so one page is one entry however many Accepts asked for
+// it — then fall back to cache.match() when offline. Assets stay cache-first. Precaching uses
+// the same put/match path.
 <%
   offline_page = render(template: "coldwire/service_worker/offline_page", layout: false, formats: :html)
   offline_frame = render(template: "coldwire/service_worker/offline_frame", layout: false, formats: :html)
@@ -515,6 +516,23 @@ function rangeKey(request, spec) {
   return new Request(url.href, { method: "GET" })
 }
 
+// One entry per URL.
+//
+// cache.put() replaces an existing entry only where the two agree about Vary, and Rails
+// answers HTML with `Vary: Accept`. Precaching fetches with `Accept: */*` and Turbo asks for
+// `text/html`, so the same page arrives under two different Accepts and is kept as two
+// records — a third once something asks with a third Accept. Chrome collapses them on put;
+// WebKit keeps them, which is where a page shows up in the list three times over.
+//
+// Deleting by URL first, with the same ignoreVary that reads use, makes writing a page retire
+// the copy it replaces whatever the browser does. Deliberately not ignoreSearch: range and
+// chunk entries live under the same path with their own query, and a page write must never
+// take a downloaded archive with it.
+async function putFresh(cache, key, response) {
+  await cache.delete(key, { ignoreVary: true })
+  await cache.put(key, response)
+}
+
 async function handleFetch(request) {
   const cache = await caches.open(CACHE_NAME)
   const cached = await cache.match(request, MATCH_OPTIONS)
@@ -529,7 +547,7 @@ async function handleFetch(request) {
   try {
     const response = await fetch(request)
     if (isCacheable(request, response) && isAutoCacheable(request)) {
-      cache.put(cacheKey(request), response.clone())
+      putFresh(cache, cacheKey(request), response.clone())
     }
     return response
   } catch {
@@ -912,7 +930,7 @@ async function fetchAndCache(cache, href, { managed = false } = {}) {
     throw new Error(response.redirected ? `Redirected to ${response.url}` : `HTTP ${response.status}`)
   }
 
-  cache.put(cacheKey(request, { managed }), response.clone())
+  await putFresh(cache, cacheKey(request, { managed }), response.clone())
 
   const contentType = response.headers.get("Content-Type") || ""
   if (!contentType.includes("text/html")) return []

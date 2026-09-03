@@ -729,9 +729,14 @@ export default class extends Controller {
     if (this.hasSummaryTarget) {
       const cacheCount = cachesInfo.length
       const urlCount = entries.length
+      // This lists every cache the origin has, not only ours, and a URL held in two of them
+      // is two rows that read as one page cached twice. Bumping cache_name leaves the old
+      // one behind, so say when there is more than one rather than leaving the duplicate
+      // unexplained.
+      const spread = cacheCount > 1 ? ` · in ${cacheCount} caches` : ""
       this.summaryTarget.textContent = urlCount === 0
         ? "Nothing cached"
-        : `${urlCount} file${urlCount === 1 ? "" : "s"} cached · ${this.formatBytes(totalBytes)}`
+        : `${urlCount} file${urlCount === 1 ? "" : "s"} cached · ${this.formatBytes(totalBytes)}${spread}`
     }
 
     // Held so searching and sorting are pure display work. Reading the cache means asking

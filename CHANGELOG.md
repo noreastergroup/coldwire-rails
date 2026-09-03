@@ -21,6 +21,11 @@ First release. The API may still change before 1.0.
   deploy, so any page cached before the current one was built disagrees with it — no
   configuration could have reconciled that. This replaced the `offline_head` setting, whose
   whole job was keeping the fallback's tracked elements in step with the layout by hand.
+- **One cache entry per URL.** `cache.put()` replaces an entry only where the two agree about
+  `Vary`, and Rails answers HTML with `Vary: Accept` — so a page fetched by precaching
+  (`*/*`) and the same page visited by Turbo (`text/html`) are kept as two records, and the
+  list grows a copy per distinct Accept. Writing a page now retires the URL first. Range and
+  chunk entries, which share a path with their own query, are left alone.
 - **Allow and block lists** written as route patterns (`"/sites/:id/card"`) or Regexps.
 - **Cache identity.** The cache is dropped when the signed-in user changes.
 - **Cross-origin caching** for origins you nominate, and **`Range` caching** for tiles and

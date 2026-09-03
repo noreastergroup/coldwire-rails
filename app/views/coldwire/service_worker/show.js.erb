@@ -251,6 +251,24 @@ function clientHeaders(extra = {}) {
   return headers
 }
 
+// Re-issuing a page's request loses the app's identity just as a fetch of our own does: the
+// user agent belongs to whoever makes the request, and here that is the worker. Left alone
+// the server answers a Turbo visit as though a browser asked, which in a native app means a
+// page without the markup the app is waiting for — a sign-in that redirects into nothing and
+// sits there.
+//
+// Navigations are left exactly as they are. Rebuilding one downgrades its mode and its
+// redirect handling, and a navigation answered with a followed redirect is a network error by
+// spec — a worse failure than the one this fixes.
+function asClient(request) {
+  if (!clientUserAgent || request.mode === "navigate") return request
+
+  const headers = new Headers(request.headers)
+  headers.set(CLIENT_UA_HEADER, clientUserAgent)
+
+  return new Request(request, { headers })
+}
+
 function chunkKey(url, index, facts = null) {
   const target = new URL(url)
   target.searchParams.set(CHUNK_PARAM, String(index))
@@ -572,7 +590,7 @@ async function handleFetch(request) {
   if (cached && !wantsHtml(request)) return cached
 
   try {
-    const response = await fetch(request)
+    const response = await fetch(asClient(request))
     if (isCacheable(request, response) && isAutoCacheable(request)) {
       putFresh(cache, cacheKey(request), response.clone())
     }

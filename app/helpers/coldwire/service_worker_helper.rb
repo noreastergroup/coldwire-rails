@@ -16,7 +16,7 @@ module Coldwire
     #   could see, so signing out — or signing in as someone else — has to invalidate them.
     # * keeps the offline marker on <html> in step with the page Turbo just rendered.
     def coldwire_service_worker_tag
-      return coldwire_teardown_tag unless Coldwire.config.register?(self)
+      return unless Coldwire.config.register?(self)
 
       # Each fragment is a self-terminated statement. `})()` followed by `(function` on the
       # next line is a single call expression, not two statements — ASI does not save you —
@@ -102,44 +102,6 @@ module Coldwire
     # whole, so every write is mirrored in memory and read back from there when the store has
     # nothing. Without that a browser refusing to persist would leave the sync clock reading
     # zero, and every finished sync would be due again the instant it ended — a hot loop.
-    # A page that must not cache is also a page that must not leave a cache behind.
-    #
-    # Signing out is the case that matters. `register_if` turns false, and without this the
-    # worker registered by the session before it keeps running and keeps answering with that
-    # user's pages — so the app lands on a signed-in page it should have been redirected away
-    # from, and the person who signed out is still looking at their predecessor's data.
-    #
-    # Only Coldwire's own registration and cache: another worker on this origin is somebody
-    # else's business.
-    def coldwire_teardown_tag
-      javascript_tag(nonce: true) do
-        <<~JS.html_safe
-          (function () {
-            if ("caches" in window) caches.delete(#{Coldwire.config.cache_name.to_json});
-
-            // The sync clock and the identity go with it. Left behind, signing back in would
-            // find an empty cache and a recent stamp, and wait out a whole interval before
-            // filling it.
-            try {
-              Object.keys(window.localStorage)
-                .filter(function (key) { return key.indexOf("coldwire-") === 0 })
-                .forEach(function (key) { window.localStorage.removeItem(key) })
-            } catch (error) {
-              // Private mode. Nothing was stored to remove.
-            }
-
-            if (!("serviceWorker" in navigator)) return
-            navigator.serviceWorker.getRegistrations().then(function (registrations) {
-              registrations.forEach(function (registration) {
-                var script = (registration.active || registration.installing || {}).scriptURL || ""
-                if (script.indexOf(#{coldwire.service_worker_path.to_json}) !== -1) registration.unregister()
-              })
-            }).catch(function () {})
-          })();
-        JS
-      end
-    end
-
     def coldwire_store_script
       <<~JS
         (function () {

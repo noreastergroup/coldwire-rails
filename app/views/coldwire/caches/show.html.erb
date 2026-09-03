@@ -111,7 +111,9 @@
   .coldwire-input:focus-visible, .coldwire-select:focus-visible { outline: 2px solid #6b7280;
     outline-offset: 1px; }
 
+  /* The rule separates one download from the next; the first has nothing above it. */
   .coldwire-archive { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; }
+  .coldwire-archive:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
   .coldwire-archive-title { font-size: 0.9375rem; font-weight: 600; }
   /* The buttons used to sit under a status line that spaced them; they lead now. */
   .coldwire-archive .coldwire-actions { margin-top: 0.75rem; }
@@ -326,12 +328,6 @@
     <%# One row per configured file. The words are the app's — the page knows only that these
         are large, optional, and worth keeping. %>
     <div class="coldwire-card" data-coldwire-cache-target="archives">
-      <h2>Downloads</h2>
-      <p class="coldwire-facts" style="margin-top: 0;">
-        Too big to download on their own. Keep one on this device and it works with no
-        connection.
-      </p>
-
       <% Coldwire.config.cache_archives.each do |archive| %>
         <div class="coldwire-archive" data-archive-url="<%= archive[:url] %>">
           <div class="coldwire-archive-title"><%= archive[:title] %></div>

@@ -327,7 +327,8 @@ wrapping the route, or override `app/views/coldwire/caches/show.html.erb`.
 - **Auto Sync** — a switch to turn automatic syncing off for this device, remembered in
   `localStorage`, plus how often it runs, a live countdown, and progress. Switched off, no
   page in the app holds a sync timer; **Sync now** still runs a pass on demand.
-- **Downloads** — anything in `cache_archives`.
+- **Downloads** — one card per entry in `cache_archives`, with its title and description,
+  Download / Resume / Download again, Delete, and how much is on the device.
 - **Cached** — every entry with size and age, a filter box, and a sort. Tapping a row shows
   the whole URL; each row has a trash icon.
 

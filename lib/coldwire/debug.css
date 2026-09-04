@@ -110,6 +110,9 @@
 .coldwire-archive .coldwire-actions { margin-top: 0.75rem; }
 /* What pressing them got you, reading under them rather than above. */
 .coldwire-archive-meta { margin-top: 0.6rem; font-size: 0.8125rem; }
+/* Under the filter, because it answers what the filter asks. */
+.coldwire-count { margin: 0 0 0.6rem; }
+
 .coldwire-entries { list-style: none; margin: 0; padding: 0; max-height: 32rem; overflow-y: auto; }
 .coldwire-entries li + li { margin-top: 0.5rem; }
 .coldwire-entry { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }

@@ -4,19 +4,6 @@ import { sendToWorker } from "coldwire/worker"
 import { renderArchiveStatus, renderArchiveProgress, toggleArchiveBusy } from "coldwire/archives"
 import { describeEntry, describeCached, describeFinishedSync } from "coldwire/entries"
 
-// Headers before body: blob() on hundreds of entries makes listing the cache a multi-second
-// job. Note that `get` answers null for a missing header and Number(null) is 0, which sailed
-// through the guard and reported Active Storage's streamed blobs as empty.
-async function entrySize(response) {
-  if (!response) return 0
-
-  const declared = response.headers.get("Content-Length")
-  const bytes = declared === null ? NaN : Number(declared)
-  if (Number.isFinite(bytes) && bytes >= 0) return bytes
-
-  return (await response.clone().blob()).size
-}
-
 // Storage goes through the one wrapper the head snippet defines, so the page and the snippet
 // cannot disagree about where anything is kept. Without that snippet there is no service
 // worker either, so an inert stand-in is the honest degradation rather than a second
@@ -30,7 +17,6 @@ const INERT_STORE = {
   toggle: () => {}
 }
 const SYNC_MESSAGE = "coldwire:sync"
-const TIMESTAMP_HEADER = "timestamp"
 
 // Drives the Coldwire debug page: inspect the cache, precache the manifest, force offline.
 export default class extends Controller {
@@ -424,14 +410,17 @@ export default class extends Controller {
     this.setRefreshing(true)
 
     try {
-        this.renderAutoSync()
+      this.renderAutoSync()
       this.renderSyncedAt()
+
+      // What this page can answer by itself comes first: the cache is read directly and the
+      // probe is one request. Behind the worker questions they waited out a registration that
+      // may never arrive, and the page sat on "Checking…" with an empty list.
+      await this.renderCache()
+      await this.renderConnection()
+
       await this.syncForcedToWorker()
       await this.catchUpOnSync()
-      await this.renderCache()
-      // Last, and awaited: it waits on a network probe, so the button should still be
-      // spinning while it does.
-      await this.renderConnection()
     } catch (error) {
       // One unreadable cache entry used to abandon the rest of the refresh with nothing said,
       // which is indistinguishable from a button that does not work.

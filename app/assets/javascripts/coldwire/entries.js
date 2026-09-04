@@ -1,5 +1,11 @@
 // Wording for the cached list and for a finished sync.
 
+import { formatBytes } from "coldwire/format"
+
+// The worker stamps this on the request it stores under; the Cache API keeps no date
+// of its own.
+export const TIMESTAMP_HEADER = "timestamp"
+
 export function describeEntry(entry) {
   const parts = [ formatBytes(entry.size) ]
   if (entry.timestamp) parts.push(`cached ${formatCachedAt(entry.timestamp)}`)
@@ -33,4 +39,17 @@ export function describeFinishedSync(data) {
   if (!data.complete) parts.push(`${data.remaining} to retry`)
 
   return `${parts.join(", ")}.`
+}
+
+// Headers before body: blob() on hundreds of entries makes listing the cache a multi-second
+// job. Note that `get` answers null for a missing header and Number(null) is 0, which sailed
+// through the guard and reported Active Storage's streamed blobs as empty.
+async function entrySize(response) {
+  if (!response) return 0
+
+  const declared = response.headers.get("Content-Length")
+  const bytes = declared === null ? NaN : Number(declared)
+  if (Number.isFinite(bytes) && bytes >= 0) return bytes
+
+  return (await response.clone().blob()).size
 }

@@ -6,14 +6,10 @@ module Coldwire
     def show
     end
 
-    # The precache manifest. Internal JSON consumed by the Stimulus controller, not a
-    # page — the list can be long and is not meant to be rendered.
+    # The precache manifest. Never stored by anything: the worker asks with `cache: "no-store"`,
+    # but that binds only the one caller, and a browser serving a heuristically-fresh copy had
+    # syncs faithfully fetching yesterday's list.
     def pack
-      # Never stored, by anything. The worker asks for it with `cache: "no-store"`, but that
-      # only binds the one caller — a browser left to its own heuristics served a copy without
-      # asking, and a sync then faithfully fetched an old list, missing exactly the newly
-      # published pages it exists to pick up. `private` because this is built from what the
-      # signed-in user can see and belongs to nobody else.
       response.headers["Cache-Control"] = "no-store, private"
 
       render json: { urls: Array(precache_urls) }
@@ -21,10 +17,8 @@ module Coldwire
 
     private
 
-    # Evaluated against the host application's URL helpers, so `config.auto_sync.precache_urls` can
-    # say `site_path(site)` and mean the host's route rather than one of Coldwire's. A
-    # lambda that takes an argument is handed this controller, for `current_user` and the
-    # like.
+    # Evaluated against the host's URL helpers, so `site_path(site)` means the host's route
+    # rather than one of Coldwire's. A lambda that takes an argument is handed this controller.
     def precache_urls
       manifest = Coldwire.config.auto_sync.precache_urls
       helpers = ::Rails.application.routes.url_helpers

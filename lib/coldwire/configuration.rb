@@ -13,62 +13,37 @@ module Coldwire
     # response also sends `Service-Worker-Allowed` to widen it past that directory.
     attr_accessor :worker_scope
 
-    # The importmap module the offline page loads.
-    #
-    # Hotwire Native rejects any page where `window.Turbo` never appears — its adapter waits,
-    # times out, and reports "Turbo is not present". So the fallback cannot be plain HTML; it
-    # has to boot Turbo like a real page. Importing the whole app entry point would work but
-    # is fragile offline: if any module in that graph is uncached the graph fails to evaluate
-    # and Turbo never lands. Importing Turbo alone keeps the dependency to one file.
-    #
-    # Set to nil if you are not on importmap-rails, and override the offline page template to
-    # load Turbo whatever way your bundler does.
+    # The importmap module the offline page loads. Hotwire Native reports "Turbo is not
+    # present" for any page where `window.Turbo` never appears, so the fallback has to boot
+    # Turbo — and Turbo alone, since one uncached module would fail the whole graph. nil if
+    # you are not on importmap-rails; load it yourself in the template instead.
     attr_accessor :offline_import
 
-    # Mark HTML served from cache because the network was unavailable, so the page can say
-    # so. Adds `data-coldwire-offline` and `data-coldwire-cached-at` (unix seconds) to <html>,
-    # plus a matching <meta> that survives Turbo's head merge. Costs a body rewrite, but only
-    # on the offline path.
+    # Stamp HTML served from cache with `data-coldwire-offline` and `data-coldwire-cached-at`,
+    # plus a <meta> that survives Turbo's head merge, so a page can say it is stale.
     attr_accessor :mark_cached_pages
 
-    # Treat "/map" and "/map?lat=1&zoom=9" as the same cached page, both when matching and
-    # when storing. Blunt on purpose for now: it also collapses query strings that genuinely
-    # select content, like `/search?q=`, so a cached result set can be served for a different
-    # query. Set false if your app leans on query strings for anything you cache.
+    # Treat "/map" and "/map?zoom=9" as one cached page, matching and storing. Blunt: it also
+    # collapses `/search?q=`, so a cached result set can answer a different query.
     attr_accessor :ignore_query_params
 
-    # Path the debug page pings to tell online from offline.
-    #
-    # navigator.onLine only reports whether a network interface is up — in a web view it is
-    # true whenever wifi is on, so a stopped server still reads as online. The page has to
-    # actually reach something. Rails' health check is the cheapest thing that exists: no
-    # authentication, no database, and almost no response.
-    #
-    # Always excluded from interception. A probe answered by the worker resolves even when
-    # the network is down, which is precisely backwards.
+    # What the debug page pings to tell online from offline, because navigator.onLine only
+    # reports whether an interface is up. Never intercepted — a probe answered from the cache
+    # would resolve with the network down, which is precisely backwards.
     attr_accessor :probe_path
 
-    # Paths the worker must never intercept, as prefix strings. Health checks and anything
-    # streaming belong here. The engine's own paths are added automatically.
-    #
-    # Use this sparingly. An unintercepted request goes straight to the network, so offline
-    # it fails outright — in Hotwire Native that means the SDK's own error screen, not your
-    # offline page. If you only want to keep something out of the cache, use `cache_blocklist`.
+    # Paths the worker never intercepts, as prefix strings; the engine's own are added for
+    # you. Sparingly: these go straight to the network and so fail outright offline, showing
+    # the SDK's error screen rather than your offline page. To keep something merely out of
+    # the cache, use `cache_blocklist`.
     attr_accessor :never_intercept
 
-    # Which URLs automatic caching is allowed to store, and which it must not.
+    # What automatic caching may and may not store. Strings are route patterns — "/sites/:id"
+    # matches that shape and nothing beneath it — and Regexps are tested against the path by
+    # JavaScript's RegExp, so write `^`/`$` rather than `\A`/`\z`.
     #
-    # Both accept strings and Regexps. A string matches the path as a segment prefix, so
-    # "/users" covers "/users" and "/users/sign_in" but not "/username". A Regexp is tested
-    # against the path, and is evaluated by JavaScript's RegExp — write JS-compatible syntax
-    # (`^`/`$`, not `\A`/`\z`).
-    #
-    # An empty allowlist means "everything is allowed"; a non-empty one means "only these".
-    # The blocklist always wins.
-    #
-    # **These govern automatic caching only.** Anything in the precache manifest is stored
-    # regardless: listing a URL there is an explicit instruction, and quietly declining it
-    # would make the manifest unpredictable.
+    # An empty allowlist allows everything; the blocklist always wins. Neither governs the
+    # precache manifest: listing a URL there is an explicit instruction.
     attr_reader :cache_allowlist, :cache_blocklist
 
     def cache_allowlist=(patterns)
@@ -79,71 +54,45 @@ module Coldwire
       @cache_blocklist = validate_patterns(patterns, :cache_blocklist)
     end
 
-    # Decides whether a given request should register the worker at all. Receives the
-    # ActionDispatch::Request. Defaults to registering everywhere; a Hotwire Native app
-    # typically narrows this to the native user agent so browser tests stay uncached.
-    # Decides whether a page registers the worker at all — and so whether it caches, syncs,
-    # or does anything. Evaluated in the view, so both `request` and `current_user` are
-    # available:
+    # Whether a page registers the worker at all — and so whether it caches or syncs anything.
+    # Evaluated in the view, so `request` and `current_user` are both in scope:
     #
-    #   config.register_if = lambda do
-    #     request.user_agent.to_s.include?("Hotwire Native") && current_user.present?
-    #   end
-    #
-    # This is the one gate worth narrowing. Offline caching is for people using the app: a
-    # browser session has no need of it, and a signed-out visitor's cache is dropped the
-    # moment anyone signs in, so anything cached now is thrown away.
+    #   config.register_if = -> { hotwire_native_app? && current_user.present? }
     attr_writer :register_if
 
-    # Identifies who the cache belongs to — typically the signed-in user's id. Evaluated in
-    # the view, so `current_user` is available. When the value changes between page loads the
-    # cache is dropped, which is what makes signing out (or switching accounts) safe: cached
-    # pages hold whatever the previous session could see.
+    # Who the cache belongs to, usually the signed-in user's id. When it changes between page
+    # loads the cache is dropped, which is what makes signing out and switching accounts safe:
+    # cached pages hold whatever the previous session could see.
     attr_writer :cache_identity
 
-    # Origins besides your own that the worker may cache. Empty by default: a service worker
-    # sees every request a page makes, and quietly hoarding third-party responses is not a
-    # thing to do without being asked.
-    #
-    # The origin has to send CORS headers that name your app, or the response arrives opaque —
-    # status 0, no headers, no readable body — and there is nothing useful to store. For ranged
-    # sources it also has to expose Content-Range.
+    # Origins besides your own that the worker may cache. Each has to send CORS headers naming
+    # your app, or the response arrives opaque — status 0, no headers, no readable body — and
+    # there is nothing worth storing. Ranged sources must also expose Content-Range.
     attr_reader :cache_origins
 
     def cache_origins=(origins)
       @cache_origins = Array(origins).map { |origin| validate_origin(origin) }
     end
 
-    # URLs whose Range requests are cached piece by piece, keyed by the range.
-    #
-    # For a large immutable archive read a slice at a time — a PMTiles basemap, say — this is
-    # the difference between an offline map and nothing at all: the file itself may be hundreds
-    # of megabytes, while the slices actually read for the area you looked at are a rounding
-    # error next to it. Same patterns as the allowlist: route shapes or Regexps.
+    # URLs whose Range requests are cached piece by piece, keyed by the range — for a large
+    # immutable archive read a slice at a time, the slices you actually read are a rounding
+    # error next to the file. Same patterns as the allowlist.
     attr_reader :cache_ranges
 
     def cache_ranges=(patterns)
       @cache_ranges = validate_patterns(patterns, :cache_ranges) || Array(patterns)
     end
 
-    # Large files somebody can choose to keep on their device — a tile archive, an audio guide,
-    # a reference PDF. Each is described well enough for the debug page to offer it without
-    # knowing what it is:
+    # Large files somebody can choose to keep, each described well enough for the debug page
+    # to offer it without knowing what it is:
     #
     #   config.cache_archives = [
-    #     { url: "https://tiles.example.com/basemap.pmtiles",
-    #       title: "Offline map",
+    #     { url: "https://tiles.example.com/basemap.pmtiles", title: "Offline map",
     #       description: "The whole coast, rather than only the places you have opened." }
     #   ]
     #
-    # A bare URL works too; the title then falls back to the filename.
-    #
-    # Nothing downloads on its own. Hundreds of megabytes over somebody's connection is their
-    # decision, so this only makes a file offerable and something has to ask for it.
-    #
-    # Fetched in chunks, so a dropped connection resumes instead of starting again, and no
-    # single cache entry is enormous. Ranges are then served by slicing the chunks, which is
-    # cheap — a Blob slice references bytes rather than copying them.
+    # A bare URL works too, with the filename as the title. Nothing downloads on its own:
+    # hundreds of megabytes over somebody's connection is their decision.
     attr_reader :cache_archives
 
     def cache_archives=(archives)
@@ -155,18 +104,14 @@ module Coldwire
       cache_archives.map { |archive| archive[:url] }
     end
 
-    # Everything about keeping the cache current on its own.
+    # Keeping the cache current on its own. Grouped because these only mean anything together:
+    # a manifest with no interval is never fetched, an interval with no manifest has nothing
+    # to fetch.
     #
     #   config.auto_sync do |sync|
     #     sync.enabled = true
     #     sync.precache_urls = -> { Site.published.map { |site| site_path(site) } }
-    #     sync.interval = 6.hours
-    #     sync.max_age = 7.days
     #   end
-    #
-    # Grouped because these four only mean anything together: a manifest with no interval is
-    # never fetched, and an interval with no manifest has nothing to fetch. Reachable as
-    # `config.auto_sync.enabled = true` as well, for setting one thing.
     def auto_sync
       @auto_sync ||= AutoSync.new
       yield(@auto_sync) if block_given?
@@ -174,31 +119,26 @@ module Coldwire
       @auto_sync
     end
 
-    # WebKit has no Background Sync, Periodic Background Sync, or Background Fetch, so there
-    # is no true "wake up later" primitive in a Hotwire Native web view. What there is: a page
-    # load can hand work to the service worker, which then runs independently of that page. So
-    # syncing is triggered by an open page and paced, rather than scheduled.
+    # WebKit has no Background Sync, Periodic Background Sync or Background Fetch, so nothing
+    # can wake a worker. What a page load can do is hand work to one, which then runs on
+    # without it — so syncing is triggered by an open page and paced, not scheduled.
     class AutoSync
       # Off unless asked for. Background fetching is a decision about somebody's data plan.
       attr_accessor :enabled
 
-      # The pages to keep cached. Evaluated in the controller, so route helpers and the
-      # current user are both available.
+      # The pages to keep cached, evaluated in the controller so route helpers and the current
+      # user are both available.
       attr_accessor :precache_urls
 
       # How long to leave between syncs.
       attr_accessor :interval
 
-      # Refetch a page from the manifest once its cached copy is older than this. Without it a
-      # sync only ever fetches what is missing: new pages appear, and the ones already cached
-      # are never noticed to have changed. Set nil to do exactly that.
+      # Refetch a manifest page once its copy is older than this. nil fetches only what is
+      # missing, so pages already cached are never noticed to have changed.
       attr_accessor :max_age
 
-      # How many fetches run at once.
-      #
-      # A sync works through the whole manifest in one pass. Sequential would take as many
-      # round trips as there are URLs, and all-at-once would open a connection per URL and
-      # stall the app's own requests behind them — so a fixed number of lanes share a queue.
+      # Lanes sharing a queue: sequential would take a round trip per URL, and all at once
+      # would stall the app's own requests behind hundreds of connections.
       attr_accessor :concurrency
 
       def initialize

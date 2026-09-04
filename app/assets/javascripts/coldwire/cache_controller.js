@@ -1,14 +1,12 @@
 import { Controller } from "@hotwired/stimulus"
+import { formatBytes, formatCachedAt, formatDuration, formatInterval, displayUrl } from "coldwire/format"
+import { sendToWorker } from "coldwire/worker"
+import { renderArchiveStatus, renderArchiveProgress, toggleArchiveBusy } from "coldwire/archives"
+import { describeEntry, describeCached, describeFinishedSync } from "coldwire/entries"
 
-// Ask the headers before reading the body. A real cache is hundreds of entries and tens of
-// megabytes; blob() on every one of them turns listing the cache into a multi-second job that
-// makes the refresh button look broken. Content-Length is present on most of what Rails
-// serves, and the body is only read when it is not.
-//
-// `get` answers null for a header that is not there, and Number(null) is 0 — which sailed
-// straight through the guard below and reported the entry as empty rather than falling back to
-// the body. Active Storage's proxy streams its blobs with `send_stream`, so it sends no
-// Content-Length at all, and every proxied image measured 0 bytes.
+// Headers before body: blob() on hundreds of entries makes listing the cache a multi-second
+// job. Note that `get` answers null for a missing header and Number(null) is 0, which sailed
+// through the guard and reported Active Storage's streamed blobs as empty.
 async function entrySize(response) {
   if (!response) return 0
 
@@ -152,7 +150,7 @@ export default class extends Controller {
       this.syncSettled = true
 
       this.settleSync(data)
-      this.setSyncStatus(this.describeFinishedSync(data))
+      this.setSyncStatus(describeFinishedSync(data))
       this.hideProgress()
       this.toggleBusy(false)
       this.toggleSyncing(false)
@@ -170,7 +168,7 @@ export default class extends Controller {
   async catchUpOnSync() {
     let state = null
     try {
-      state = await this.sendToWorker("syncState", {}, 5000)
+      state = await sendToWorker("syncState", {}, 5000)
     } catch {
       // No worker yet, or an older one that does not answer. Nothing to catch up on.
       return
@@ -190,12 +188,9 @@ export default class extends Controller {
     this.handleSyncMessage({ data: last })
   }
 
-  // What a finished run means for the clock. Reached from the reply to this page's own
-  // request as well as from the broadcast, because a broadcast can go missing and the clock
-  // must not depend on one arriving: this page drives its own sync, so if it fails to record
-  // the outcome nothing else will, and it reads "Never synced" and re-syncs on every tick.
-  //
-  // Writing the same finishedAt twice is harmless, so hearing it both ways costs nothing.
+  // Reached from this page's own reply as well as from the broadcast, because a broadcast can
+  // go missing and this page drives its own sync — miss the outcome and it reads "Never
+  // synced" and re-syncs on every tick. Writing the same finishedAt twice is harmless.
   settleSync(data) {
     if (!data) return
 
@@ -212,31 +207,8 @@ export default class extends Controller {
     this.retryAfter = 0
   }
 
-  describeFinishedSync(data) {
-    // Nothing went wrong and nothing needs retrying — it was simply never asked to work.
-    if (data.offline) {
-      return data.reason === "forced"
-        ? "Paused while force offline is on."
-        : "No connection. Will sync when it is back."
-    }
-    if (data.error) return `Sync failed: ${data.error}`
-
-    const parts = [ `Cached ${data.cached}` ]
-    if (data.retired) parts.push(`retired ${data.retired}`)
-    if (data.failed?.length) parts.push(`${data.failed.length} failed`)
-    // A sync attempts the whole manifest, so anything left is something that would not
-    // fetch. It stays missing, so the next sync finds it and tries again.
-    if (!data.complete) parts.push(`${data.remaining} to retry`)
-
-    return `${parts.join(", ")}.`
-  }
-
-  // The same pass a page load kicks off by itself, minus the wait — the interval throttles
-  // only the automatic trigger, and asking by hand means now. The worker hands back the run
-  // already in flight rather than starting a second, so pressing this during a sync joins it.
-  //
-  // Progress and the closing summary arrive on the broadcast every page gets, so this run
-  // renders through handleSyncMessage exactly like one another tab started.
+  // The same pass a page load kicks off, minus the wait. The worker hands back the run already
+  // in flight rather than starting a second, so pressing this during a sync joins it.
   async syncNow(event) {
     event?.preventDefault()
     this.setStatus("")
@@ -249,13 +221,13 @@ export default class extends Controller {
     this.showProgress("Starting…")
 
     try {
-      const result = await this.sendToWorker("sync", {}, 10 * 60 * 1000)
+      const result = await sendToWorker("sync", {}, 10 * 60 * 1000)
 
       // The reply cannot be missed the way a broadcast can, so this is what the clock rests
       // on. If the broadcast did arrive it has already recorded the same thing.
       this.settleSync(result)
       this.renderSyncedAt()
-      if (!this.syncSettled) this.setSyncStatus(this.describeFinishedSync(result))
+      if (!this.syncSettled) this.setSyncStatus(describeFinishedSync(result))
     } catch (error) {
       // A sync that already reported itself finished has nothing to apologise for; the reply
       // channel simply did not survive to say so.
@@ -293,7 +265,7 @@ export default class extends Controller {
     }
 
     this.autoSyncTarget.textContent = this.syncIntervalValue > 0
-      ? `Every ${this.formatInterval(this.syncIntervalValue)}`
+      ? `Every ${formatInterval(this.syncIntervalValue)}`
       : "On"
   }
 
@@ -302,7 +274,7 @@ export default class extends Controller {
 
     const stamp = this.store.number(this.store.keys.syncedAt)
     const synced = stamp
-      ? `Synced ${this.formatCachedAt(Math.floor(stamp / 1000))}`
+      ? `Synced ${formatCachedAt(Math.floor(stamp / 1000))}`
       : "Never synced"
     const next = this.describeNextSync()
 
@@ -323,44 +295,12 @@ export default class extends Controller {
       let status = null
 
       try {
-        status = await this.sendToWorker("archiveStatus", { url: row.dataset.archiveUrl }, 15000)
+        status = await sendToWorker("archiveStatus", { url: row.dataset.archiveUrl }, 15000)
       } catch {
         // No worker yet. The row still names the file and offers the button.
       }
 
-      this.renderArchiveStatus(row, status)
-    }
-  }
-
-  renderArchiveStatus(row, status) {
-    const label = row.querySelector("[data-archive-status]")
-    const download = row.querySelector("[data-archive-download-label]")
-    const remove = row.querySelector("[data-archive-remove]")
-
-    if (!status || !status.ok) {
-      label.textContent = "Not downloaded"
-      remove.hidden = true
-      download.textContent = "Download"
-      return
-    }
-
-    remove.hidden = status.chunks === 0
-    download.textContent = status.complete ? "Download again" : status.chunks ? "Resume" : "Download"
-
-    if (status.complete) {
-      label.textContent = status.cachedAt
-        ? `${this.formatBytes(status.bytes)} · downloaded ${this.formatCachedAt(status.cachedAt)}`
-        : `${this.formatBytes(status.bytes)} · on this device`
-    } else if (status.chunks) {
-      // Partly downloaded is worth saying plainly: it is not broken, it stopped, and asking
-      // again carries on from there.
-      const share = status.expected ? Math.round((status.chunks / status.expected) * 100) : null
-      const stopped = status.cachedAt ? `, stopped ${this.formatCachedAt(status.cachedAt)}` : ""
-      label.textContent = share
-        ? `${this.formatBytes(status.bytes)} of ${this.formatBytes(status.total)} · ${share}%${stopped}`
-        : `${this.formatBytes(status.bytes)} downloaded · not finished${stopped}`
-    } else {
-      label.textContent = "Not downloaded"
+      renderArchiveStatus(row, status)
     }
   }
 
@@ -373,17 +313,17 @@ export default class extends Controller {
 
     const url = event.currentTarget.dataset.url
     const row = this.archiveRow(url)
-    this.toggleArchiveBusy(row, true)
+    toggleArchiveBusy(row, true)
 
     try {
-      const result = await this.sendToWorker("archiveDownload", { url }, 60 * 60 * 1000)
+      const result = await sendToWorker("archiveDownload", { url }, 60 * 60 * 1000)
       if (result && result.ok === false) {
         this.setStatus(result.offline ? "No connection — the download will resume when there is one." : (result.error || "Download failed"))
       }
     } catch (error) {
       this.setStatus(error.message || "Download failed")
     } finally {
-      this.toggleArchiveBusy(row, false)
+      toggleArchiveBusy(row, false)
       await this.renderArchives()
       await this.renderCache()
     }
@@ -396,7 +336,7 @@ export default class extends Controller {
     if (!window.confirm("Delete this download? It will have to be downloaded again to work offline.")) return
 
     try {
-      await this.sendToWorker("archiveRemove", { url }, 60000)
+      await sendToWorker("archiveRemove", { url }, 60000)
       this.setStatus("Deleted.")
     } catch (error) {
       this.setStatus(error.message || "Could not remove it")
@@ -414,38 +354,16 @@ export default class extends Controller {
     if (!row) return
 
     if (data.state === "progress") {
-      this.renderArchiveProgress(row, data.done, data.total)
+      renderArchiveProgress(row, data.done, data.total)
     } else if (data.state === "finished") {
-      this.toggleArchiveBusy(row, false)
+      toggleArchiveBusy(row, false)
       this.renderArchives()
     }
   }
 
-  renderArchiveProgress(row, done, total) {
-    const progress = row.querySelector("[data-archive-progress]")
-    const bar = row.querySelector("[data-archive-bar]")
-    const label = row.querySelector("[data-archive-progress-label]")
-
-    progress.hidden = false
-    const percent = total ? Math.round((done / total) * 100) : 0
-    bar.style.width = `${percent}%`
-    bar.classList.remove("coldwire-pulse")
-    progress.setAttribute("aria-valuenow", String(percent))
-    label.textContent = `${done} of ${total} pieces`
-  }
-
-  toggleArchiveBusy(row, busy) {
-    row.querySelector("[data-archive-spinner]").hidden = !busy
-    row.querySelectorAll("button").forEach((button) => { button.disabled = busy })
-    if (!busy) row.querySelector("[data-archive-progress]").hidden = true
-  }
-
-  // A page that shows a countdown had better act on it. The head snippet keeps its own timer
-  // for every other page in the app, but this page must not depend on it: the two are
-  // separate clocks, and when they disagreed the page sat there saying "due now" with
-  // nothing scheduled to do anything about it — and no way to tell from the page which of
-  // them had gone wrong. Now the countdown reaching zero *is* what starts the sync, so what
-  // the page says and what it does cannot come apart.
+  // A page that shows a countdown had better act on it. Two clocks disagreeing left the page
+  // saying "due now" with nothing scheduled to do anything about it, so the countdown reaching
+  // zero *is* what starts the sync here.
   tick() {
     this.renderSyncedAt()
 
@@ -498,28 +416,7 @@ export default class extends Controller {
 
     const seconds = Math.ceil((this.dueAt() - Date.now()) / 1000)
 
-    return seconds > 0 ? `next in ${this.formatDuration(seconds)}` : "due now"
-  }
-
-  // Whole words. "every 1 d" reads like a typo, and the cadence is the one number on this
-  // card somebody is meant to act on.
-  formatDuration(seconds) {
-    if (seconds < 60) return `${seconds} sec`
-    if (seconds < 3600) return this.plural(Math.round(seconds / 60), "min", "min")
-    if (seconds < 86400) return this.plural(Math.round(seconds / 3600), "hour")
-
-    return this.plural(Math.round(seconds / 86400), "day")
-  }
-
-  plural(count, one, many = `${one}s`) {
-    return `${count} ${count === 1 ? one : many}`
-  }
-
-  // "Every day", not "Every 1 day".
-  formatInterval(seconds) {
-    const text = this.formatDuration(seconds)
-
-    return text.startsWith("1 ") ? text.slice(2) : text
+    return seconds > 0 ? `next in ${formatDuration(seconds)}` : "due now"
   }
 
   async refresh(event) {
@@ -640,7 +537,7 @@ export default class extends Controller {
     }))
 
     try {
-      await this.sendToWorker("setForcedOffline", { value: enabled }, 5000)
+      await sendToWorker("setForcedOffline", { value: enabled }, 5000)
       this.setStatus(enabled ? "Forced offline is on. Requests will use the cache only." : "Forced offline is off.")
     } catch (error) {
       this.setStatus(error.message || "Could not update offline mode")
@@ -682,18 +579,15 @@ export default class extends Controller {
   async syncForcedToWorker() {
     if (!this.hasForcedToggleTarget) return
     try {
-      await this.sendToWorker("setForcedOffline", { value: this.forcedToggleTarget.checked }, 5000)
+      await sendToWorker("setForcedOffline", { value: this.forcedToggleTarget.checked }, 5000)
     } catch {
       // Worker may not be controlling yet; the checkbox still reflects local state.
     }
   }
 
-  // Ask the server, always.
-  //
-  // navigator.onLine answers "is a network interface up", which is not the question — and in
-  // a web view it is unreliable in both directions: true with the server stopped, and
-  // sometimes false while everything works. Consulting it at all meant the page could report
-  // Offline without ever checking. One HEAD to the health check is cheap and it is the truth.
+  // Ask the server, always. navigator.onLine answers "is an interface up", which in a web view
+  // is unreliable both ways — true with the server stopped, sometimes false while everything
+  // works. One HEAD to the health check is cheap and it is the truth.
   async renderConnection() {
     if (!this.hasConnectionTarget) return
 
@@ -758,7 +652,7 @@ export default class extends Controller {
       const spread = cacheCount > 1 ? ` · in ${cacheCount} caches` : ""
       this.summaryTarget.textContent = urlCount === 0
         ? "Nothing cached"
-        : `${urlCount} file${urlCount === 1 ? "" : "s"} cached · ${this.formatBytes(totalBytes)}${spread}`
+        : `${urlCount} file${urlCount === 1 ? "" : "s"} cached · ${formatBytes(totalBytes)}${spread}`
     }
 
     // Held so searching and sorting are pure display work. Reading the cache means asking
@@ -779,7 +673,7 @@ export default class extends Controller {
     const entries = this.entries || []
     const query = this.hasSearchTarget ? this.searchTarget.value.trim().toLowerCase() : ""
     const matches = query
-      ? entries.filter((entry) => this.displayUrl(entry.url).toLowerCase().includes(query))
+      ? entries.filter((entry) => displayUrl(entry.url).toLowerCase().includes(query))
       : entries
 
     this.entriesTarget.replaceChildren()
@@ -807,14 +701,14 @@ export default class extends Controller {
 
       const path = document.createElement("div")
       path.className = "coldwire-entry-url"
-      path.textContent = this.displayUrl(entry.url)
+      path.textContent = displayUrl(entry.url)
       path.title = entry.url
 
       const meta = document.createElement("div")
       meta.className = "coldwire-entry-meta"
       meta.textContent = entry.timestamp
-        ? `${this.formatBytes(entry.size)} · ${this.formatCachedAt(entry.timestamp)}`
-        : this.formatBytes(entry.size)
+        ? `${formatBytes(entry.size)} · ${formatCachedAt(entry.timestamp)}`
+        : formatBytes(entry.size)
       if (entry.timestamp) meta.title = new Date(entry.timestamp * 1000).toLocaleString()
 
       text.append(path, meta)
@@ -838,7 +732,7 @@ export default class extends Controller {
 
     if (this.hasDetailUrlTarget) this.detailUrlTarget.textContent = url
     if (this.hasDetailMetaTarget) {
-      this.detailMetaTarget.textContent = entry ? this.describeEntry(entry) : ""
+      this.detailMetaTarget.textContent = entry ? describeEntry(entry) : ""
     }
     if (this.hasDetailForgetTarget) {
       // The same handler the row button uses, so there is one way to remove an entry.
@@ -882,14 +776,6 @@ export default class extends Controller {
     if (event.target === this.detailTarget) this.closeDetail()
   }
 
-  describeEntry(entry) {
-    const parts = [ this.formatBytes(entry.size) ]
-    if (entry.timestamp) parts.push(`cached ${this.formatCachedAt(entry.timestamp)}`)
-    if (entry.cache) parts.push(`in “${entry.cache}”`)
-
-    return parts.join(" · ")
-  }
-
   buildForgetButton(entry) {
     if (!this.hasForgetTemplateTarget) return null
 
@@ -898,17 +784,14 @@ export default class extends Controller {
     if (entry.cache) button.dataset.cache = entry.cache
     // Unlabelled but for its shape, and there is one per row — so the path goes in the label
     // rather than a bare "Remove", which would read as a column of identical buttons.
-    button.setAttribute("aria-label", `Delete ${this.displayUrl(entry.url)} from the cache`)
+    button.setAttribute("aria-label", `Delete ${displayUrl(entry.url)} from the cache`)
     button.title = "Delete from the cache"
 
     return button
   }
 
-  // Deliberately without a confirmation. Clear cache asks because it throws away everything
-  // the app has to work with offline; one entry is a small, self-repairing loss — anything the
-  // manifest lists comes back on the next sync — and a prompt per row would be noise.
-  //
-  // Reached from the row's icon and from the dialog's Delete button alike.
+  // No confirmation: one entry is a small, self-repairing loss, since anything the manifest
+  // lists comes back on the next sync. Reached from the row's icon and the dialog alike.
   async forgetEntry(event) {
     event.preventDefault()
 
@@ -922,7 +805,7 @@ export default class extends Controller {
       await this.forgetUrl(url, cache)
       // Whether this came from the row or the dialog, the entry it was describing is gone.
       this.closeDetail()
-      this.setStatus(`Deleted ${this.displayUrl(url)}.`)
+      this.setStatus(`Deleted ${displayUrl(url)}.`)
       await this.renderCache()
     } catch (error) {
       button.disabled = false
@@ -940,13 +823,13 @@ export default class extends Controller {
       return
     }
 
-    await this.sendToWorker("forget", { url, cache: name }, 5000)
+    await sendToWorker("forget", { url, cache: name }, 5000)
   }
 
   // Sorted on a copy: `entries` is the cache as it was read, and re-sorting it in place would
   // make the order depend on whatever was picked last.
   sortEntries(entries) {
-    const byPath = (a, b) => this.displayUrl(a.url).localeCompare(this.displayUrl(b.url))
+    const byPath = (a, b) => displayUrl(a.url).localeCompare(displayUrl(b.url))
     const order = this.hasSortTarget ? this.sortTarget.value : "recent"
 
     if (order === "alphabetical") return entries.slice().sort(byPath)
@@ -980,7 +863,7 @@ export default class extends Controller {
           while (queue.length) {
             const { request, index } = queue.shift()
             const response = await cache.match(request, { ignoreVary: true })
-            entries[index] = await this.describeCached(request, response)
+            entries[index] = await describeCached(request, response)
           }
         }))
 
@@ -989,88 +872,19 @@ export default class extends Controller {
       return result
     }
 
-    const response = await this.sendToWorker("listCache", {}, 5000)
+    const response = await sendToWorker("listCache", {}, 5000)
     return response.caches || []
-  }
-
-  async describeCached(request, response) {
-    const seconds = Number(request.headers.get(TIMESTAMP_HEADER))
-
-    return {
-      url: request.url,
-      size: await entrySize(response),
-      timestamp: Number.isFinite(seconds) && seconds > 0 ? seconds : null
-    }
   }
 
   async clearCaches() {
     if ("caches" in window) {
       const names = await caches.keys()
       await Promise.all(names.map((name) => caches.delete(name)))
-      this.sendToWorker("clearCache", {}, 5000).catch(() => {})
+      sendToWorker("clearCache", {}, 5000).catch(() => {})
       return { ok: true, cleared: names.length }
     }
 
-    return this.sendToWorker("clearCache", {}, 5000)
-  }
-
-  displayUrl(href) {
-    try {
-      const url = new URL(href)
-      return `${url.pathname}${url.search}`
-    } catch {
-      return href
-    }
-  }
-
-  formatBytes(bytes) {
-    if (!Number.isFinite(bytes) || bytes < 0) return "—"
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) {
-      const kb = bytes / 1024
-      return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`
-    }
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-
-  formatCachedAt(timestamp) {
-    if (!timestamp) return "Unknown time"
-    const date = new Date(timestamp * 1000)
-    if (Number.isNaN(date.getTime())) return "Unknown time"
-
-    const deltaSec = Math.round((date.getTime() - Date.now()) / 1000)
-    const abs = Math.abs(deltaSec)
-    const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" })
-    if (abs < 60) return rtf.format(deltaSec, "second")
-    if (abs < 3600) return rtf.format(Math.round(deltaSec / 60), "minute")
-    if (abs < 86400) return rtf.format(Math.round(deltaSec / 3600), "hour")
-    if (abs < 86400 * 7) return rtf.format(Math.round(deltaSec / 86400), "day")
-    return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
-  }
-
-  async sendToWorker(type, payload, timeoutMs) {
-    if (!("serviceWorker" in navigator)) {
-      throw new Error("Service workers are not available in this web view")
-    }
-
-    const registration = await navigator.serviceWorker.ready
-    if (!registration.active) {
-      throw new Error("Service worker is not active yet. Reload and try again.")
-    }
-
-    return new Promise((resolve, reject) => {
-      const { port1, port2 } = new MessageChannel()
-      // A worker torn down mid-job answers nobody, so every send needs a way out. For a sync
-      // that is a backstop only: the run reports itself over the broadcast either way.
-      const timeout = window.setTimeout(() => reject(new Error("Timed out")), timeoutMs)
-
-      port1.onmessage = (event) => {
-        window.clearTimeout(timeout)
-        resolve(event.data)
-      }
-
-      registration.active.postMessage({ type, ...payload }, [ port2 ])
-    })
+    return sendToWorker("clearCache", {}, 5000)
   }
 
   setStatus(text) {

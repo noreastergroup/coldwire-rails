@@ -1,19 +1,17 @@
 # frozen_string_literal: true
 
 module Coldwire
-  # Serves the worker script itself. Deliberately does NOT inherit from the host's
-  # ApplicationController: the worker must be fetchable before anyone signs in, and any
-  # authentication filter here would break registration.
+  # Serves the worker script. Deliberately not the host's ApplicationController: the worker
+  # must be fetchable before anyone signs in, and an authentication filter would break
+  # registration.
   class ServiceWorkerController < ActionController::Base
-    # Rails guards JavaScript responses against cross-origin <script> embedding. The worker
-    # carries no user data and must be fetchable by the browser's worker loader, which is
-    # not an XHR, so that guard only rejects legitimate registrations.
+    # The worker carries no user data and is fetched by the browser's worker loader, not an
+    # XHR, so Rails' cross-origin script guard only rejects legitimate registrations.
     skip_forgery_protection
 
     def show
-      # A worker's scope is capped by the directory it is served from, so an engine mounted
-      # at /coldwire would only ever control /coldwire/*. This header lifts that cap; the
-      # registration snippet asks for the matching scope.
+      # A worker's scope is capped by the directory it is served from, so an engine mounted at
+      # /coldwire would only control /coldwire/*. This lifts the cap.
       response.headers["Service-Worker-Allowed"] = Coldwire.config.worker_scope
       response.headers["Cache-Control"] = "no-cache"
 

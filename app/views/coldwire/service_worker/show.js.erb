@@ -37,6 +37,11 @@ const OFFLINE_PAGE = untrack(<%= raw offline_page.to_json %>)
 const OFFLINE_FRAME_CONTENT = <%= raw offline_frame.to_json %>
 const RETRY_URL_TOKEN = "coldwire:retry-url"
 
+// Asking an open page to make a request on the cache's behalf, so it carries the agent the
+// app gave its web view. See fetchThroughClient.
+const CLIENT_FETCH_MESSAGE = "coldwire:fetch"
+const CLIENT_FETCH_TIMEOUT = 30000
+
 // Manifest sync.
 const PACK_PATH = <%= raw coldwire.pack_path.to_json %>
 const REFETCH_AFTER = <%= raw Coldwire.config.auto_sync.max_age ? Coldwire.config.auto_sync.max_age.to_i.to_json : "null" %>
@@ -804,7 +809,13 @@ async function fetchManifest() {
   let response
 
   try {
-    response = await fetch(PACK_PATH, {
+    const init = {
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: [ [ "Accept", "application/json" ] ]
+    }
+
+    response = (await fetchThroughClient(PACK_PATH, init)) || await fetch(PACK_PATH, {
       credentials: "same-origin",
       // The manifest has to describe the server as it is now. Left to the HTTP cache a
       // browser may serve a heuristically-fresh copy without asking, and a sync would then
@@ -930,9 +941,52 @@ async function precacheUrls(inputUrls, onProgress = () => {}) {
   return { ok: failed.length === 0, cached: cached.size, failed, pageFailures: pageFailures.length }
 }
 
+// Filling the cache through an open page rather than from here.
+//
+// A request carries the user agent of whoever makes it, and on Android that is the difference
+// between the app and a browser: Hotwire Native sets the agent on the web view, and a service
+// worker is not one — android.webkit.ServiceWorkerWebSettings has no such setting, so nothing
+// the app configures can reach these fetches. WebKit has no such split, which is why only
+// Android caches pages rendered for the wrong client: navigation chrome the app hides, and
+// none of the markup that depends on knowing it is the app.
+//
+// So the page fetches and hands back the pieces. Nothing is spoofed: the request really is
+// made by the app's web view, with its agent, its cookies and its session. Only the network
+// moves — the worker still decides what to fetch, keys it and stores it.
+async function fetchThroughClient(href, init = {}) {
+  const [ client ] = await self.clients.matchAll({ type: "window" })
+  if (!client) return null
+
+  const answer = await new Promise((resolve) => {
+    const channel = new MessageChannel()
+    // A page that navigates away mid-request answers nobody. Give up rather than hanging the
+    // pass; the caller falls back, and what is missing is found by the next one.
+    const timer = setTimeout(() => resolve(null), CLIENT_FETCH_TIMEOUT)
+
+    channel.port1.onmessage = (event) => {
+      clearTimeout(timer)
+      resolve(event.data)
+    }
+
+    client.postMessage({ type: CLIENT_FETCH_MESSAGE, url: href, init }, [ channel.port2 ])
+  })
+
+  if (!answer) return null
+  // A redirect is refused there rather than rebuilt here: a reconstructed Response always
+  // reports redirected: false, and storing one is what breaks a cold launch offline.
+  if (answer.redirected) throw new Error(`Redirected to ${answer.url}`)
+  if (!answer.ok) throw new Error(answer.error || "Client fetch failed")
+
+  return new Response(answer.body, {
+    status: answer.status,
+    statusText: answer.statusText,
+    headers: answer.headers
+  })
+}
+
 async function fetchAndCache(cache, href, { managed = false } = {}) {
   const request = new Request(href, { credentials: "same-origin" })
-  const response = await fetch(request)
+  const response = (await fetchThroughClient(href)) || (await fetch(request))
   if (!isCacheable(request, response)) {
     throw new Error(response.redirected ? `Redirected to ${response.url}` : `HTTP ${response.status}`)
   }

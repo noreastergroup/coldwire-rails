@@ -2,6 +2,7 @@
 
 require "coldwire/version"
 require "coldwire/configuration"
+require "coldwire/client_user_agent"
 require "coldwire/engine"
 
 module Coldwire

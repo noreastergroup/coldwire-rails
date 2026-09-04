@@ -220,6 +220,27 @@ that were in flight.
 
 ---
 
+## What the cache looks like to your server
+
+A request carries the user agent of whoever makes it, and a service worker is not the page. On
+Android that is the difference between the app and a browser: Hotwire Native sets the agent on
+the web view, and `android.webkit.ServiceWorkerWebSettings` has no such setting — it offers
+content access, file access, network blocking and cache mode, and nothing else — so nothing the
+app configures reaches a worker's fetches. They cannot set one either: Chromium drops a
+`User-Agent` given to `fetch`. WebKit has no such split, which is why only Android is affected.
+
+Left alone, an Android app's cache fills with pages rendered for a browser: navigation chrome
+the app hides, and none of the markup that depends on knowing it is the app.
+
+A cookie is the one thing the browser attaches by itself to every same-origin request, whoever
+makes it. So each page writes its own user agent into `coldwire-user-agent`, and a middleware
+reads it back before anything else in the stack runs. `hotwire_native_app?`, your layout and
+`register_if` then see the client the request actually came from.
+
+Nothing to configure, and no new trust: the user agent was always the client's to state, and a
+cookie is as much the client's as the header is — written by a page in the same browser
+profile, which is the same client the request comes from.
+
 ## Large files
 
 Some things are too big to cache as a matter of course but worth keeping if somebody asks — a

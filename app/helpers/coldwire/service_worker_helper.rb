@@ -5,6 +5,8 @@ module Coldwire
     OFFLINE_ATTRIBUTE = "data-coldwire-offline"
     CACHED_AT_ATTRIBUTE = "data-coldwire-cached-at"
     CHANGE_EVENT = "coldwire:change"
+    # Read back by Coldwire::ClientUserAgent, on the requests a worker makes.
+    USER_AGENT_COOKIE = "coldwire-user-agent"
 
     # Drop this in your layout's <head>. Emits nothing when `register_if` says this request
     # should not be caching — that check happens server side so no dead JS ships at all.
@@ -23,7 +25,7 @@ module Coldwire
       # so a missing semicolon here throws and takes the registration down with it.
       safe_join([ coldwire_sync_interval_meta, javascript_tag(nonce: true) do
         [ coldwire_store_script, coldwire_api_script, coldwire_identity_script,
-          coldwire_cached_page_marker_script,
+          coldwire_cached_page_marker_script, coldwire_user_agent_cookie_script,
           coldwire_forced_offline_script, coldwire_auto_sync_script, coldwire_register_script ]
           .compact
           .join("\n")
@@ -102,6 +104,36 @@ module Coldwire
     # whole, so every write is mirrored in memory and read back from there when the store has
     # nothing. Without that a browser refusing to persist would leave the sync clock reading
     # zero, and every finished sync would be due again the instant it ended — a hot loop.
+    # Leaving the app's user agent somewhere its own service worker's requests will carry it.
+    #
+    # A request carries the agent of whoever makes it, and a worker is not the page. On Android
+    # that is the difference between the app and a browser: Hotwire Native sets the agent on
+    # the web view, and `android.webkit.ServiceWorkerWebSettings` has no such setting, so
+    # nothing the app configures reaches a worker's fetches. They cannot set one either —
+    # Chromium drops a User-Agent given to `fetch`.
+    #
+    # A cookie is the one thing the browser attaches by itself to every same-origin request,
+    # whoever makes it. So the page writes what it is, and Coldwire::ClientUserAgent puts it
+    # back where the server looks. Nothing is invented: the value is this web view's own agent,
+    # travelling by the only road open to it.
+    def coldwire_user_agent_cookie_script
+      <<~JS
+        (function () {
+          try {
+            var name = #{USER_AGENT_COOKIE.to_json}
+            var value = encodeURIComponent(navigator.userAgent)
+            // Rewritten only when it has changed — an app update, or a first run.
+            if (document.cookie.indexOf(name + "=" + value) !== -1) return
+
+            document.cookie = name + "=" + value + "; path=/; max-age=31536000; samesite=lax"
+          } catch (error) {
+            // Cookies refused. The worker's requests will look like a browser's, which is
+            // where this started.
+          }
+        })();
+      JS
+    end
+
     def coldwire_store_script
       <<~JS
         (function () {

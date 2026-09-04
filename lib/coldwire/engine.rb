@@ -19,6 +19,12 @@ module Coldwire
       end
     end
 
+    # Ahead of everything, so whatever asks whether this is the native app — the layout, the
+    # helpers, `register_if` — sees the client the request actually came from.
+    initializer "coldwire.client_user_agent" do |app|
+      app.config.middleware.insert_before 0, Coldwire::ClientUserAgent
+    end
+
     initializer "coldwire.helpers" do
       ActiveSupport.on_load(:action_controller_base) do
         helper Coldwire::ServiceWorkerHelper

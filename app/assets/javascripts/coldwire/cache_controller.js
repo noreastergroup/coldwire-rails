@@ -94,6 +94,7 @@ export default class extends Controller {
   }
 
   disconnect() {
+    window.cancelAnimationFrame(this.painting)
     window.clearInterval(this.ticker)
     if ("serviceWorker" in navigator && this.onArchiveMessage) {
       navigator.serviceWorker.removeEventListener("message", this.onArchiveMessage)
@@ -632,8 +633,14 @@ export default class extends Controller {
     // Held so searching and sorting are pure display work. Reading the cache means asking
     // every entry for its headers, which is slow enough to feel broken if it happened on each
     // keystroke.
+    // The path and its lowercase form are derived once here. Both used to be recomputed for
+    // every row on every keystroke, and `new URL()` 485 times is 19ms of it.
     this.entries = cachesInfo.flatMap((cache) =>
-      (cache.entries || []).map((entry) => ({ ...entry, cache: cache.name })))
+      (cache.entries || []).map((entry) => {
+        const path = displayUrl(entry.url)
+
+        return { ...entry, cache: cache.name, path, search: path.toLowerCase() }
+      }))
     this.cacheCount = cachesInfo.length
 
     this.renderEntries()
@@ -684,10 +691,11 @@ export default class extends Controller {
     const entries = this.entries || []
     const query = this.hasSearchTarget ? this.searchTarget.value.trim().toLowerCase() : ""
     const matches = query
-      ? entries.filter((entry) => displayUrl(entry.url).toLowerCase().includes(query))
+      ? entries.filter((entry) => entry.search.includes(query))
       : entries
 
     this.renderSummary(matches, entries)
+    window.cancelAnimationFrame(this.painting)
     this.entriesTarget.replaceChildren()
 
     if (matches.length === 0) {
@@ -700,37 +708,59 @@ export default class extends Controller {
       return
     }
 
-    this.sortEntries(matches).forEach((entry) => {
-      const item = document.createElement("li")
-      item.className = "coldwire-entry"
+    this.paintRows(this.sortEntries(matches))
+  }
 
-      const text = document.createElement("button")
-      text.type = "button"
-      text.className = "coldwire-entry-text"
-      text.dataset.url = entry.url
-      if (entry.cache) text.dataset.cache = entry.cache
-      text.dataset.action = "click->coldwire-cache#showDetail"
+  // A few rows at a time. Building all of them costs a third of a second for a real manifest,
+  // and doing that between keystrokes is what made typing feel stuck — the first chunk lands
+  // immediately, the rest arrive over the following frames, and the next keystroke cancels
+  // whatever is left rather than queueing behind it.
+  paintRows(rows) {
+    const CHUNK = 50
+    let index = 0
 
-      const path = document.createElement("div")
-      path.className = "coldwire-entry-url"
-      path.textContent = displayUrl(entry.url)
-      path.title = entry.url
+    const paint = () => {
+      const fragment = document.createDocumentFragment()
+      for (const entry of rows.slice(index, index + CHUNK)) fragment.append(this.buildRow(entry))
+      this.entriesTarget.append(fragment)
 
-      const meta = document.createElement("div")
-      meta.className = "coldwire-entry-meta"
-      meta.textContent = entry.timestamp
-        ? `${formatBytes(entry.size)} · ${formatCachedAt(entry.timestamp)}`
-        : formatBytes(entry.size)
-      if (entry.timestamp) meta.title = new Date(entry.timestamp * 1000).toLocaleString()
+      index += CHUNK
+      this.painting = index < rows.length ? window.requestAnimationFrame(paint) : null
+    }
 
-      text.append(path, meta)
-      item.append(text)
+    paint()
+  }
 
-      const forget = this.buildForgetButton(entry)
-      if (forget) item.append(forget)
+  buildRow(entry) {
+    const item = document.createElement("li")
+    item.className = "coldwire-entry"
 
-      this.entriesTarget.append(item)
-    })
+    const text = document.createElement("button")
+    text.type = "button"
+    text.className = "coldwire-entry-text"
+    text.dataset.url = entry.url
+    if (entry.cache) text.dataset.cache = entry.cache
+    text.dataset.action = "click->coldwire-cache#showDetail"
+
+    const path = document.createElement("div")
+    path.className = "coldwire-entry-url"
+    path.textContent = entry.path
+    path.title = entry.url
+
+    const meta = document.createElement("div")
+    meta.className = "coldwire-entry-meta"
+    meta.textContent = entry.timestamp
+      ? `${formatBytes(entry.size)} · ${formatCachedAt(entry.timestamp)}`
+      : formatBytes(entry.size)
+    if (entry.timestamp) meta.title = new Date(entry.timestamp * 1000).toLocaleString()
+
+    text.append(path, meta)
+    item.append(text)
+
+    const forget = this.buildForgetButton(entry)
+    if (forget) item.append(forget)
+
+    return item
   }
 
   // A row can only ellipsise; the whole URL has to be readable somewhere, and this is it.
@@ -841,7 +871,7 @@ export default class extends Controller {
   // Sorted on a copy: `entries` is the cache as it was read, and re-sorting it in place would
   // make the order depend on whatever was picked last.
   sortEntries(entries) {
-    const byPath = (a, b) => displayUrl(a.url).localeCompare(displayUrl(b.url))
+    const byPath = (a, b) => a.path.localeCompare(b.path)
     const order = this.hasSortTarget ? this.sortTarget.value : "recent"
 
     if (order === "alphabetical") return entries.slice().sort(byPath)

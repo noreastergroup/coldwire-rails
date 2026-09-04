@@ -26,6 +26,7 @@ export default class extends Controller {
     "connection",
     "connectionLight",
     "summary",
+    "total",
     "entries",
     "forcedToggle",
     "autoSyncToggle",
@@ -644,26 +645,37 @@ export default class extends Controller {
 
   // Counts what is on screen, so filtering answers "how many match" rather than leaving the
   // total sitting above a list of three.
+  // Two figures, because they answer different questions. The header says what the device is
+  // holding; the line under the filter says how much of it you are looking at.
   renderSummary(matches, entries) {
-    if (!this.hasSummaryTarget) return
-
     // Every cache the origin has is listed, not only ours, and a URL held in two of them is
     // two rows reading as one page cached twice. Bumping cache_name leaves the old one
     // behind, so say when there is more than one rather than leaving that unexplained.
     const spread = this.cacheCount > 1 ? ` · in ${this.cacheCount} caches` : ""
+
+    if (this.hasTotalTarget) {
+      this.totalTarget.textContent = entries.length === 0
+        ? "Nothing cached"
+        : `${plural(entries.length, "file")} cached · ${formatBytes(this.totalBytes(entries))}${spread}`
+    }
+
+    if (!this.hasSummaryTarget) return
 
     if (entries.length === 0) {
       this.summaryTarget.textContent = "Nothing cached"
       return
     }
 
-    const bytes = matches.reduce((sum, entry) => sum + (entry.size || 0), 0)
-    const size = matches.length === 0 ? "" : ` · ${formatBytes(bytes)}`
+    const size = matches.length === 0 ? "" : ` · ${formatBytes(this.totalBytes(matches))}`
     const count = matches.length === entries.length
       ? `${plural(entries.length, "file")} cached`
       : `${matches.length} of ${plural(entries.length, "file")}`
 
-    this.summaryTarget.textContent = `${count}${size}${spread}`
+    this.summaryTarget.textContent = `${count}${size}`
+  }
+
+  totalBytes(entries) {
+    return entries.reduce((sum, entry) => sum + (entry.size || 0), 0)
   }
 
   renderEntries() {

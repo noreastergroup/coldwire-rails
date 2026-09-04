@@ -1,5 +1,7 @@
 // The download rows: what each one says, and what it looks like mid-download.
 
+import { formatBytes, formatCachedAt } from "coldwire/format"
+
 export function renderArchiveStatus(row, status) {
   const label = row.querySelector("[data-archive-status]")
   const download = row.querySelector("[data-archive-download-label]")

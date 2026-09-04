@@ -1,6 +1,6 @@
 // Wording for the cached list and for a finished sync.
 
-import { formatBytes } from "coldwire/format"
+import { formatBytes, formatCachedAt } from "coldwire/format"
 
 // The worker stamps this on the request it stores under; the Cache API keeps no date
 // of its own.

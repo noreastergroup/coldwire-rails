@@ -220,24 +220,6 @@ that were in flight.
 
 ---
 
-## What the cache looks like to your server
-
-A request carries the user agent of whoever makes it, and a service worker is not the page.
-On Android that is the difference between the app and a browser: Hotwire Native sets the agent
-on the web view, and `android.webkit.ServiceWorkerWebSettings` has no such setting, so nothing
-the app configures reaches a worker's own fetches. WebKit has no such split — there the agent
-belongs to the configuration the worker shares, and everything inherits it.
-
-Left alone, an Android app's cache therefore fills with pages rendered for a browser:
-navigation chrome the app hides, and none of the markup that depends on knowing it is the app.
-
-So Coldwire fills the cache **through an open page**. The worker still decides what to fetch,
-keys it and stores it; only the network moves. The request really is the app's — its agent,
-its cookies, its session — rather than something dressed up as it, and nothing needs
-configuring on either side.
-
-With no page open the worker falls back to fetching for itself, which is what it always did.
-
 ## Large files
 
 Some things are too big to cache as a matter of course but worth keeping if somebody asks — a

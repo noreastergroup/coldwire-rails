@@ -5,8 +5,6 @@ module Coldwire
     OFFLINE_ATTRIBUTE = "data-coldwire-offline"
     CACHED_AT_ATTRIBUTE = "data-coldwire-cached-at"
     CHANGE_EVENT = "coldwire:change"
-    # Named the same in the worker, which sends it.
-    CLIENT_FETCH_MESSAGE = "coldwire:fetch"
 
     # Drop this in your layout's <head>. Emits nothing when `register_if` says this request
     # should not be caching — that check happens server side so no dead JS ships at all.
@@ -25,7 +23,7 @@ module Coldwire
       # so a missing semicolon here throws and takes the registration down with it.
       safe_join([ coldwire_sync_interval_meta, javascript_tag(nonce: true) do
         [ coldwire_store_script, coldwire_api_script, coldwire_identity_script,
-          coldwire_cached_page_marker_script, coldwire_client_fetch_script,
+          coldwire_cached_page_marker_script,
           coldwire_forced_offline_script, coldwire_auto_sync_script, coldwire_register_script ]
           .compact
           .join("\n")
@@ -104,70 +102,6 @@ module Coldwire
     # whole, so every write is mirrored in memory and read back from there when the store has
     # nothing. Without that a browser refusing to persist would leave the sync clock reading
     # zero, and every finished sync would be due again the instant it ended — a hot loop.
-    # Fetching on the worker's behalf.
-    #
-    # A request carries the user agent of whoever makes it. On Android the worker's own are a
-    # plain web view — Hotwire Native sets the agent on the WebView, and a service worker is
-    # not one, so nothing the app configures reaches them — and the cache filled with pages
-    # rendered for a browser. This page has the agent, so the worker asks it, and the request
-    # really is the app's rather than something dressed as it.
-    #
-    # Every page carries this, not just the debug page: the worker asks whichever one is open.
-    def coldwire_client_fetch_script
-      <<~JS
-        (function () {
-          if (!("serviceWorker" in navigator)) return
-          if (window.__coldwireClientFetch) return
-          window.__coldwireClientFetch = true
-
-          navigator.serviceWorker.addEventListener("message", function (event) {
-            var data = event.data
-            if (!data || data.type !== #{CLIENT_FETCH_MESSAGE.to_json}) return
-
-            var port = event.ports[0]
-            if (!port) return
-
-            var init = data.init || {}
-
-            fetch(data.url, {
-              credentials: init.credentials || "same-origin",
-              cache: init.cache || "default",
-              headers: new Headers(init.headers || [])
-            }).then(function (response) {
-              // Refused here rather than rebuilt there: a Response put back together from
-              // these pieces always reports redirected: false, and storing a redirect is what
-              // leaves a cold launch offline with nothing to serve.
-              if (response.redirected) {
-                port.postMessage({ ok: false, redirected: true, url: response.url })
-                return
-              }
-
-              return response.arrayBuffer().then(function (body) {
-                var headers = []
-                response.headers.forEach(function (value, key) { headers.push([ key, value ]) })
-
-                // The body is transferred rather than copied, so a sync of hundreds of pages
-                // costs no more here than it would have in the worker.
-                port.postMessage({
-                  ok: true,
-                  status: response.status,
-                  statusText: response.statusText,
-                  headers: headers,
-                  body: body
-                }, [ body ])
-              })
-            }).catch(function (error) {
-              port.postMessage({ ok: false, error: error.message })
-            })
-          })
-
-          // A ServiceWorkerContainer starts with its message queue disabled; a listener alone
-          // hears nothing until this is called.
-          if (navigator.serviceWorker.startMessages) navigator.serviceWorker.startMessages()
-        })();
-      JS
-    end
-
     def coldwire_store_script
       <<~JS
         (function () {

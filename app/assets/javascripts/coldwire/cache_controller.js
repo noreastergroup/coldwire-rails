@@ -1,5 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
-import { formatBytes, formatCachedAt, formatDuration, formatInterval, displayUrl } from "coldwire/format"
+import { formatBytes, formatCachedAt, formatDuration, formatInterval, displayUrl, plural } from "coldwire/format"
 import { sendToWorker } from "coldwire/worker"
 import { renderArchiveStatus, renderArchiveProgress, toggleArchiveBusy } from "coldwire/archives"
 import { describeEntry, describeCached, describeFinishedSync } from "coldwire/entries"
@@ -627,33 +627,43 @@ export default class extends Controller {
 
   async renderCache() {
     const cachesInfo = await this.listCaches()
-    const entries = cachesInfo.flatMap((cache) =>
-      (cache.entries || []).map((entry) => ({ ...entry, cache: cache.name })))
-    const totalBytes = entries.reduce((sum, entry) => sum + (entry.size || 0), 0)
-
-    if (this.hasSummaryTarget) {
-      const cacheCount = cachesInfo.length
-      const urlCount = entries.length
-      // This lists every cache the origin has, not only ours, and a URL held in two of them
-      // is two rows that read as one page cached twice. Bumping cache_name leaves the old
-      // one behind, so say when there is more than one rather than leaving the duplicate
-      // unexplained.
-      const spread = cacheCount > 1 ? ` · in ${cacheCount} caches` : ""
-      this.summaryTarget.textContent = urlCount === 0
-        ? "Nothing cached"
-        : `${urlCount} file${urlCount === 1 ? "" : "s"} cached · ${formatBytes(totalBytes)}${spread}`
-    }
 
     // Held so searching and sorting are pure display work. Reading the cache means asking
     // every entry for its headers, which is slow enough to feel broken if it happened on each
     // keystroke.
-    this.entries = entries
+    this.entries = cachesInfo.flatMap((cache) =>
+      (cache.entries || []).map((entry) => ({ ...entry, cache: cache.name })))
+    this.cacheCount = cachesInfo.length
 
     this.renderEntries()
   }
 
   filterEntries() {
     this.renderEntries()
+  }
+
+  // Counts what is on screen, so filtering answers "how many match" rather than leaving the
+  // total sitting above a list of three.
+  renderSummary(matches, entries) {
+    if (!this.hasSummaryTarget) return
+
+    // Every cache the origin has is listed, not only ours, and a URL held in two of them is
+    // two rows reading as one page cached twice. Bumping cache_name leaves the old one
+    // behind, so say when there is more than one rather than leaving that unexplained.
+    const spread = this.cacheCount > 1 ? ` · in ${this.cacheCount} caches` : ""
+
+    if (entries.length === 0) {
+      this.summaryTarget.textContent = "Nothing cached"
+      return
+    }
+
+    const bytes = matches.reduce((sum, entry) => sum + (entry.size || 0), 0)
+    const size = matches.length === 0 ? "" : ` · ${formatBytes(bytes)}`
+    const count = matches.length === entries.length
+      ? `${plural(entries.length, "file")} cached`
+      : `${matches.length} of ${plural(entries.length, "file")}`
+
+    this.summaryTarget.textContent = `${count}${size}${spread}`
   }
 
   renderEntries() {
@@ -665,6 +675,7 @@ export default class extends Controller {
       ? entries.filter((entry) => displayUrl(entry.url).toLowerCase().includes(query))
       : entries
 
+    this.renderSummary(matches, entries)
     this.entriesTarget.replaceChildren()
 
     if (matches.length === 0) {

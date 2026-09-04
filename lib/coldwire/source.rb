@@ -19,8 +19,12 @@ module Coldwire
       end
 
       # The page-side script: the values it cannot know, then whichever parts this page needs.
+      #
+      # A property rather than a const. Turbo copies head scripts it does not recognise, and a
+      # per-request CSP nonce makes this one look new on every visit — a second `const COLDWIRE`
+      # in the same document is a SyntaxError, and the whole script dies with it.
       def client(config, parts)
-        assemble([ "const COLDWIRE = #{config.to_json};" ] + parts.map { |part| read("client/#{part}.js") })
+        assemble([ "window.COLDWIRE = #{config.to_json};" ] + parts.map { |part| read("client/#{part}.js") })
       end
 
       def debug_css

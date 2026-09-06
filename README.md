@@ -137,7 +137,7 @@ config.register_if = -> { request.user_agent.to_s.include?("Hotwire Native") && 
 
 | Request | Behavior |
 |---|---|
-| An allowlisted path | Network-first. Recached on every view; falls back to cache when the network fails |
+| HTML page | Network-first. Recached on every view; falls back to cache when the network fails |
 | Assets (CSS, JS, images) | Cache-first |
 | Cross-origin | Passed through, unless the origin is in `cache_origins` |
 | `Range` (tiles, media) | Passed through, unless the URL matches `cache_ranges` |
@@ -152,13 +152,6 @@ config.register_if = -> { request.user_agent.to_s.include?("Hotwire Native") && 
 config.cache_allowlist = [ "/sites", "/sites/:id", "/sites/:id/card" ]
 config.cache_blocklist = [ "/users/:id/edit", %r{^/admin(/|$)} ]
 ```
-
-The allowlist is also what decides *freshness*, not just what may be stored. An allowlisted
-path keeps its address while its contents change, so it is refetched whenever there is a
-network and the cached copy is the fallback. An asset's address changes with its contents —
-a new build is a new digest — so refetching one could only ever return what is already held,
-and it is served from the cache. That applies to JSON as much as to HTML: a URL you serve
-data from is a surface, and listing it keeps a cached copy from outliving the data.
 
 A **string** is a route pattern, and matches that shape and nothing else:
 

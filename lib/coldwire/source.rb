@@ -33,11 +33,8 @@ module Coldwire
 
       private
 
-      # Spelled out rather than left to the host's locale: these files have em dashes in them,
-      # and a server running under a C locale would otherwise read them as US-ASCII and raise
-      # on the first one.
       def read(path)
-        ROOT.join(path).read(encoding: "UTF-8")
+        ROOT.join(path).read
       end
 
       # Each fragment is self-terminated. `})()` followed by `(function` reads as one call

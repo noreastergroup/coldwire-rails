@@ -95,9 +95,13 @@ Coldwire.configure do |config|
   config.offline_import = "@hotwired/turbo-rails"
 
   # What automatic caching may store. Strings are route patterns, Regexps are tested against
-  # the path. An empty allowlist allows everything; the blocklist always wins.
-  config.cache_allowlist = []
-  config.cache_blocklist = []
+  # the path. An empty `cacheable` allows everything; `never_cacheable` always wins.
+  config.cacheable = []
+  config.never_cacheable = []
+
+  # Which stored responses answer without asking the network. Digested addresses, so a stored
+  # copy is the current one. Everything else is fetched fresh with the cache behind it.
+  config.cache_first = [ "/assets/*", "/packs/*", "/vite/*", "/rails/active_storage/*" ]
 
   # Never intercepted, so these fail outright offline. Coldwire's own routes are added for you.
   config.never_intercept = [ "/up" ]  # probe_path is added for you
@@ -137,39 +141,41 @@ config.register_if = -> { request.user_agent.to_s.include?("Hotwire Native") && 
 
 | Request | Behavior |
 |---|---|
-| HTML page | Network-first. Recached on every view; falls back to cache when the network fails |
-| Assets (CSS, JS, images) | Cache-first |
-| Listed in `cache_revalidate` | Network-first, like a page |
-| Cross-origin | Passed through, unless the origin is in `cache_origins` |
+| Matches `cache_first` (assets, by default) | Answered from the cache when there is a copy |
+| Everything else, pages included | Network-first. Recached on every view; falls back to cache when the network fails |
+| Cross-origin | Passed through, unless the origin is in `cache_origins` — then cache-first |
 | `Range` (tiles, media) | Passed through, unless the URL matches `cache_ranges` |
 | Non-GET | Passed through |
 | Redirected response | Never stored |
-| Blocklisted, or not allowlisted | Not stored automatically; still cacheable via the manifest |
+| In `never_cacheable`, or absent from a non-empty `cacheable` | Not stored automatically; still cacheable via the manifest |
 | Query strings | Ignored by default, when matching *and* when storing |
 
-### Keeping a URL fresh
+### Cache-first, and everything else
 
-Cache-first is right for anything whose address changes with its contents: an asset carries a
-digest, so a cached copy *is* the current one. It is wrong for a URL you serve data from —
-that keeps its address while the data moves underneath it, and a cached copy quietly outlives
-it until the next sync.
+Two different questions, and Coldwire keeps them apart. `cacheable` decides what may be
+**stored**. `cache_first` decides how long a stored thing is allowed to **speak for**.
 
 ```ruby
-config.cache_revalidate = [ "/map/:kind" ]
+config.cache_first = [ "/assets/*", "/packs/*", "/vite/*", "/rails/active_storage/*" ]
 ```
 
-Same patterns as the lists below. A URL named here is fetched fresh whenever there is a
-network, with the cache as the fallback, exactly as a page already is.
+The test is whether the address outlives its contents. A digest in the URL means it does not,
+so the copy in hand is by definition the current one and fetching it again could only return
+it a second time. Anything else — a page, a JSON endpoint, an image at a fixed path — keeps
+its address while its contents move, so it is fetched fresh with the cache as the fallback.
 
-Empty by default, and deliberately not inferred from the allowlist: an empty allowlist means
-"store anything", and reading that as "revalidate everything" would put every stylesheet in
-the app behind a network round trip.
+The defaults are where Rails puts digested files. Add to them if you serve your own from
+somewhere else, and leave a URL out to keep it fresh. Same patterns as the lists below.
 
-### Allow and block lists
+Other origins named in `cache_origins` are always cache-first: you opted the whole origin in,
+its URLs are not yours to describe, and a CDN names its versions in the path. Refetching them
+would mean a round trip for every glyph and tile a map asks for.
+
+### What may be stored
 
 ```ruby
-config.cache_allowlist = [ "/sites", "/sites/:id", "/sites/:id/card" ]
-config.cache_blocklist = [ "/users/:id/edit", %r{^/admin(/|$)} ]
+config.cacheable = [ "/sites", "/sites/:id", "/sites/:id/card" ]
+config.never_cacheable = [ "/users/:id/edit", %r{^/admin(/|$)} ]
 ```
 
 A **string** is a route pattern, and matches that shape and nothing else:
@@ -193,8 +199,8 @@ A **Regexp** is tested against the path by JavaScript's `RegExp`, so write JS sy
 `$`, not `\A` and `\z`. Coldwire raises on `\A`/`\z`/`\Z` and the `x`/`m` flags rather than
 letting a rule silently never match.
 
-An **empty allowlist allows everything**. A non-empty one means *only* these. The **blocklist
-always wins**. Neither applies to the precache manifest: listing a URL there is an explicit
+An **empty `cacheable` allows everything**. A non-empty one means *only* these.
+**`never_cacheable` always wins**. Neither applies to the precache manifest: listing a URL there is an explicit
 instruction, and quietly declining it would mean precaching 84 pages and silently getting 60.
 
 ### Query strings
@@ -338,9 +344,9 @@ it changes — so signing out clears the previous user's pages, and signing in a
 does not inherit them. Leave it unset and the cache persists across sessions: fine for a
 single-user or fully public app, wrong for anything else.
 
-**Put auth paths in `cache_blocklist`, not `never_intercept`.** The two fail very differently
+**Put auth paths in `never_cacheable`, not `never_intercept`.** The two fail very differently
 offline. `never_intercept` means *never intercept*, so the request goes to a dead network and
-Hotwire Native shows its own error screen. `cache_blocklist` means *intercept but never store
+Hotwire Native shows its own error screen. `never_cacheable` means *intercept but never store
 automatically*, so the request still reaches your offline view.
 
 **Your cold-boot URL must be cacheable.** This is the one that will bite you. Whatever URL
@@ -372,7 +378,7 @@ wrapping the route, or override `app/views/coldwire/caches/show.html.erb`.
 - **Cached** — every entry with size and age, a filter box, and a sort. Tapping a row shows
   the whole URL; each row has a trash icon.
 
-To reach it offline, allowlist it like any other page. The worker script and the manifest are
+To reach it offline, list it in `cacheable` like any other page. The worker script and the manifest are
 never intercepted, so **Sync now** will fail while offline; the inspector, **Clear cache** and
 **Force offline** are client-side and keep working.
 

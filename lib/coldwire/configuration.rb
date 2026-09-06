@@ -35,39 +35,41 @@ module Coldwire
     # Paths the worker never intercepts, as prefix strings; the engine's own are added for
     # you. Sparingly: these go straight to the network and so fail outright offline, showing
     # the SDK's error screen rather than your offline page. To keep something merely out of
-    # the cache, use `cache_blocklist`.
+    # the cache, use `never_cacheable`.
     attr_accessor :never_intercept
 
     # What automatic caching may and may not store. Strings are route patterns — "/sites/:id"
-    # matches that shape and nothing beneath it — and Regexps are tested against the path by
-    # JavaScript's RegExp, so write `^`/`$` rather than `\A`/`\z`.
+    # matches that shape and nothing beneath it, "/assets/*" takes everything under it — and
+    # Regexps are tested against the path by JavaScript's RegExp, so write `^`/`$` rather than
+    # `\A`/`\z`.
     #
-    # An empty allowlist allows everything; the blocklist always wins. Neither governs the
-    # precache manifest: listing a URL there is an explicit instruction.
-    attr_reader :cache_allowlist, :cache_blocklist
+    # An empty `cacheable` allows everything; `never_cacheable` always wins. Neither governs
+    # the precache manifest: listing a URL there is an explicit instruction.
+    attr_reader :cacheable, :never_cacheable
 
-    def cache_allowlist=(patterns)
-      @cache_allowlist = validate_patterns(patterns, :cache_allowlist)
+    def cacheable=(patterns)
+      @cacheable = validate_patterns(patterns, :cacheable)
     end
 
-    def cache_blocklist=(patterns)
-      @cache_blocklist = validate_patterns(patterns, :cache_blocklist)
+    def never_cacheable=(patterns)
+      @never_cacheable = validate_patterns(patterns, :never_cacheable)
     end
 
-    # URLs whose cached copy must never be served while there is a network. Same patterns as
-    # the lists above.
+    # Which stored responses may answer without asking the network. A separate question from
+    # the two above, which decide only what may be *stored*.
     #
-    # Cached responses are served cache-first, which is right for anything whose URL changes
-    # with its contents — an asset carries a digest, so a cached copy is the current one. It
-    # is wrong for a URL you serve data from: that keeps its address while the data moves
-    # underneath it, and a cached copy quietly outlives it. Name it here and it is fetched
-    # fresh, with the cache as the fallback, the way a page already is.
+    # The dividing line is whether a URL outlives its contents. An asset carries a digest, so
+    # its address changes whenever it does and a stored copy is by definition the current one
+    # — fetching it again could only return what you already have. Everything else keeps its
+    # address while its contents move, so it is fetched fresh with the cache as the fallback,
+    # which is what a page has always done here.
     #
-    # Empty by default. Nothing is treated this way unless you say so.
-    attr_reader :cache_revalidate
+    # The defaults are where Rails puts digested files. Add your own if you serve them from
+    # somewhere else; leave a URL out and it stays fresh.
+    attr_reader :cache_first
 
-    def cache_revalidate=(patterns)
-      @cache_revalidate = validate_patterns(patterns, :cache_revalidate)
+    def cache_first=(patterns)
+      @cache_first = validate_patterns(patterns, :cache_first)
     end
 
     # Whether a page registers the worker at all — and so whether it caches or syncs anything.
@@ -92,7 +94,7 @@ module Coldwire
 
     # URLs whose Range requests are cached piece by piece, keyed by the range — for a large
     # immutable archive read a slice at a time, the slices you actually read are a rounding
-    # error next to the file. Same patterns as the allowlist.
+    # error next to the file. Same patterns as the lists above.
     attr_reader :cache_ranges
 
     def cache_ranges=(patterns)
@@ -171,9 +173,11 @@ module Coldwire
       @worker_scope = "/"
       @probe_path = "/up"
       @never_intercept = [ "/up" ]
-      @cache_allowlist = []
-      @cache_blocklist = []
-      @cache_revalidate = []
+      @cacheable = []
+      @never_cacheable = []
+      # Propshaft and Sprockets, Webpacker, Vite, and Active Storage's signed blob URLs —
+      # every one of them addressed by something that changes when the bytes do.
+      @cache_first = [ "/assets/*", "/packs/*", "/vite/*", "/rails/active_storage/*" ]
       @mark_cached_pages = true
       @offline_import = "@hotwired/turbo-rails"
       @ignore_query_params = true

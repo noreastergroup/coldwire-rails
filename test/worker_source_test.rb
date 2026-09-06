@@ -19,35 +19,35 @@ class WorkerSourceTest < Minitest::Test
     assert rules < serve, "rules must come before the code that calls them"
   end
 
-  # The guard that decides cache-first. Everything with an address that changes with its
-  # contents belongs on the cached side of it, which is nearly everything: an asset's digest
-  # means a cached copy is already the current one.
-  def test_a_cached_copy_answers_unless_the_app_asked_otherwise
+  # The guard that decides whether a stored copy answers. Cached HTML must leave through
+  # cachedPageResponse whichever branch it takes: returned as it is, it would still carry
+  # data-turbo-track="reload", and offline that reload is answered from this same cache.
+  def test_a_cached_copy_answers_only_where_the_address_is_digested
     guard = worker[/^\s*if \(cached &&.*$/]
 
     refute_nil guard, "handleFetch must still short-circuit to the cached copy"
-    assert_includes guard, "!wantsHtml("
-    assert_includes guard, "!mustRevalidate("
+    assert_includes guard, "isCacheFirst(request)"
+    assert_includes guard, "cachedPageResponse(cache, request, cached)"
+    refute_match(/return cached\s*$/, guard, "the raw cached response must not be returned")
   end
 
-  # The whole point of the opt-in: an app that names nothing must behave exactly as before,
-  # or every asset it holds becomes a network round trip and a bad response loses the page
-  # its stylesheet.
-  def test_revalidation_is_off_until_asked_for
-    body = worker[/function mustRevalidate\(request\) \{(.*?)\n\}/m, 1]
+  # An empty `cacheable` means "store anything", and reading that as "answer anything from
+  # cache" is how every stylesheet in a default app ends up behind a network round trip.
+  def test_cache_first_does_not_borrow_the_storage_rules
+    body = worker[/function isCacheFirst\(request\) \{(.*?)\n\}/m, 1]
 
     refute_nil body
-    assert_includes body, "if (CACHE_REVALIDATE.length === 0) return false"
-    assert_includes body, "url.origin !== self.location.origin"
+    assert_includes body, "matchesRules(url, CACHE_FIRST)"
+    refute_includes body, "CACHEABLE"
+    refute_includes body, "length === 0"
   end
 
-  # An empty allowlist means "store anything", which must never be read as "revalidate
-  # everything" — that is the same mistake wearing a different hat.
-  def test_revalidation_does_not_borrow_the_allowlists_empty_means_all_rule
-    body = worker[/function mustRevalidate\(request\) \{(.*?)\n\}/m, 1]
+  # A nominated origin is opted into wholesale, and a CDN names its versions in the path.
+  # Refetching those would mean a round trip per glyph and tile.
+  def test_other_origins_are_answered_from_the_cache
+    body = worker[/function isCacheFirst\(request\) \{(.*?)\n\}/m, 1]
 
-    refute_includes body, "CACHE_ALLOWLIST"
-    refute_includes body, "length === 0) return true"
+    assert_includes body, "if (url.origin !== self.location.origin) return true"
   end
 
   def test_nominated_origins_still_bypass_the_path_lists

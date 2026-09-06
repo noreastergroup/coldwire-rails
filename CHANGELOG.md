@@ -14,9 +14,11 @@ First release. The API may still change before 1.0.
   no equivalent, and `fetch` may not set one — so on Android everything precached came back
   rendered for a browser. Each page writes its agent into `coldwire-user-agent`, which the
   browser attaches to every same-origin request, and a middleware puts it back.
-- **`cache_revalidate`** names URLs whose cached copy must never answer while there is a
-  network — for data served from an address that outlives it, where cache-first would hold a
-  copy past the point it was true. Empty by default: nothing changes unless an app asks.
+- **`cache_first`** decides which stored responses answer without asking the network, and
+  defaults to where Rails puts digested files. A digest means the address changes with the
+  contents, so the stored copy is the current one; everything else keeps its address while
+  its contents move, and is fetched fresh with the cache behind it. What may be *stored* is a
+  separate question, asked by `cacheable` and `never_cacheable`.
 - **Automatic syncing** on an interval, refetching anything older than `max_age`, resuming
   across page loads when a run is cut short.
 - **Debug page** at the mount point: connection status, force offline, an Auto Sync switch

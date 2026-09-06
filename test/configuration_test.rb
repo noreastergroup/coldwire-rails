@@ -10,7 +10,7 @@ class ConfigurationTest < Minitest::Test
 
   def test_storing_is_wide_open_until_narrowed
     assert_empty config.cache_as_you_go
-    assert_empty config.never_cacheable
+    assert_empty config.never_cache
   end
 
   # Where Rails puts digested files. An app that says nothing still gets its assets answered
@@ -34,9 +34,9 @@ class ConfigurationTest < Minitest::Test
 
   def test_naming_a_list_replaces_it
     config.cache_as_you_go = [ "/sites", "/sites/:id" ]
-    config.never_cacheable = [ "/users/:id/edit" ]
+    config.never_cache = [ "/users/:id/edit" ]
 
     assert_equal [ "/sites", "/sites/:id" ], config.cache_as_you_go
-    assert_equal [ "/users/:id/edit" ], config.never_cacheable
+    assert_equal [ "/users/:id/edit" ], config.never_cache
   end
 end

@@ -83,15 +83,15 @@ class WorkerSourceTest < Minitest::Test
 
     refute_nil body
     assert_includes body, "if (await cache.match(href, MATCH_OPTIONS)) return"
-    assert_includes body, "if (isNeverCacheable(new URL(href))) return"
+    assert_includes body, "if (isNeverCached(new URL(href))) return"
   end
 
   # One veto, and it has to hold on every route in — browsing, a page that references it, and
   # the manifest — or "never" is not what the name says.
-  def test_never_cacheable_stops_every_route_in
-    assert_includes worker[/function isAutoCacheable\(request\) \{(.*?)\n\}/m, 1], "if (isNeverCacheable(url)) return false"
-    assert_includes worker[/async function storeSubresource\(cache, href\) \{(.*?)\n\}/m, 1], "isNeverCacheable"
-    assert_includes worker[/async function fetchAndCache\(cache, href.*?\n\}/m], "isNeverCacheable"
+  def test_never_cache_stops_every_route_in
+    assert_includes worker[/function isAutoCacheable\(request\) \{(.*?)\n\}/m, 1], "if (isNeverCached(url)) return false"
+    assert_includes worker[/async function storeSubresource\(cache, href\) \{(.*?)\n\}/m, 1], "isNeverCached"
+    assert_includes worker[/async function fetchAndCache\(cache, href.*?\n\}/m], "isNeverCached"
   end
 
   def test_nominated_origins_still_bypass_the_path_lists

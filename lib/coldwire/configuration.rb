@@ -37,13 +37,13 @@ module Coldwire
     # the SDK's error screen rather than your offline page — which is what you want for a
     # health check, and almost never what you want for a page.
     #
-    # Not the same as `never_cacheable`, which is about storing. Compare:
+    # Not the same as `never_cache`, which is about storing. Compare:
     #
     #   never_intercept   the worker stands aside. No cache, no offline page, no fallback.
-    #   never_cacheable   the worker still answers, and can still show your offline page.
+    #   never_cache       the worker still answers, and can still show your offline page.
     #                     It just never stores the response.
     #
-    # So auth pages, admin, anything sensitive: `never_cacheable`. A probe the worker must
+    # So auth pages, admin, anything sensitive: `never_cache`. A probe the worker must
     # never be able to answer from a cache: `never_intercept`.
     attr_accessor :never_intercept
 
@@ -66,10 +66,10 @@ module Coldwire
 
     # Never stored, by any route in: not by browsing, not as a subresource of a page that
     # references it, not by the precache manifest. The one veto.
-    attr_reader :never_cacheable
+    attr_reader :never_cache
 
-    def never_cacheable=(patterns)
-      @never_cacheable = validate_patterns(patterns, :never_cacheable)
+    def never_cache=(patterns)
+      @never_cache = validate_patterns(patterns, :never_cache)
     end
 
     # Which stored responses may answer without asking the network. A separate question from
@@ -192,7 +192,7 @@ module Coldwire
       @probe_path = "/up"
       @never_intercept = [ "/up" ]
       @cache_as_you_go = []
-      @never_cacheable = []
+      @never_cache = []
       # Propshaft and Sprockets, Webpacker, Vite, and Active Storage's signed blob URLs —
       # every one of them addressed by something that changes when the bytes do.
       @cache_first = [ "/assets/*", "/packs/*", "/vite/*", "/rails/active_storage/*" ]

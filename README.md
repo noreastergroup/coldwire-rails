@@ -95,9 +95,9 @@ Coldwire.configure do |config|
   config.offline_import = "@hotwired/turbo-rails"
 
   # Which pages are kept as somebody browses. What one needs to render comes with it.
-  # Empty means everything; `never_cacheable` always wins.
+  # Empty means everything; `never_cache` always wins.
   config.cache_as_you_go = []
-  config.never_cacheable = []
+  config.never_cache = []
 
   # Which stored responses answer without asking the network. Digested addresses, so a stored
   # copy is the current one. Everything else is fetched fresh with the cache behind it.
@@ -149,12 +149,12 @@ config.register_if = -> { request.user_agent.to_s.include?("Hotwire Native") && 
 | Redirected response | Never stored |
 | A stored page's stylesheets, scripts, images | Stored with it, whatever the lists say |
 | Absent from a non-empty `cache_as_you_go` | Not stored by browsing; still cacheable via the manifest |
-| In `never_cacheable` | Never stored, by any route in |
+| In `never_cache` | Never stored, by any route in |
 | Query strings | Ignored by default, when matching *and* when storing |
 
 ### Cache-first, and everything else
 
-Two different questions, and Coldwire keeps them apart. `cacheable` decides what may be
+Two different questions, and Coldwire keeps them apart. `cache_as_you_go` decides what may be
 **stored**. `cache_first` decides how long a stored thing is allowed to **speak for**.
 
 ```ruby
@@ -177,7 +177,7 @@ would mean a round trip for every glyph and tile a map asks for.
 
 ```ruby
 config.cache_as_you_go = [ "/sites", "/sites/:id", "/sites/:id/card" ]
-config.never_cacheable = [ "/users/:id/edit", %r{^/admin(/|$)} ]
+config.never_cache = [ "/users/:id/edit", %r{^/admin(/|$)} ]
 ```
 
 These are the pages worth keeping as somebody moves through the app. **What a stored page
@@ -189,7 +189,7 @@ kept alone starts asking for files nobody has.
 Only what is missing is fetched, so after the first visit this costs a cache lookup per
 subresource and nothing else.
 
-`never_cacheable` is the one veto: nothing stores a URL named there — not browsing, not a page
+`never_cache` is the one veto: nothing stores a URL named there — not browsing, not a page
 that references it, not the precache manifest.
 
 A **string** is a route pattern, and matches that shape and nothing else:
@@ -214,8 +214,13 @@ A **Regexp** is tested against the path by JavaScript's `RegExp`, so write JS sy
 letting a rule silently never match.
 
 An **empty `cache_as_you_go` stores everything you browse**. A non-empty one means *only*
-these pages. **`never_cacheable` always wins**. Neither applies to the precache manifest: listing a URL there is an explicit
-instruction, and quietly declining it would mean precaching 84 pages and silently getting 60.
+these pages, and it does not apply to the precache manifest: listing a URL there is an
+explicit instruction, and quietly declining it would mean precaching 84 pages and silently
+getting 60.
+
+**`never_cache` always wins**, the manifest included. Between two explicit instructions that
+contradict each other, the one that says do not store is the safe one to honour — it is where
+auth pages and admin go.
 
 ### Query strings
 
@@ -358,10 +363,10 @@ it changes — so signing out clears the previous user's pages, and signing in a
 does not inherit them. Leave it unset and the cache persists across sessions: fine for a
 single-user or fully public app, wrong for anything else.
 
-**Put auth paths in `never_cacheable`, not `never_intercept`.** They are not the same setting
+**Put auth paths in `never_cache`, not `never_intercept`.** They are not the same setting
 and they fail very differently
 offline. `never_intercept` means *never intercept*, so the request goes to a dead network and
-Hotwire Native shows its own error screen. `never_cacheable` means *intercept but never store
+Hotwire Native shows its own error screen. `never_cache` means *intercept but never store
 automatically*, so the request still reaches your offline view.
 
 **Your cold-boot URL must be cacheable.** This is the one that will bite you. Whatever URL

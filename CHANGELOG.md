@@ -17,14 +17,14 @@ First release. The API may still change before 1.0.
 - **`cache_as_you_go`** names the pages kept as somebody browses, and **a stored page brings
   what it asks for** — its stylesheets, scripts and images are stored with it whatever the
   lists say, because a page held without them is the offline equivalent of not holding it.
-  **`never_cacheable`** is the one veto over storing anything, by any route in; it is not
+  **`never_cache`** is the one veto over storing anything, by any route in; it is not
   `never_intercept`, which stops the worker touching a request at all and so fails outright
   offline.
 - **`cache_first`** decides which stored responses answer without asking the network, and
   defaults to where Rails puts digested files. A digest means the address changes with the
   contents, so the stored copy is the current one; everything else keeps its address while
   its contents move, and is fetched fresh with the cache behind it. What may be *stored* is a
-  separate question, asked by `cacheable` and `never_cacheable`.
+  separate question, asked by `cache_as_you_go` and `never_cache`.
 - **Automatic syncing** on an interval, refetching anything older than `max_age`, resuming
   across page loads when a run is cut short.
 - **Debug page** at the mount point: connection status, force offline, an Auto Sync switch

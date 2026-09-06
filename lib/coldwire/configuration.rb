@@ -54,6 +54,22 @@ module Coldwire
       @cache_blocklist = validate_patterns(patterns, :cache_blocklist)
     end
 
+    # URLs whose cached copy must never be served while there is a network. Same patterns as
+    # the lists above.
+    #
+    # Cached responses are served cache-first, which is right for anything whose URL changes
+    # with its contents — an asset carries a digest, so a cached copy is the current one. It
+    # is wrong for a URL you serve data from: that keeps its address while the data moves
+    # underneath it, and a cached copy quietly outlives it. Name it here and it is fetched
+    # fresh, with the cache as the fallback, the way a page already is.
+    #
+    # Empty by default. Nothing is treated this way unless you say so.
+    attr_reader :cache_revalidate
+
+    def cache_revalidate=(patterns)
+      @cache_revalidate = validate_patterns(patterns, :cache_revalidate)
+    end
+
     # Whether a page registers the worker at all — and so whether it caches or syncs anything.
     # Evaluated in the view, so `request` and `current_user` are both in scope:
     #
@@ -157,6 +173,7 @@ module Coldwire
       @never_intercept = [ "/up" ]
       @cache_allowlist = []
       @cache_blocklist = []
+      @cache_revalidate = []
       @mark_cached_pages = true
       @offline_import = "@hotwired/turbo-rails"
       @ignore_query_params = true

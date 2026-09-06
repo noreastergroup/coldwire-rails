@@ -18,6 +18,9 @@ const NEVER_INTERCEPT = <%= raw Coldwire.never_intercept(coldwire.service_worker
 // Govern automatic caching only — the precache manifest ignores both.
 const CACHE_ALLOWLIST = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.cache_allowlist).to_json %>)
 const CACHE_BLOCKLIST = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.cache_blocklist).to_json %>)
+// Never answered from the cache while there is a network: URLs that keep their address while
+// their contents change. Empty unless the app names some.
+const CACHE_REVALIDATE = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.cache_revalidate).to_json %>)
 // Origins besides ours that may be cached at all, and the URLs whose byte ranges are cached
 // piece by piece.
 const CACHE_ORIGINS = <%= raw Coldwire.config.cache_origins.to_json %>

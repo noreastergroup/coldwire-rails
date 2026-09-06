@@ -139,12 +139,31 @@ config.register_if = -> { request.user_agent.to_s.include?("Hotwire Native") && 
 |---|---|
 | HTML page | Network-first. Recached on every view; falls back to cache when the network fails |
 | Assets (CSS, JS, images) | Cache-first |
+| Listed in `cache_revalidate` | Network-first, like a page |
 | Cross-origin | Passed through, unless the origin is in `cache_origins` |
 | `Range` (tiles, media) | Passed through, unless the URL matches `cache_ranges` |
 | Non-GET | Passed through |
 | Redirected response | Never stored |
 | Blocklisted, or not allowlisted | Not stored automatically; still cacheable via the manifest |
 | Query strings | Ignored by default, when matching *and* when storing |
+
+### Keeping a URL fresh
+
+Cache-first is right for anything whose address changes with its contents: an asset carries a
+digest, so a cached copy *is* the current one. It is wrong for a URL you serve data from —
+that keeps its address while the data moves underneath it, and a cached copy quietly outlives
+it until the next sync.
+
+```ruby
+config.cache_revalidate = [ "/map/:kind" ]
+```
+
+Same patterns as the lists below. A URL named here is fetched fresh whenever there is a
+network, with the cache as the fallback, exactly as a page already is.
+
+Empty by default, and deliberately not inferred from the allowlist: an empty allowlist means
+"store anything", and reading that as "revalidate everything" would put every stylesheet in
+the app behind a network round trip.
 
 ### Allow and block lists
 

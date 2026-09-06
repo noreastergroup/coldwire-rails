@@ -14,6 +14,10 @@ First release. The API may still change before 1.0.
   no equivalent, and `fetch` may not set one — so on Android everything precached came back
   rendered for a browser. Each page writes its agent into `coldwire-user-agent`, which the
   browser attaches to every same-origin request, and a middleware puts it back.
+- **Freshness follows the allowlist, not the content type.** An allowlisted path keeps its
+  address while its contents change, so it is refetched whenever there is a network and the
+  cached copy is the fallback — for a URL serving JSON as much as for a page. Assets stay
+  cache-first: their address changes with their contents, so a cached one is the current one.
 - **Automatic syncing** on an interval, refetching anything older than `max_age`, resuming
   across page loads when a run is cut short.
 - **Debug page** at the mount point: connection status, force offline, an Auto Sync switch

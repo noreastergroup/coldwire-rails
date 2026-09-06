@@ -50,6 +50,20 @@ class WorkerSourceTest < Minitest::Test
     assert_includes body, "if (url.origin !== self.location.origin) return true"
   end
 
+  # A page cached by browsing is stored without its subresources, so the stylesheet it asks
+  # for has to be storable on its own — or the pairing a sync established drifts apart the
+  # first time anyone views the page after a rebuild.
+  def test_a_digested_path_is_storable_whatever_else_is_listed
+    body = worker[/function isAutoCacheable\(request\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "if (matchesRules(url, CACHE_FIRST)) return true"
+
+    never = body.index("NEVER_CACHEABLE")
+    digested = body.index("CACHE_FIRST")
+    assert never < digested, "never_cacheable has to win over it"
+  end
+
   def test_nominated_origins_still_bypass_the_path_lists
     body = worker[/function isAutoCacheable\(request\) \{(.*?)\n\}/m, 1]
 

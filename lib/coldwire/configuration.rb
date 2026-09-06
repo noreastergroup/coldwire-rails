@@ -66,6 +66,10 @@ module Coldwire
     #
     # The defaults are where Rails puts digested files. Add your own if you serve them from
     # somewhere else; leave a URL out and it stays fresh.
+    #
+    # Naming a path here also makes it storable, whatever `cacheable` says: a cached page is
+    # only as good as the assets it asks for, and there is no staleness to fear from an address
+    # that changes with its contents. `never_cacheable` still wins.
     attr_reader :cache_first
 
     def cache_first=(patterns)

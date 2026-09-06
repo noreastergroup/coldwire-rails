@@ -19,41 +19,27 @@ class WorkerSourceTest < Minitest::Test
     assert rules < serve, "rules must come before the code that calls them"
   end
 
-  # The guard that decides whether a stored copy answers. Cached HTML must leave through
-  # cachedPageResponse whichever branch it takes: returned as it is, it would still carry
-  # data-turbo-track="reload", and offline that reload is answered from this same cache.
-  def test_a_cached_copy_answers_only_where_the_address_is_digested
-    guard = worker[/^\s*if \(cached &&.*$/]
-
-    refute_nil guard, "handleFetch must still short-circuit to the cached copy"
-    assert_includes guard, "isCacheFirst(request)"
-    assert_includes guard, "cachedPageResponse(cache, request, cached)"
-    refute_match(/return cached\s*$/, guard, "the raw cached response must not be returned")
-  end
-
-  # An empty list means "store anything", and reading that as "answer anything from cache" is
-  # how every stylesheet in a default app ends up behind a network round trip.
-  def test_cache_first_does_not_borrow_the_storage_rules
-    body = worker[/function isCacheFirst\(request\) \{(.*?)\n\}/m, 1]
+  # Nothing is answered from the cache while the network is answering, so the cache is not
+  # even looked in until a fetch has failed. A lookup on the working path would be pure cost,
+  # and the browser already holds what it holds.
+  def test_the_cache_is_only_consulted_once_the_network_has_failed
+    body = worker[/async function handleFetch\(request, event\) \{(.*?)\n\}/m, 1]
 
     refute_nil body
-    assert_includes body, "matchesRules(url, CACHE_FIRST)"
-    refute_includes body, "CACHE_AS_YOU_GO"
-    refute_includes body, "length === 0"
+    assert_includes body, "if (forcedOffline) return offlineFallback(cache, request)"
+    assert_includes body, "return offlineFallback(cache, request)"
+    refute_includes body, "cache.match", "the working path must not look in the cache"
   end
 
-  # And the reverse: storing is not decided by freshness either. Subresources are what keep a
-  # page's assets in the cache now, so the two questions stay separate.
-  def test_storing_does_not_borrow_the_freshness_rules
-    refute_includes worker[/function isAutoCacheable\(request\) \{(.*?)\n\}/m, 1], "CACHE_FIRST"
-  end
+  # Cached HTML leaves through cachedPageResponse, or it still carries data-turbo-track and
+  # offline that reload is answered from this same cache.
+  def test_a_cached_page_is_untracked_on_the_way_out
+    body = worker[/async function offlineFallback\(cache, request\) \{(.*?)\n\}/m, 1]
 
-  # A nominated origin is opted into wholesale, and a CDN names its versions in the path.
-  # Refetching those would mean a round trip per glyph and tile.
-  def test_other_origins_are_answered_from_the_cache
-    body = worker[/function isCacheFirst\(request\) \{(.*?)\n\}/m, 1]
-
-    assert_includes body, "if (url.origin !== self.location.origin) return true"
+    refute_nil body
+    assert_includes body, "cache.match(request, MATCH_OPTIONS)"
+    assert_includes body, "cachedPageResponse(cache, request, cached)"
+    assert_includes body, "offlineResponse(request)"
   end
 
   # The whole point of the list being about pages: browsing to one stores what it needs to

@@ -13,23 +13,10 @@ class ConfigurationTest < Minitest::Test
     assert_empty config.never_cache
   end
 
-  # Where Rails puts digested files. An app that says nothing still gets its assets answered
-  # from the cache rather than refetched on every page.
-  def test_digested_paths_are_cache_first_by_default
-    assert_includes config.cache_first, "/assets/*"
-    assert_includes config.cache_first, "/rails/active_storage/*"
-  end
+  def test_patterns_are_checked_at_boot
+    error = assert_raises(ArgumentError) { config.cache_as_you_go = [ /\A\/map/ ] }
 
-  def test_patterns_are_checked_at_boot_like_the_other_lists
-    error = assert_raises(ArgumentError) { config.cache_first = [ /\A\/map/ ] }
-
-    assert_match(/cache_first/, error.message)
-  end
-
-  def test_the_defaults_are_patterns_the_worker_will_accept
-    config.cache_first = Coldwire::Configuration.new.cache_first
-
-    assert_equal [ "/assets/*", "/packs/*", "/vite/*", "/rails/active_storage/*" ], config.cache_first
+    assert_match(/cache_as_you_go/, error.message)
   end
 
   def test_naming_a_list_replaces_it

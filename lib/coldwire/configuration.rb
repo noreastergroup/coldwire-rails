@@ -72,24 +72,6 @@ module Coldwire
       @never_cache = validate_patterns(patterns, :never_cache)
     end
 
-    # Which stored responses may answer without asking the network. A separate question from
-    # the two above, which decide only what may be *stored*.
-    #
-    # The dividing line is whether a URL outlives its contents. An asset carries a digest, so
-    # its address changes whenever it does and a stored copy is by definition the current one
-    # — fetching it again could only return what you already have. Everything else keeps its
-    # address while its contents move, so it is fetched fresh with the cache as the fallback,
-    # which is what a page has always done here.
-    #
-    # The defaults are where Rails puts digested files. Add your own if you serve them from
-    # somewhere else; leave a URL out and it stays fresh.
-    #
-    attr_reader :cache_first
-
-    def cache_first=(patterns)
-      @cache_first = validate_patterns(patterns, :cache_first)
-    end
-
     # Whether a page registers the worker at all — and so whether it caches or syncs anything.
     # Evaluated in the view, so `request` and `current_user` are both in scope:
     #
@@ -195,7 +177,6 @@ module Coldwire
       @never_cache = []
       # Propshaft and Sprockets, Webpacker, Vite, and Active Storage's signed blob URLs —
       # every one of them addressed by something that changes when the bytes do.
-      @cache_first = [ "/assets/*", "/packs/*", "/vite/*", "/rails/active_storage/*" ]
       @mark_cached_pages = true
       @offline_import = "@hotwired/turbo-rails"
       @ignore_query_params = true

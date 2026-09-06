@@ -19,9 +19,6 @@ const NEVER_INTERCEPT = <%= raw Coldwire.never_intercept(coldwire.service_worker
 // precache manifest, which is an explicit instruction.
 const CACHE_AS_YOU_GO = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.cache_as_you_go).to_json %>)
 const NEVER_CACHE = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.never_cache).to_json %>)
-// Answered from the cache without asking the network: addresses that change with their
-// contents, so a stored copy is the current one. Everything else is fetched fresh.
-const CACHE_FIRST = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.cache_first).to_json %>)
 // Origins besides ours that may be cached at all, and the URLs whose byte ranges are cached
 // piece by piece.
 const CACHE_ORIGINS = <%= raw Coldwire.config.cache_origins.to_json %>

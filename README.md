@@ -99,9 +99,6 @@ Coldwire.configure do |config|
   config.cache_as_you_go = []
   config.never_cache = []
 
-  # Which stored responses answer without asking the network. Digested addresses, so a stored
-  # copy is the current one. Everything else is fetched fresh with the cache behind it.
-  config.cache_first = [ "/assets/*", "/packs/*", "/vite/*", "/rails/active_storage/*" ]
 
   # Never intercepted, so these fail outright offline. Coldwire's own routes are added for you.
   config.never_intercept = [ "/up" ]  # probe_path is added for you
@@ -141,9 +138,9 @@ config.register_if = -> { request.user_agent.to_s.include?("Hotwire Native") && 
 
 | Request | Behavior |
 |---|---|
-| Matches `cache_first` (assets, by default) | Answered from the cache when there is a copy |
-| Everything else, pages included | Network-first. Recached on every view; falls back to cache when the network fails |
-| Cross-origin | Passed through, unless the origin is in `cache_origins` — then cache-first |
+| Anything, while the network answers | Network. Stored on the way past if the lists allow |
+| Anything, once it does not | The cached copy, or the offline page |
+| Cross-origin | Passed through, unless the origin is in `cache_origins` |
 | `Range` (tiles, media) | Passed through, unless the URL matches `cache_ranges` |
 | Non-GET | Passed through |
 | Redirected response | Never stored |
@@ -152,26 +149,15 @@ config.register_if = -> { request.user_agent.to_s.include?("Hotwire Native") && 
 | In `never_cache` | Never stored, by any route in |
 | Query strings | Ignored by default, when matching *and* when storing |
 
-### Cache-first, and everything else
+### Online, then offline
 
-Two different questions, and Coldwire keeps them apart. `cache_as_you_go` decides what may be
-**stored**. `cache_first` decides how long a stored thing is allowed to **speak for**.
+Coldwire does not sit between the browser and its own cache. While the network answers, every
+request goes to it — and an asset the browser already holds is served from the browser's cache
+without a request either way, which is what it is for. Coldwire's job starts when the network
+stops: then the stored copy answers, or the offline page does.
 
-```ruby
-config.cache_first = [ "/assets/*", "/packs/*", "/vite/*", "/rails/active_storage/*" ]
-```
-
-The test is whether the address outlives its contents. A digest in the URL means it does not,
-so the copy in hand is by definition the current one and fetching it again could only return
-it a second time. Anything else — a page, a JSON endpoint, an image at a fixed path — keeps
-its address while its contents move, so it is fetched fresh with the cache as the fallback.
-
-The defaults are where Rails puts digested files. Add to them if you serve your own from
-somewhere else, and leave a URL out to keep it fresh. Same patterns as the lists below.
-
-Other origins named in `cache_origins` are always cache-first: you opted the whole origin in,
-its URLs are not yours to describe, and a CDN names its versions in the path. Refetching them
-would mean a round trip for every glyph and tile a map asks for.
+That is the whole rule. There is no freshness setting, because there is nothing being kept
+back to be stale.
 
 ### What browsing stores
 

@@ -14,6 +14,12 @@ First release. The API may still change before 1.0.
   no equivalent, and `fetch` may not set one — so on Android everything precached came back
   rendered for a browser. Each page writes its agent into `coldwire-user-agent`, which the
   browser attaches to every same-origin request, and a middleware puts it back.
+- **`cache_as_you_go`** names the pages kept as somebody browses, and **a stored page brings
+  what it asks for** — its stylesheets, scripts and images are stored with it whatever the
+  lists say, because a page held without them is the offline equivalent of not holding it.
+  **`never_cacheable`** is the one veto over storing anything, by any route in; it is not
+  `never_intercept`, which stops the worker touching a request at all and so fails outright
+  offline.
 - **`cache_first`** decides which stored responses answer without asking the network, and
   defaults to where Rails puts digested files. A digest means the address changes with the
   contents, so the stored copy is the current one; everything else keeps its address while

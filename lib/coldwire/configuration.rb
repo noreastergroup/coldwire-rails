@@ -32,24 +32,41 @@ module Coldwire
     # would resolve with the network down, which is precisely backwards.
     attr_accessor :probe_path
 
-    # Paths the worker never intercepts, as prefix strings; the engine's own are added for
-    # you. Sparingly: these go straight to the network and so fail outright offline, showing
-    # the SDK's error screen rather than your offline page. To keep something merely out of
-    # the cache, use `never_cacheable`.
+    # Paths the worker does not touch at all, as prefix strings; the engine's own are added
+    # for you. The request goes straight to the network and so fails outright offline, showing
+    # the SDK's error screen rather than your offline page — which is what you want for a
+    # health check, and almost never what you want for a page.
+    #
+    # Not the same as `never_cacheable`, which is about storing. Compare:
+    #
+    #   never_intercept   the worker stands aside. No cache, no offline page, no fallback.
+    #   never_cacheable   the worker still answers, and can still show your offline page.
+    #                     It just never stores the response.
+    #
+    # So auth pages, admin, anything sensitive: `never_cacheable`. A probe the worker must
+    # never be able to answer from a cache: `never_intercept`.
     attr_accessor :never_intercept
 
-    # What automatic caching may and may not store. Strings are route patterns — "/sites/:id"
-    # matches that shape and nothing beneath it, "/assets/*" takes everything under it — and
-    # Regexps are tested against the path by JavaScript's RegExp, so write `^`/`$` rather than
-    # `\A`/`\z`.
+    # What browsing stores. Strings are route patterns — "/sites/:id" matches that shape and
+    # nothing beneath it, "/assets/*" takes everything under it — and Regexps are tested
+    # against the path by JavaScript's RegExp, so write `^`/`$` rather than `\A`/`\z`.
     #
-    # An empty `cacheable` allows everything; `never_cacheable` always wins. Neither governs
-    # the precache manifest: listing a URL there is an explicit instruction.
-    attr_reader :cacheable, :never_cacheable
+    # These are the pages worth keeping as somebody moves through the app. What one of them
+    # needs in order to render — its stylesheets, its scripts, its images — is stored with it
+    # whether or not those match anything here, because a page held without them is the
+    # offline equivalent of not holding it at all.
+    #
+    # Empty means everything. It does not govern the precache manifest: listing a URL there is
+    # an explicit instruction.
+    attr_reader :cache_as_you_go
 
-    def cacheable=(patterns)
-      @cacheable = validate_patterns(patterns, :cacheable)
+    def cache_as_you_go=(patterns)
+      @cache_as_you_go = validate_patterns(patterns, :cache_as_you_go)
     end
+
+    # Never stored, by any route in: not by browsing, not as a subresource of a page that
+    # references it, not by the precache manifest. The one veto.
+    attr_reader :never_cacheable
 
     def never_cacheable=(patterns)
       @never_cacheable = validate_patterns(patterns, :never_cacheable)
@@ -67,9 +84,6 @@ module Coldwire
     # The defaults are where Rails puts digested files. Add your own if you serve them from
     # somewhere else; leave a URL out and it stays fresh.
     #
-    # Naming a path here also makes it storable, whatever `cacheable` says: a cached page is
-    # only as good as the assets it asks for, and there is no staleness to fear from an address
-    # that changes with its contents. `never_cacheable` still wins.
     attr_reader :cache_first
 
     def cache_first=(patterns)
@@ -177,7 +191,7 @@ module Coldwire
       @worker_scope = "/"
       @probe_path = "/up"
       @never_intercept = [ "/up" ]
-      @cacheable = []
+      @cache_as_you_go = []
       @never_cacheable = []
       # Propshaft and Sprockets, Webpacker, Vite, and Active Storage's signed blob URLs —
       # every one of them addressed by something that changes when the bytes do.

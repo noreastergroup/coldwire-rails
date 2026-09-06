@@ -94,9 +94,9 @@ Coldwire.configure do |config|
   # importmap-rails; load Turbo your own way in the template instead.
   config.offline_import = "@hotwired/turbo-rails"
 
-  # What automatic caching may store. Strings are route patterns, Regexps are tested against
-  # the path. An empty `cacheable` allows everything; `never_cacheable` always wins.
-  config.cacheable = []
+  # Which pages are kept as somebody browses. What one needs to render comes with it.
+  # Empty means everything; `never_cacheable` always wins.
+  config.cache_as_you_go = []
   config.never_cacheable = []
 
   # Which stored responses answer without asking the network. Digested addresses, so a stored
@@ -147,7 +147,9 @@ config.register_if = -> { request.user_agent.to_s.include?("Hotwire Native") && 
 | `Range` (tiles, media) | Passed through, unless the URL matches `cache_ranges` |
 | Non-GET | Passed through |
 | Redirected response | Never stored |
-| In `never_cacheable`, or absent from a non-empty `cacheable` | Not stored automatically; still cacheable via the manifest |
+| A stored page's stylesheets, scripts, images | Stored with it, whatever the lists say |
+| Absent from a non-empty `cache_as_you_go` | Not stored by browsing; still cacheable via the manifest |
+| In `never_cacheable` | Never stored, by any route in |
 | Query strings | Ignored by default, when matching *and* when storing |
 
 ### Cache-first, and everything else
@@ -171,12 +173,24 @@ Other origins named in `cache_origins` are always cache-first: you opted the who
 its URLs are not yours to describe, and a CDN names its versions in the path. Refetching them
 would mean a round trip for every glyph and tile a map asks for.
 
-### What may be stored
+### What browsing stores
 
 ```ruby
-config.cacheable = [ "/sites", "/sites/:id", "/sites/:id/card" ]
+config.cache_as_you_go = [ "/sites", "/sites/:id", "/sites/:id/card" ]
 config.never_cacheable = [ "/users/:id/edit", %r{^/admin(/|$)} ]
 ```
+
+These are the pages worth keeping as somebody moves through the app. **What a stored page
+needs in order to render — its stylesheets, its scripts, its images — is stored with it**,
+whether or not those match anything in the list. A page held without its stylesheet is the
+offline equivalent of not holding it at all, and asset digests move often enough that a page
+kept alone starts asking for files nobody has.
+
+Only what is missing is fetched, so after the first visit this costs a cache lookup per
+subresource and nothing else.
+
+`never_cacheable` is the one veto: nothing stores a URL named there — not browsing, not a page
+that references it, not the precache manifest.
 
 A **string** is a route pattern, and matches that shape and nothing else:
 
@@ -199,8 +213,8 @@ A **Regexp** is tested against the path by JavaScript's `RegExp`, so write JS sy
 `$`, not `\A` and `\z`. Coldwire raises on `\A`/`\z`/`\Z` and the `x`/`m` flags rather than
 letting a rule silently never match.
 
-An **empty `cacheable` allows everything**. A non-empty one means *only* these.
-**`never_cacheable` always wins**. Neither applies to the precache manifest: listing a URL there is an explicit
+An **empty `cache_as_you_go` stores everything you browse**. A non-empty one means *only*
+these pages. **`never_cacheable` always wins**. Neither applies to the precache manifest: listing a URL there is an explicit
 instruction, and quietly declining it would mean precaching 84 pages and silently getting 60.
 
 ### Query strings
@@ -344,7 +358,8 @@ it changes — so signing out clears the previous user's pages, and signing in a
 does not inherit them. Leave it unset and the cache persists across sessions: fine for a
 single-user or fully public app, wrong for anything else.
 
-**Put auth paths in `never_cacheable`, not `never_intercept`.** The two fail very differently
+**Put auth paths in `never_cacheable`, not `never_intercept`.** They are not the same setting
+and they fail very differently
 offline. `never_intercept` means *never intercept*, so the request goes to a dead network and
 Hotwire Native shows its own error screen. `never_cacheable` means *intercept but never store
 automatically*, so the request still reaches your offline view.
@@ -378,7 +393,7 @@ wrapping the route, or override `app/views/coldwire/caches/show.html.erb`.
 - **Cached** — every entry with size and age, a filter box, and a sort. Tapping a row shows
   the whole URL; each row has a trash icon.
 
-To reach it offline, list it in `cacheable` like any other page. The worker script and the manifest are
+To reach it offline, list it in `cache_as_you_go` like any other page. The worker script and the manifest are
 never intercepted, so **Sync now** will fail while offline; the inspector, **Clear cache** and
 **Force offline** are client-side and keep working.
 

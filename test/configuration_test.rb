@@ -9,7 +9,7 @@ class ConfigurationTest < Minitest::Test
   end
 
   def test_storing_is_wide_open_until_narrowed
-    assert_empty config.cacheable
+    assert_empty config.cache_as_you_go
     assert_empty config.never_cacheable
   end
 
@@ -33,10 +33,10 @@ class ConfigurationTest < Minitest::Test
   end
 
   def test_naming_a_list_replaces_it
-    config.cacheable = [ "/sites", "/sites/:id" ]
+    config.cache_as_you_go = [ "/sites", "/sites/:id" ]
     config.never_cacheable = [ "/users/:id/edit" ]
 
-    assert_equal [ "/sites", "/sites/:id" ], config.cacheable
+    assert_equal [ "/sites", "/sites/:id" ], config.cache_as_you_go
     assert_equal [ "/users/:id/edit" ], config.never_cacheable
   end
 end

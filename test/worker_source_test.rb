@@ -31,15 +31,21 @@ class WorkerSourceTest < Minitest::Test
     refute_match(/return cached\s*$/, guard, "the raw cached response must not be returned")
   end
 
-  # An empty `cacheable` means "store anything", and reading that as "answer anything from
-  # cache" is how every stylesheet in a default app ends up behind a network round trip.
+  # An empty list means "store anything", and reading that as "answer anything from cache" is
+  # how every stylesheet in a default app ends up behind a network round trip.
   def test_cache_first_does_not_borrow_the_storage_rules
     body = worker[/function isCacheFirst\(request\) \{(.*?)\n\}/m, 1]
 
     refute_nil body
     assert_includes body, "matchesRules(url, CACHE_FIRST)"
-    refute_includes body, "CACHEABLE"
+    refute_includes body, "CACHE_AS_YOU_GO"
     refute_includes body, "length === 0"
+  end
+
+  # And the reverse: storing is not decided by freshness either. Subresources are what keep a
+  # page's assets in the cache now, so the two questions stay separate.
+  def test_storing_does_not_borrow_the_freshness_rules
+    refute_includes worker[/function isAutoCacheable\(request\) \{(.*?)\n\}/m, 1], "CACHE_FIRST"
   end
 
   # A nominated origin is opted into wholesale, and a CDN names its versions in the path.
@@ -50,18 +56,42 @@ class WorkerSourceTest < Minitest::Test
     assert_includes body, "if (url.origin !== self.location.origin) return true"
   end
 
-  # A page cached by browsing is stored without its subresources, so the stylesheet it asks
-  # for has to be storable on its own — or the pairing a sync established drifts apart the
-  # first time anyone views the page after a rebuild.
-  def test_a_digested_path_is_storable_whatever_else_is_listed
-    body = worker[/function isAutoCacheable\(request\) \{(.*?)\n\}/m, 1]
+  # The whole point of the list being about pages: browsing to one stores what it needs to
+  # render, whether or not those files match anything the app listed. Without this a page is
+  # stored on its own, and the first rebuild leaves it asking for a stylesheet nobody kept.
+  def test_a_stored_page_brings_what_it_asks_for
+    body = worker[/async function storeResponse\(cache, request, response\) \{(.*?)\n\}/m, 1]
 
     refute_nil body
-    assert_includes body, "if (matchesRules(url, CACHE_FIRST)) return true"
+    assert_includes body, "putFresh(cache, cacheKey(request), response.clone())"
+    assert_includes body, "urlsFromHtml(await response.text(), request.url)"
+    assert_includes body, "storeSubresource"
+    assert_includes body, 'if (!type.includes("text/html")) return'
+  end
 
-    never = body.index("NEVER_CACHEABLE")
-    digested = body.index("CACHE_FIRST")
-    assert never < digested, "never_cacheable has to win over it"
+  # In waitUntil, not left running: a worker can be stopped as soon as it has answered.
+  def test_storing_outlives_the_response
+    guard = worker[/^\s*const stored = storeResponse.*\n\s*if \(event\).*$/]
+
+    refute_nil guard
+    assert_includes guard, "event.waitUntil(stored)"
+  end
+
+  # Only what is missing, or every navigation refetches every asset on the page.
+  def test_a_subresource_already_held_is_not_fetched_again
+    body = worker[/async function storeSubresource\(cache, href\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "if (await cache.match(href, MATCH_OPTIONS)) return"
+    assert_includes body, "if (isNeverCacheable(new URL(href))) return"
+  end
+
+  # One veto, and it has to hold on every route in — browsing, a page that references it, and
+  # the manifest — or "never" is not what the name says.
+  def test_never_cacheable_stops_every_route_in
+    assert_includes worker[/function isAutoCacheable\(request\) \{(.*?)\n\}/m, 1], "if (isNeverCacheable(url)) return false"
+    assert_includes worker[/async function storeSubresource\(cache, href\) \{(.*?)\n\}/m, 1], "isNeverCacheable"
+    assert_includes worker[/async function fetchAndCache\(cache, href.*?\n\}/m], "isNeverCacheable"
   end
 
   def test_nominated_origins_still_bypass_the_path_lists

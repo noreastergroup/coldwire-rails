@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.0]
 
 First release. The API may still change before 1.0.
 

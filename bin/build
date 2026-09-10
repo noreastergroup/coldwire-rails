@@ -1,0 +1,40 @@
+#!/usr/bin/env ruby
+require "fileutils"
+
+# path to your application root.
+APP_ROOT = File.expand_path("..", __dir__)
+
+def system!(*args)
+  system(*args) || abort("\n== Command #{args} failed ==")
+end
+
+FileUtils.chdir APP_ROOT do
+  puts "== Building coldwire-rails gem =="
+
+  # Clean previous builds
+  puts "Cleaning previous builds..."
+  FileUtils.rm_rf("pkg") if Dir.exist?("pkg")
+  FileUtils.rm_f(Dir.glob("*.gem"))
+
+  # Run tests to ensure everything is working
+  puts "Running tests..."
+  system! "bundle exec rake test"
+
+  # Build the gem
+  puts "Building gem package..."
+  FileUtils.mkdir_p("pkg")
+  system! "gem build coldwire-rails.gemspec"
+  FileUtils.mv(Dir.glob("*.gem"), "pkg")
+
+  # Show the built gem
+  puts "\n== Gem built successfully! =="
+  gems = Dir.glob("pkg/*.gem")
+  if gems.any?
+    puts "Built gems:"
+    gems.each { |gem| puts "  #{gem}" }
+  else
+    puts "No gems found in pkg directory"
+  end
+
+  puts "\n== Build complete =="
+end

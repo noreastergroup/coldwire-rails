@@ -7,7 +7,7 @@ require_relative "lib/coldwire/version"
 Gem::Specification.new do |spec|
   spec.name        = "coldwire-rails"
   spec.version     = Coldwire::VERSION
-  spec.authors     = [ "Noreaster Group" ]
+  spec.authors     = [ "Noreaster Group, Stuart Yamartino" ]
   spec.email       = [ "stuart@noreastergroup.com" ]
 
   spec.summary     = "Offline page caching for Hotwire, PWA, and Hotwire Native Rails apps."

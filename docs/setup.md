@@ -1,8 +1,7 @@
 # Setup
 
 The gem is `coldwire-rails`; everything in it lives under `Coldwire`, the way `turbo-rails`
-provides `Turbo`. Four things to wire: the gem, the mount, the Stimulus controller, and a
-tag in the layout.
+provides `Turbo`. Add the gem, then let the installer wire the rest.
 
 ## Requirements
 
@@ -22,7 +21,24 @@ domains. See [Hotwire Native on iOS](#hotwire-native-on-ios).
 gem "coldwire-rails"
 ```
 
-Then `bundle install`.
+Then `bundle install` and:
+
+```bash
+bin/rails coldwire:install
+```
+
+That does four things, and skips any it finds already done:
+
+1. Mounts the engine at `/offline` in `config/routes.rb`
+2. Writes `config/initializers/coldwire.rb` with every option and its default
+3. Registers the Stimulus controller in `app/javascript/controllers/index.js`
+4. Adds `<%= coldwire_service_worker_tag %>` inside `<head>` in your application layout
+
+Visit `/offline` to see what's cached. What to set after that is below.
+
+## By hand
+
+The installer does the next four steps. Do them yourself if you would rather.
 
 ## 2. Mount the engine
 

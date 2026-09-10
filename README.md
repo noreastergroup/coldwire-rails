@@ -19,7 +19,7 @@ Works the same in a plain Hotwire app, an installed PWA, or Hotwire Native.
 
 ## What you get
 
-- **Minutes to wire.** Gem, mount, Stimulus controller, layout tag. The rest has working defaults.
+- **Minutes to wire.** `bin/rails coldwire:install`. The rest has working defaults.
 - **Precaching in Ruby.** Nominate URLs with your own route helpers; assets come with them.
 - **Cache as you go.** Pages someone visits are kept, with the styles, scripts, and images
   they need to render.
@@ -47,23 +47,13 @@ Works the same in a plain Hotwire app, an installed PWA, or Hotwire Native.
 gem "coldwire-rails"
 ```
 
-```ruby
-# config/routes.rb
-mount Coldwire::Engine => "/offline"
+```bash
+bin/rails coldwire:install
 ```
 
-```js
-// app/javascript/controllers/index.js
-import ColdwireCacheController from "coldwire"
-application.register("coldwire-cache", ColdwireCacheController)
-```
-
-```erb
-<%# app/views/layouts/application.html.erb, inside <head> %>
-<%= coldwire_service_worker_tag %>
-```
-
-That's the wiring. Visit `/offline` to see what's cached.
+That mounts the engine at `/offline`, writes `config/initializers/coldwire.rb`, registers
+the Stimulus controller, and adds the tag to your layout. Visit `/offline` to see what's
+cached.
 
 For signed-in apps, set `cache_identity`. To have pages ready before anyone visits them,
 turn on `auto_sync`. Both are in the [configuration reference](docs/configuration.md).

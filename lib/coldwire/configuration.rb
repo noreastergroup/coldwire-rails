@@ -56,8 +56,8 @@ module Coldwire
     # whether or not those match anything here, because a page held without them is the
     # offline equivalent of not holding it at all.
     #
-    # Empty means everything. It does not govern the precache manifest: listing a URL there is
-    # an explicit instruction.
+    # Defaults to "/*", which is every path. An empty list stores nothing by browsing. It
+    # does not govern the precache manifest: listing a URL there is an explicit instruction.
     attr_reader :cache_as_you_go
 
     def cache_as_you_go=(patterns)
@@ -173,7 +173,7 @@ module Coldwire
       @worker_scope = "/"
       @probe_path = "/up"
       @never_intercept = [ "/up" ]
-      @cache_as_you_go = []
+      @cache_as_you_go = [ "/*" ]
       @never_cache = []
       # Propshaft and Sprockets, Webpacker, Vite, and Active Storage's signed blob URLs —
       # every one of them addressed by something that changes when the bytes do.

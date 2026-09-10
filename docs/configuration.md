@@ -1,7 +1,8 @@
 # Configuration
 
-Everything lives in `config/initializers/coldwire.rb`. Only `auto_sync` really needs your
-attention; the rest has a working default.
+Everything lives in `config/initializers/coldwire.rb`. `bin/rails coldwire:install` writes
+this file with every default. Only `auto_sync` really needs your attention; the rest has a
+working default.
 
 ```ruby
 Coldwire.configure do |config|
@@ -17,7 +18,7 @@ Coldwire.configure do |config|
   config.register_if = -> { true }
   config.offline_import = "@hotwired/turbo-rails"
 
-  config.cache_as_you_go = []
+  config.cache_as_you_go = [ "/*" ]
   config.never_cache = []
   config.never_intercept = [ "/up" ]
 
@@ -48,7 +49,7 @@ down with it.
 | [`cache_identity`](#cache_identity) | `-> { nil }` | Who the cache belongs to; changing it drops the cache |
 | [`register_if`](#register_if) | `-> { true }` | Whether a page registers the worker at all |
 | [`offline_import`](#offline_import) | `"@hotwired/turbo-rails"` | Importmap module the offline page loads to boot Turbo |
-| [`cache_as_you_go`](#cache_as_you_go) | `[]` | Pages stored as somebody browses. Empty means everything |
+| [`cache_as_you_go`](#cache_as_you_go) | `["/*"]` | Pages stored as somebody browses. `/*` is everything |
 | [`never_cache`](#never_cache) | `[]` | Never stored, by any route in. The one veto |
 | [`never_intercept`](#never_intercept) | `["/up"]` | Paths the worker does not touch at all |
 | [`cache_origins`](#cache_origins) | `[]` | Other origins the worker may cache |
@@ -229,7 +230,7 @@ template instead. Override the template at
 
 ## `cache_as_you_go`
 
-**Default:** `[]` (everything you browse)
+**Default:** `["/*"]` (everything you browse)
 
 What browsing stores. These are the pages worth keeping as somebody moves through the app.
 What a stored page needs in order to render — its stylesheets, its scripts, its images — is
@@ -239,7 +240,8 @@ stored with it, whether or not those match anything in the list.
 config.cache_as_you_go = [ "/sites", "/sites/:id", "/sites/:id/card" ]
 ```
 
-An **empty list stores everything you browse**. A non-empty one means *only* these pages.
+`/*` is every path, including `/`. Narrow it to the pages worth keeping, or set `[]` to
+store nothing by browsing. `never_cache` still wins either way.
 
 It does not apply to the precache manifest: listing a URL in `precache_urls` is an explicit
 instruction, and quietly declining it would mean precaching 84 pages and silently getting 60.
@@ -311,8 +313,12 @@ A **string** is a route pattern, and matches that shape and nothing else:
 | `/sites/:id` | `/sites/1` | `/sites`, `/sites/1/card` |
 | `/sites/:id/card` | `/sites/1/card` | `/sites/1/notices` |
 | `/sites/*` | `/sites/1`, `/sites/1/card` | `/sites` |
+| `/*` | `/`, `/sites`, `/sites/1/card` | — |
 
-`:name` is exactly one segment; `*` takes everything remaining and may only be last.
+`:name` is exactly one segment; `*` takes everything remaining and may only be last. A
+lone `/*` is the exception: it is every path, including `/`. `/sites/*` still does not
+match `/sites`.
+
 Coldwire raises at boot on anything else — a missing leading slash, `*` in the middle, a
 malformed segment — because every mistake of this shape fails the same silent way: the rule
 never matches, and you find out when a page you expected offline is not there.

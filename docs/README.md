@@ -14,6 +14,6 @@ caches pages for Hotwire, PWAs, and Hotwire Native.
 | [Configuration](configuration.md) | Every option, its default, and what changing it does |
 | [How it works](how-it-works.md) | Why a naive cache fails in Hotwire, and what Coldwire does about it |
 
-Everything is set in `config/initializers/coldwire.rb` through `Coldwire.configure`. Only
-`auto_sync` really needs your attention on a first install; `cache_identity` needs it if
-anyone signs in.
+Everything is set in `config/initializers/coldwire.rb` through `Coldwire.configure`.
+`bin/rails coldwire:install` writes that file with every default. Only `auto_sync` really
+needs your attention on a first install; `cache_identity` needs it if anyone signs in.

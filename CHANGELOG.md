@@ -4,6 +4,9 @@
 
 First release. The API may still change before 1.0.
 
+- **`bin/rails coldwire:install`.** Mounts the engine at `/offline`, writes an initializer
+  with every option and its default, registers the Stimulus controller, and tags the
+  layout. Safe to run twice.
 - **Service worker and offline fallback.** A mountable engine serves the worker; when there is
   no cached copy and no network, a full page or a `<turbo-frame>` — both overridable — stands
   in. Built to satisfy Hotwire Native, which is stricter than a browser.
@@ -14,12 +17,12 @@ First release. The API may still change before 1.0.
   no equivalent, and `fetch` may not set one — so on Android everything precached came back
   rendered for a browser. Each page writes its agent into `coldwire-user-agent`, which the
   browser attaches to every same-origin request, and a middleware puts it back.
-- **`cache_as_you_go`** names the pages kept as somebody browses, and **a stored page brings
-  what it asks for** — its stylesheets, scripts and images are stored with it whatever the
-  lists say, because a page held without them is the offline equivalent of not holding it.
-  **`never_cache`** is the one veto over storing anything, by any route in; it is not
-  `never_intercept`, which stops the worker touching a request at all and so fails outright
-  offline.
+- **`cache_as_you_go`** names the pages kept as somebody browses — default `["/*"]`, every
+  path. An empty list stores nothing by browsing. **A stored page brings what it asks for**
+  — its stylesheets, scripts and images are stored with it whatever the lists say, because
+  a page held without them is the offline equivalent of not holding it. **`never_cache`**
+  is the one veto over storing anything, by any route in; it is not `never_intercept`,
+  which stops the worker touching a request at all and so fails outright offline.
 - **Automatic syncing** on an interval, refetching anything older than `max_age`, resuming
   across page loads when a run is cut short.
 - **Offline settings page** at the mount point: connection status, force offline, an Auto Sync switch

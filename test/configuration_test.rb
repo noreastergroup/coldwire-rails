@@ -9,7 +9,7 @@ class ConfigurationTest < Minitest::Test
   end
 
   def test_storing_is_wide_open_until_narrowed
-    assert_empty config.cache_as_you_go
+    assert_equal [ "/*" ], config.cache_as_you_go
     assert_empty config.never_cache
   end
 

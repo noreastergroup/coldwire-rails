@@ -86,4 +86,22 @@ class WorkerSourceTest < Minitest::Test
     refute_nil body
     assert_includes body, "CACHE_ORIGINS.includes(url.origin)"
   end
+
+  # An empty list used to mean "store everything". That made [] and ["/*"] the same, and
+  # left no way to turn browsing-cache off. The list is now the list: empty stores nothing
+  # by browsing, "/*" is the catch-all default.
+  def test_browsing_stores_only_what_the_list_names
+    body = worker[/function isAutoCacheable\(request\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    refute_includes body, "CACHE_AS_YOU_GO.length === 0"
+    assert_includes body, "return matchesRules(url, CACHE_AS_YOU_GO)"
+  end
+
+  def test_a_lone_star_matches_every_path_including_root
+    body = worker[/function matchesPattern\(path, pattern\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "index === 0 && pattern.length === 1"
+  end
 end

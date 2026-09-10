@@ -24,7 +24,7 @@ Works the same in a plain Hotwire app, an installed PWA, or Hotwire Native.
 - **Cache as you go.** Pages someone visits are kept, with the styles, scripts, and images
   they need to render.
 - **An offline fallback** Turbo — and Hotwire Native — will actually show.
-- **Offline settings** at `/offline`: status, force offline, sync, downloads, what's cached.
+- **Offline settings** at `/offline`: turn caching off, force offline, sync, downloads, what's cached.
 - **Safe when people sign in.** The cache drops when the user changes.
 
 <p align="center">

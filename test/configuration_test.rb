@@ -13,6 +13,14 @@ class ConfigurationTest < Minitest::Test
     assert_empty config.never_cache
   end
 
+  def test_caching_enabled_by_default_starts_on
+    assert config.caching_enabled_by_default
+
+    config.caching_enabled_by_default = false
+
+    refute config.caching_enabled_by_default
+  end
+
   def test_patterns_are_checked_at_boot
     error = assert_raises(ArgumentError) { config.cache_as_you_go = [ /\A\/map/ ] }
 

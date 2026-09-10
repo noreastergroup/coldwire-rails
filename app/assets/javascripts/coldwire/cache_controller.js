@@ -14,7 +14,8 @@ const INERT_STORE = {
   set: () => {},
   number: () => 0,
   on: () => false,
-  toggle: () => {}
+  toggle: () => {},
+  cachingOn: () => true
 }
 const SYNC_MESSAGE = "coldwire:sync"
 
@@ -28,6 +29,9 @@ export default class extends Controller {
     "summary",
     "total",
     "entries",
+    "cachingToggle",
+    "whenOn",
+    "disableConfirm",
     "forcedToggle",
     "autoSyncToggle",
     "spinner",
@@ -71,10 +75,13 @@ export default class extends Controller {
       if (navigator.serviceWorker.startMessages) navigator.serviceWorker.startMessages()
     }
 
+    this.restoreCaching()
     this.restoreForced()
     this.restoreAutoSync()
-    this.renderArchives()
-    this.refresh()
+    if (this.cachingOn()) {
+      this.renderArchives()
+      this.refresh()
+    }
 
     // A download outlives the page that started it, and reports itself as it goes.
     this.onArchiveMessage = (event) => this.handleArchiveMessage(event)
@@ -355,6 +362,7 @@ export default class extends Controller {
   tick() {
     this.renderSyncedAt()
 
+    if (!this.cachingOn()) return
     if (!this.autoSyncOn() || this.syncIntervalValue <= 0) return
     if (this.syncRunning || this.syncStarting) return
     // Nothing to do out of sight, and nothing worth doing with no network.
@@ -538,6 +546,106 @@ export default class extends Controller {
   restoreForced() {
     if (!this.hasForcedToggleTarget) return
     this.forcedToggleTarget.checked = this.store.on(this.store.keys.forced)
+  }
+
+  cachingOn() {
+    return this.store.cachingOn()
+  }
+
+  restoreCaching() {
+    if (this.hasCachingToggleTarget) this.cachingToggleTarget.checked = this.cachingOn()
+    this.applyCachingVisibility()
+  }
+
+  applyCachingVisibility() {
+    if (this.hasWhenOnTarget) this.whenOnTarget.hidden = !this.cachingOn()
+  }
+
+  // The switch itself flips before this runs. Turning off asks first: cancel puts it back.
+  toggleCaching(event) {
+    if (event.currentTarget.checked) {
+      this.enableCaching()
+      return
+    }
+
+    event.currentTarget.checked = true
+    this.openDisableConfirm()
+  }
+
+  openDisableConfirm() {
+    if (!this.hasDisableConfirmTarget) {
+      if (window.confirm("Turn off caching? Everything saved for offline use will be deleted.")) {
+        this.confirmDisableCaching()
+      }
+      return
+    }
+
+    if (typeof this.disableConfirmTarget.showModal === "function") {
+      this.disableConfirmTarget.showModal()
+    } else {
+      this.disableConfirmTarget.setAttribute("open", "")
+    }
+  }
+
+  closeDisableConfirm() {
+    if (!this.hasDisableConfirmTarget) return
+
+    if (typeof this.disableConfirmTarget.close === "function") {
+      this.disableConfirmTarget.close()
+    } else {
+      this.disableConfirmTarget.removeAttribute("open")
+    }
+  }
+
+  cancelDisableCaching(event) {
+    event?.preventDefault()
+    this.closeDisableConfirm()
+    if (this.hasCachingToggleTarget) this.cachingToggleTarget.checked = true
+  }
+
+  closeDisableOnBackdrop(event) {
+    if (event.target === this.disableConfirmTarget) this.cancelDisableCaching(event)
+  }
+
+  async confirmDisableCaching(event) {
+    event?.preventDefault()
+    this.closeDisableConfirm()
+    if (this.hasCachingToggleTarget) this.cachingToggleTarget.checked = false
+    await this.disableCaching()
+  }
+
+  async enableCaching() {
+    this.store.toggle(this.store.keys.caching, true)
+    this.applyCachingVisibility()
+    this.setStatus("Caching is on.")
+
+    if (window.coldwireRegister) {
+      try { await window.coldwireRegister() } catch { /* registration warns on its own */ }
+    }
+    try { await sendToWorker("setCachingEnabled", { value: true }, 5000) } catch { /* no worker yet */ }
+
+    this.restoreForced()
+    this.restoreAutoSync()
+    this.renderArchives()
+    this.refresh()
+  }
+
+  async disableCaching() {
+    this.store.toggle(this.store.keys.caching, false)
+    this.applyCachingVisibility()
+    this.setStatus("Turning caching off…")
+    this.toggleBusy(true)
+
+    try {
+      try { await sendToWorker("setCachingEnabled", { value: false }, 5000) } catch { /* worker may already be gone */ }
+      await this.clearCaches()
+      if (window.coldwireUnregister) await window.coldwireUnregister()
+      this.setStatus("Caching is off. Nothing is being saved for offline use.")
+    } catch (error) {
+      this.setStatus(error.message || "Could not turn caching off")
+    } finally {
+      this.toggleBusy(false)
+    }
   }
 
   // Automatic syncing, as this device has it. The config decides whether it is on offer at

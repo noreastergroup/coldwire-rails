@@ -61,5 +61,6 @@ const OFFLINE_ATTRIBUTE = "data-coldwire-offline"
 const CACHED_AT_ATTRIBUTE = "data-coldwire-cached-at"
 
 let forcedOffline = false
+let cachingEnabled = true
 
 <%= raw Coldwire::Source.worker %>

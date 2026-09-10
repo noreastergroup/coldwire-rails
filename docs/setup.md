@@ -135,9 +135,11 @@ redirects to login, so nothing about the online flow changes.
 Mounted at the engine root — `/offline` with the mount above. It inherits your
 `ApplicationController`, so it picks up your layout, authentication, and helpers.
 
-This is the page people use to see connection status, download archives, turn auto-sync
-off for this device, force offline, and manage what is cached. Put it behind whatever
-authentication you use by wrapping the route, or override `app/views/coldwire/caches/show.html.erb`.
+This is the page people use to turn caching on or off, see connection status, download
+archives, turn auto-sync off for this device, force offline, and manage what is cached.
+Turning caching off asks first, then deletes what is stored and hides the rest of the
+page. Put it behind whatever authentication you use by wrapping the route, or override
+`app/views/coldwire/caches/show.html.erb`.
 
 <p align="center">
   <img src="images/offline-settings.png" alt="Offline settings: status, force offline, auto sync, and downloads" width="280">

@@ -7,6 +7,9 @@ First release. The API may still change before 1.0.
 - **`bin/rails coldwire:install`.** Mounts the engine at `/offline`, writes an initializer
   with every option and its default, registers the Stimulus controller, and tags the
   layout. Safe to run twice.
+- **Caching switch** on the offline settings page. Off deletes what is stored, unregisters
+  the worker, and hides the rest of the page. `config.caching_enabled_by_default` is the
+  starting position of the switch (on). A device remembers the choice.
 - **Service worker and offline fallback.** A mountable engine serves the worker; when there is
   no cached copy and no network, a full page or a `<turbo-frame>` — both overridable — stands
   in. Built to satisfy Hotwire Native, which is stricter than a browser.

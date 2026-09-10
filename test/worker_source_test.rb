@@ -19,6 +19,13 @@ class WorkerSourceTest < Minitest::Test
     assert rules < serve, "rules must come before the code that calls them"
   end
 
+  def test_a_disabled_worker_stands_aside
+    body = worker[/function shouldHandle\(request\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "if (!cachingEnabled) return false"
+  end
+
   # Nothing is answered from the cache while the network is answering, so the cache is not
   # even looked in until a fetch has failed. A lookup on the working path would be pure cost,
   # and the browser already holds what it holds.

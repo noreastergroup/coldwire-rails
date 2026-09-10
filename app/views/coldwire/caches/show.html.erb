@@ -36,6 +36,25 @@
   <h1>Offline settings</h1>
 
   <div class="coldwire-card">
+    <label class="coldwire-setting">
+      <span class="coldwire-switch coldwire-switch--on">
+        <input type="checkbox"
+               data-coldwire-cache-target="cachingToggle"
+               data-action="change->coldwire-cache#toggleCaching">
+        <span aria-hidden="true"></span>
+      </span>
+      <span>
+        <span class="coldwire-setting-title">Caching</span>
+        <span class="coldwire-setting-note">
+          Save pages as you browse so they work without a connection. Turn this off to stop
+          saving and delete what is already stored.
+        </span>
+      </span>
+    </label>
+  </div>
+
+  <div data-coldwire-cache-target="whenOn">
+  <div class="coldwire-card">
     <div class="coldwire-head">
       <div>
         <p class="coldwire-headline">
@@ -228,6 +247,7 @@
   </div>
 
   <p class="coldwire-status" data-coldwire-cache-target="status"></p>
+  </div>
 
   <%# A real <dialog>: Escape, focus handling and the backdrop come with it, and none of that
       is worth reimplementing to show one string. %>
@@ -250,6 +270,29 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="<%= trash_path %>" />
         </svg>
         Delete
+      </button>
+    </div>
+  </dialog>
+
+  <%# Turning caching off deletes everything stored. Ask first, and keep the switch on
+      until they confirm — cancel is the safe default. %>
+  <dialog class="coldwire-dialog"
+          data-coldwire-cache-target="disableConfirm"
+          data-action="cancel->coldwire-cache#cancelDisableCaching
+                       click->coldwire-cache#closeDisableOnBackdrop">
+    <h2>Turn off caching?</h2>
+    <p class="coldwire-facts" style="margin-top: 0;">
+      Everything saved for offline use will be deleted. Pages will not be available without
+      a connection until you turn caching back on.
+    </p>
+    <div class="coldwire-actions coldwire-actions--spaced">
+      <button type="button" class="coldwire-button" data-action="click->coldwire-cache#cancelDisableCaching">
+        Cancel
+      </button>
+      <button type="button"
+              class="coldwire-button coldwire-button--danger"
+              data-action="click->coldwire-cache#confirmDisableCaching">
+        Turn off and delete
       </button>
     </div>
   </dialog>

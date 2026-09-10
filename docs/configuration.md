@@ -16,6 +16,7 @@ Coldwire.configure do |config|
 
   config.cache_identity = -> { nil }
   config.register_if = -> { true }
+  config.caching_enabled_by_default = true
   config.offline_import = "@hotwired/turbo-rails"
 
   config.cache_as_you_go = [ "/*" ]
@@ -48,6 +49,7 @@ down with it.
 | [`auto_sync.concurrency`](#autosyncconcurrency) | `4` | Fetches in flight at once during a sync |
 | [`cache_identity`](#cache_identity) | `-> { nil }` | Who the cache belongs to; changing it drops the cache |
 | [`register_if`](#register_if) | `-> { true }` | Whether a page registers the worker at all |
+| [`caching_enabled_by_default`](#caching_enabled_by_default) | `true` | Starting position of the Caching switch. Not a master on/off |
 | [`offline_import`](#offline_import) | `"@hotwired/turbo-rails"` | Importmap module the offline page loads to boot Turbo |
 | [`cache_as_you_go`](#cache_as_you_go) | `["/*"]` | Pages stored as somebody browses. `/*` is everything |
 | [`never_cache`](#never_cache) | `[]` | Never stored, by any route in. The one veto |
@@ -211,6 +213,23 @@ config.register_if = ->(request) { request.format.html? }
 A page that does not register does not cache or sync. The helper
 `coldwire_service_worker_tag` already consults this, so you can leave the tag in the layout
 and gate registration here.
+
+---
+
+## `caching_enabled_by_default`
+
+**Default:** `true`
+
+Starting position of the Caching switch on the offline settings page. It does not turn
+caching on or off for the app — people do that themselves, and their choice is remembered
+on the device. A fresh device follows this.
+
+```ruby
+config.caching_enabled_by_default = true
+```
+
+This is not [`register_if`](#register_if). `register_if` is the app's decision that the
+worker should not run here at all. This is only where the switch starts.
 
 ---
 
@@ -472,6 +491,7 @@ From JavaScript, `window.Coldwire`:
 ```js
 Coldwire.isOffline()        // this page did not come from the network
 Coldwire.isForcedOffline()  // …because the switch is on, rather than for want of a signal
+Coldwire.isCachingEnabled() // the Caching switch, not navigator.serviceWorker
 Coldwire.cachedAt()         // a Date, or null if it came from the network
 Coldwire.onChange((state) => { … })  // fires on every Turbo visit and on toggling force
                                      // offline; returns its own unsubscribe

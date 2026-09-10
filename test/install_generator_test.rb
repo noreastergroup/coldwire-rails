@@ -26,6 +26,7 @@ class InstallGeneratorTest < Rails::Generators::TestCase
       assert_match "Coldwire.configure do |config|", content
       assert_match "sync.enabled = false", content
       assert_match "config.cache_identity = -> { nil }", content
+      assert_match "config.caching_enabled_by_default = true", content
       assert_match 'config.cache_as_you_go = [ "/*" ]', content
       assert_match 'config.worker_scope = "/"', content
     end

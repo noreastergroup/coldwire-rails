@@ -78,6 +78,11 @@ module Coldwire
     #   config.register_if = -> { hotwire_native_app? && current_user.present? }
     attr_writer :register_if
 
+    # Default for the Caching switch on the offline settings page. People can turn it off
+    # there, which deletes what is stored and stops anything new being saved. Unset on a
+    # device follows this; a choice they have already made is remembered.
+    attr_accessor :caching_enabled_by_default
+
     # Who the cache belongs to, usually the signed-in user's id. When it changes between page
     # loads the cache is dropped, which is what makes signing out and switching accounts safe:
     # cached pages hold whatever the previous session could see.
@@ -181,6 +186,7 @@ module Coldwire
       @offline_import = "@hotwired/turbo-rails"
       @ignore_query_params = true
       @register_if = -> { true }
+      @caching_enabled_by_default = true
       @cache_identity = -> { nil }
       @cache_origins = []
       @cache_ranges = []

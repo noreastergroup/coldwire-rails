@@ -34,6 +34,7 @@ module Coldwire
         workerPath: coldwire.service_worker_path,
         workerScope: Coldwire.config.worker_scope,
         syncInterval: Coldwire.config.auto_sync.interval.to_i * 1000,
+        cachingEnabledByDefault: Coldwire.config.caching_enabled_by_default,
         userAgentCookie: USER_AGENT_COOKIE
       }
     end

@@ -123,6 +123,11 @@ This is the page people use to see connection status, download archives, turn au
 off for this device, force offline, and manage what is cached. Put it behind whatever
 authentication you use by wrapping the route, or override `app/views/coldwire/caches/show.html.erb`.
 
+<p align="center">
+  <img src="images/offline-settings.png" alt="Offline settings: status, force offline, auto sync, and downloads" width="280">
+  <img src="images/offline-settings-cached.png" alt="Offline settings: every cached entry, with search, sort, and delete" width="280">
+</p>
+
 To reach it offline, list it in `cache_as_you_go` like any other page. **Sync now** talks to
 the manifest, which is never intercepted, so that button fails while offline; the cached list,
 **Clear cache**, and **Force offline** are client-side and keep working.
@@ -148,7 +153,31 @@ app-bound mode and takes service workers with it.
 - Nominate other origins or `Range` URLs with [`cache_origins`](configuration.md#cache_origins)
   and [`cache_ranges`](configuration.md#cache_ranges)
 - Offer large files for download with [`cache_archives`](configuration.md#cache_archives)
-- Override the offline page by creating
+- Override the offline fallback by creating
   `app/views/coldwire/service_worker/offline_page.html.erb` (and
-  `offline_frame.html.erb` for frames) in your app. The [project README](../README.md#the-offline-page)
-  covers what those templates have to keep
+  `offline_frame.html.erb` for frames) in your app. See
+  [The offline page](#the-offline-page) for what those templates have to keep.
+
+## The offline page
+
+The fallback carries its own styles and needs no configuration. It deliberately does not
+pull in your stylesheet: a fallback that depends on the cache being healthy is a fallback
+that fails when it is needed.
+
+Override either template by creating it in your own app:
+
+| Path | Renders |
+|---|---|
+| `app/views/coldwire/service_worker/offline_page.html.erb` | The full-page fallback |
+| `app/views/coldwire/service_worker/offline_frame.html.erb` | The inside of the fallback `<turbo-frame>` |
+
+Both are rendered at worker-build time and embedded in the script, so they are plain markup —
+no request context, no helpers that need a current user. Three things to keep in the page:
+
+- **CSS in the body, scoped.** Turbo's head merge copies new `<style>` elements into the app
+  and never removes them, so a `<style>` in the head outlives the offline page and restyles
+  everything after it.
+- **The Turbo import**, alone rather than your app entry point — offline, every module in that
+  graph would have to be cached for it to evaluate, and one miss means no Turbo.
+- **`<meta name="turbo-cache-control" content="no-cache">`**, or Turbo snapshots the offline
+  page and can restore it after you are back online.

@@ -101,6 +101,11 @@ are never retired.
 The offline settings page has a per-device switch that turns automatic syncing off, remembered in
 `localStorage`. Switched off, no page holds a sync timer; **Sync now** still runs a pass.
 
+<p align="center">
+  <img src="images/offline-settings.png" alt="Offline settings: status, force offline, auto sync, and downloads" width="280">
+  <img src="images/offline-settings-cached.png" alt="Offline settings: every cached entry, with search, sort, and delete" width="280">
+</p>
+
 ### `auto_sync.enabled`
 
 **Default:** `false`
@@ -448,9 +453,27 @@ for the first paint of a cold boot, before any JS runs, and a `<meta name="coldw
 for Turbo visits, since Turbo merges the head but never copies `<html>` attributes.
 `coldwire_service_worker_tag` mirrors the meta onto `<html>` on each `turbo:load`.
 
-Any CSS can key off the attribute. From JavaScript, `window.Coldwire.isOffline()` reads the
-marker rather than `navigator.onLine`. See the [project README](../README.md#telling-the-page-it-is-offline)
-for the JS API and a Tailwind variant.
+Any CSS can key off the attribute. With Tailwind v4, two custom variants give you
+`offline:` and `online:`:
+
+```css
+@custom-variant offline (html[data-coldwire-offline] &);
+@custom-variant online (html:not([data-coldwire-offline]) &);
+```
+
+From JavaScript, `window.Coldwire`:
+
+```js
+Coldwire.isOffline()        // this page did not come from the network
+Coldwire.isForcedOffline()  // …because the switch is on, rather than for want of a signal
+Coldwire.cachedAt()         // a Date, or null if it came from the network
+Coldwire.onChange((state) => { … })  // fires on every Turbo visit and on toggling force
+                                     // offline; returns its own unsubscribe
+```
+
+`isOffline()` reads the marker rather than `navigator.onLine`, which a web view reports
+unreliably in both directions. `onChange` is what lets a map put its remote sources back
+without a reload.
 
 Set this to `false` if you do not want the stamp. The worker still serves from cache; the
 page just cannot tell.

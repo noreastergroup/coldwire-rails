@@ -1,5 +1,8 @@
 # Coldwire
 
+[![Gem](https://img.shields.io/gem/v/coldwire-rails.svg)](https://rubygems.org/gems/coldwire-rails)
+[![Gem](https://img.shields.io/gem/dt/coldwire-rails.svg)](https://rubygems.org/gems/coldwire-rails)
+
 **When your Hotwire wires go cold.**
 
 Offline caching for Rails. Add a gem, mount it, drop a tag in your layout — pages start

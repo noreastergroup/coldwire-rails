@@ -206,45 +206,54 @@
     </div>
   <% end %>
 
-  <div class="coldwire-card">
-    <h2>Cached</h2>
+  <%# The URL list is a debug surface, not something most people need. Closed until they
+      open it; remembered after that. %>
+  <details class="coldwire-inspect"
+           data-coldwire-cache-target="inspect"
+           data-action="toggle->coldwire-cache#toggleInspect">
+    <summary>
+      <span class="coldwire-inspect-label">Inspect cache</span>
+      <span class="coldwire-inspect-hint">Every URL stored on this device</span>
+    </summary>
 
-    <div class="coldwire-filters">
-      <input type="search"
-             class="coldwire-input"
-             placeholder="Filter by path"
-             aria-label="Filter cached files by path"
-             autocomplete="off"
-             autocapitalize="none"
-             spellcheck="false"
-             data-coldwire-cache-target="search"
-             data-action="input->coldwire-cache#filterEntries search->coldwire-cache#filterEntries">
-      <select class="coldwire-select"
-              aria-label="Sort cached files"
-              data-coldwire-cache-target="sort"
-              data-action="change->coldwire-cache#filterEntries">
-        <option value="recent">Most recent</option>
-        <option value="largest">Largest</option>
-        <option value="alphabetical">A–Z</option>
-      </select>
+    <div class="coldwire-inspect-body">
+      <div class="coldwire-filters">
+        <input type="search"
+               class="coldwire-input"
+               placeholder="Filter by path"
+               aria-label="Filter cached files by path"
+               autocomplete="off"
+               autocapitalize="none"
+               spellcheck="false"
+               data-coldwire-cache-target="search"
+               data-action="input->coldwire-cache#filterEntries search->coldwire-cache#filterEntries">
+        <select class="coldwire-select"
+                aria-label="Sort cached files"
+                data-coldwire-cache-target="sort"
+                data-action="change->coldwire-cache#filterEntries">
+          <option value="recent">Most recent</option>
+          <option value="largest">Largest</option>
+          <option value="alphabetical">A–Z</option>
+        </select>
+      </div>
+
+      <p class="coldwire-facts coldwire-count" data-coldwire-cache-target="summary">Reading the cache…</p>
+
+      <ul class="coldwire-entries" data-coldwire-cache-target="entries">
+        <li class="coldwire-empty">Nothing cached yet.</li>
+      </ul>
+
+      <%# Cloned for each row. Keeping the markup here rather than assembling it in JavaScript
+          means the icon and its wrapper are described once, in the place you would look. %>
+      <template data-coldwire-cache-target="forgetTemplate">
+        <button type="button" class="coldwire-entry-forget" data-action="click->coldwire-cache#forgetEntry">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="<%= trash_path %>" />
+          </svg>
+        </button>
+      </template>
     </div>
-
-    <p class="coldwire-facts coldwire-count" data-coldwire-cache-target="summary">Reading the cache…</p>
-
-    <ul class="coldwire-entries" data-coldwire-cache-target="entries">
-      <li class="coldwire-empty">Nothing cached yet.</li>
-    </ul>
-
-    <%# Cloned for each row. Keeping the markup here rather than assembling it in JavaScript
-        means the icon and its wrapper are described once, in the place you would look. %>
-    <template data-coldwire-cache-target="forgetTemplate">
-      <button type="button" class="coldwire-entry-forget" data-action="click->coldwire-cache#forgetEntry">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="<%= trash_path %>" />
-        </svg>
-      </button>
-    </template>
-  </div>
+  </details>
 
   <p class="coldwire-status" data-coldwire-cache-target="status"></p>
   </div>

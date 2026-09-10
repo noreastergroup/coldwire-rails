@@ -29,9 +29,8 @@ First release. The API may still change before 1.0.
 - **Automatic syncing** on an interval, refetching anything older than `max_age`, resuming
   across page loads when a run is cut short.
 - **Offline settings page** at the mount point: connection status, force offline, an Auto Sync switch
-  with a countdown and live progress, and every cached entry with search, sort, and per-row
-  delete. Turning automatic syncing off is remembered on the device — `Sync now` still works,
-  and no page in the app arms a timer while it is off.
+  with a countdown and live progress. The list of every cached URL is under **Inspect cache**,
+  closed until you open it and remembered after that.
 - **Nothing served from the cache is `data-turbo-track="reload"`.** Turbo will not render a
   page whose tracked elements differ from the current page's; it reloads instead, which
   offline buys nothing and which Hotwire Native can hang on. Asset digests change with every

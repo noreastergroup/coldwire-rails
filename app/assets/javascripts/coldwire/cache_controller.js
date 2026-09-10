@@ -47,6 +47,7 @@ export default class extends Controller {
     "syncLabel",
     "search",
     "sort",
+    "inspect",
     "forgetTemplate",
     "detail",
     "detailUrl",
@@ -76,6 +77,7 @@ export default class extends Controller {
     }
 
     this.restoreCaching()
+    this.restoreInspect()
     this.restoreForced()
     this.restoreAutoSync()
     if (this.cachingOn()) {
@@ -557,6 +559,19 @@ export default class extends Controller {
     this.applyCachingVisibility()
   }
 
+  restoreInspect() {
+    if (!this.hasInspectTarget) return
+    this.inspectTarget.open = this.store.on(this.store.keys.inspect)
+  }
+
+  // Closed unless they have opened it. Remembered so a developer who needs the list
+  // does not have to expand it on every visit.
+  toggleInspect() {
+    if (!this.hasInspectTarget) return
+    this.store.toggle(this.store.keys.inspect, this.inspectTarget.open)
+    if (this.inspectTarget.open && this.entries) this.renderEntries()
+  }
+
   applyCachingVisibility() {
     if (this.hasWhenOnTarget) this.whenOnTarget.hidden = !this.cachingOn()
   }
@@ -803,6 +818,14 @@ export default class extends Controller {
       : entries
 
     this.renderSummary(matches, entries)
+
+    // The list is hidden until they expand Inspect cache. Painting hundreds of rows for a
+    // panel nobody opened is wasted work; the header total is enough until then.
+    if (this.hasInspectTarget && !this.inspectTarget.open) {
+      window.cancelAnimationFrame(this.painting)
+      return
+    }
+
     window.cancelAnimationFrame(this.painting)
     this.entriesTarget.replaceChildren()
 

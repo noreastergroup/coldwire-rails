@@ -32,7 +32,7 @@ Works the same in a plain Hotwire app, an installed PWA, or Hotwire Native.
   <img src="docs/images/offline-settings-cached.png" alt="Offline settings: every cached entry, with search, sort, and delete" width="280">
 </p>
 
-<p align="center"><em>The offline settings page that ships with it.</em></p>
+<p align="center"><em>The offline settings page that ships with it. The URL list is under Inspect cache.</em></p>
 
 <p align="center">
   <img src="docs/images/offline-fallback.png" alt="The offline fallback: You're offline. This page isn't available offline. Reconnect and try again." width="280">

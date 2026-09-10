@@ -147,8 +147,9 @@ page. Put it behind whatever authentication you use by wrapping the route, or ov
 </p>
 
 To reach it offline, list it in `cache_as_you_go` like any other page. **Sync now** talks to
-the manifest, which is never intercepted, so that button fails while offline; the cached list,
-**Clear cache**, and **Force offline** are client-side and keep working.
+the manifest, which is never intercepted, so that button fails while offline; **Inspect cache**,
+**Clear cache**, and **Force offline** are client-side and keep working. The URL list lives
+under Inspect cache, closed until you open it.
 
 ## Hotwire Native on iOS
 

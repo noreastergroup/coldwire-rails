@@ -32,7 +32,8 @@ Gem::Specification.new do |spec|
     "LICENSE",
     "VERSION",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs/**/*"
   ]
 
   spec.add_dependency "rails", ">= 7.1"

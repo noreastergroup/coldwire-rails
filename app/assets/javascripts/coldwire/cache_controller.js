@@ -18,7 +18,7 @@ const INERT_STORE = {
 }
 const SYNC_MESSAGE = "coldwire:sync"
 
-// Drives the Coldwire debug page: inspect the cache, precache the manifest, force offline.
+// Drives the offline settings page: inspect the cache, precache the manifest, force offline.
 export default class extends Controller {
   static values = { probeUrl: String, autoSync: Boolean, syncInterval: Number }
   static targets = [

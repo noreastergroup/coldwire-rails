@@ -1,4 +1,4 @@
-// Turning numbers and timestamps into the words the debug page shows.
+// Turning numbers and timestamps into the words the offline settings page shows.
 
 // Whole words. "every 1 d" reads like a typo, and the cadence is the one number on this
 // card somebody is meant to act on.

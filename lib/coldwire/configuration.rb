@@ -27,7 +27,7 @@ module Coldwire
     # collapses `/search?q=`, so a cached result set can answer a different query.
     attr_accessor :ignore_query_params
 
-    # What the debug page pings to tell online from offline, because navigator.onLine only
+    # What the offline settings page pings to tell online from offline, because navigator.onLine only
     # reports whether an interface is up. Never intercepted — a probe answered from the cache
     # would resolve with the network down, which is precisely backwards.
     attr_accessor :probe_path
@@ -101,7 +101,7 @@ module Coldwire
       @cache_ranges = validate_patterns(patterns, :cache_ranges) || Array(patterns)
     end
 
-    # Large files somebody can choose to keep, each described well enough for the debug page
+    # Large files somebody can choose to keep, each described well enough for the offline settings page
     # to offer it without knowing what it is:
     #
     #   config.cache_archives = [

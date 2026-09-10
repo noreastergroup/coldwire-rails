@@ -23,7 +23,7 @@ install prompt, no icons.
 | **Precaching** | A list of URLs you compute in Ruby, fetched with the subresources those pages reference |
 | **Automatic sync** | Kept current on an interval, resuming where it left off when a run is cut short |
 | **Offline fallback** | A page and a `<turbo-frame>`, both overridable, that Turbo renders rather than rejects |
-| **A debug page** | Status, force offline, sync with a countdown and progress, and every cached entry with search, sort and delete |
+| **Offline settings** | Status, force offline, sync with a countdown and progress, downloadable archives, and every cached entry with search, sort and delete |
 | **Allow and block lists** | Route patterns — `"/sites/:id/card"` — or Regexps |
 | **Cache identity** | The cache is dropped when the signed-in user changes |
 | **Cross-origin and `Range`** | Nominate other origins, and cache tiles and media the Cache API otherwise refuses |
@@ -45,7 +45,7 @@ layout:
 
 ```ruby
 # config/routes.rb
-mount Coldwire::Engine => "/coldwire"
+mount Coldwire::Engine => "/offline"
 ```
 
 ```js
@@ -68,7 +68,8 @@ mount it — narrow that with `config.worker_scope`.
 
 ## Configuration
 
-Everything, with its default. Only `auto_sync` really needs your attention.
+Setup and a reference for every option are in [docs](docs/README.md). Everything, with its
+default, is below. Only `auto_sync` really needs your attention.
 
 ```ruby
 # config/initializers/coldwire.rb
@@ -287,7 +288,7 @@ config.cache_archives = [
 A bare URL string works too, and the filename becomes the title.
 
 **Nothing downloads on its own.** Hundreds of megabytes over somebody's connection is their
-decision, so this only makes a file offerable — the debug page shows Download, then **Download
+decision, so this only makes a file offerable — the offline settings page shows Download, then **Download
 again** and **Delete** once it is on the device, or **Resume** where a download stopped part
 way.
 
@@ -364,12 +365,14 @@ login, so nothing about the online flow changes.
 
 ---
 
-## The debug page
+## The offline settings page
 
-Mounted at the engine root — `/coldwire` with the mount above. It inherits your
-`ApplicationController`, so it picks up your layout, authentication and helpers, and is styled
-with plain CSS assuming no framework. Put it behind whatever authentication you use by
-wrapping the route, or override `app/views/coldwire/caches/show.html.erb`.
+Mounted at the engine root — `/offline` with the mount above. This is the page people use
+to see connection status, download archives, turn auto-sync off for this device, force
+offline, and manage what is cached. It inherits your `ApplicationController`, so it picks
+up your layout, authentication and helpers, and is styled with plain CSS assuming no
+framework. Put it behind whatever authentication you use by wrapping the route, or override
+`app/views/coldwire/caches/show.html.erb`.
 
 - **Status** — a light and a word for the connection, how much is cached, when it last synced.
   Decided by pinging `probe_path`, never by `navigator.onLine`.
@@ -385,7 +388,7 @@ wrapping the route, or override `app/views/coldwire/caches/show.html.erb`.
   the whole URL; each row has a trash icon.
 
 To reach it offline, list it in `cache_as_you_go` like any other page. The worker script and the manifest are
-never intercepted, so **Sync now** will fail while offline; the inspector, **Clear cache** and
+never intercepted, so **Sync now** will fail while offline; the cached list, **Clear cache** and
 **Force offline** are client-side and keep working.
 
 ---
@@ -464,7 +467,7 @@ lets one cache serve all three targets — and none of them cost a browser anyth
 
 The Cache API also ignores HTTP freshness headers entirely, and WebKit drops `Date` from
 `match()`. So Coldwire stamps unix seconds onto the *request key* it stores under — `keys()`
-hands it back, and URL matching still finds the entry. That is what the inspector's "2 hours
+hands it back, and URL matching still finds the entry. That is what the cached list's "2 hours
 ago" reads.
 
 ---

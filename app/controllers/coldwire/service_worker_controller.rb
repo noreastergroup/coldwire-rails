@@ -11,7 +11,7 @@ module Coldwire
 
     def show
       # A worker's scope is capped by the directory it is served from, so an engine mounted at
-      # /coldwire would only control /coldwire/*. This lifts the cap.
+      # /offline would only control /offline/*. This lifts the cap.
       response.headers["Service-Worker-Allowed"] = Coldwire.config.worker_scope
       response.headers["Cache-Control"] = "no-cache"
 

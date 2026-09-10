@@ -7,7 +7,7 @@ export async function sendToWorker(type, payload, timeoutMs) {
 
   // `ready` is a promise for a registration that may never exist, not a check — with nothing
   // registered for this scope it simply never settles. Unbounded, it hangs whatever awaited
-  // it: the debug page sat on "Checking…" with an empty list, because the refresh never got
+  // it: the offline settings page sat on "Checking…" with an empty list, because the refresh never got
   // past its first question to the worker.
   const registration = await deadline(
     navigator.serviceWorker.ready, timeoutMs, "No service worker is registered for this page"

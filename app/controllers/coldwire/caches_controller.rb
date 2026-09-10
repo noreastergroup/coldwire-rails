@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Coldwire
-  # The debug surface: inspect what is cached, precache the manifest, force offline.
+  # Offline settings: inspect what is cached, precache the manifest, force offline.
   class CachesController < Coldwire::ApplicationController
     def show
     end

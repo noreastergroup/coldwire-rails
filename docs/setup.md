@@ -1,0 +1,154 @@
+# Setup
+
+The gem is `coldwire-rails`; everything in it lives under `Coldwire`, the way `turbo-rails`
+provides `Turbo`. Four things to wire: the gem, the mount, the Stimulus controller, and a
+tag in the layout.
+
+## Requirements
+
+- Rails 7.1+
+- Turbo — a plain Hotwire app, a PWA, or Hotwire Native
+- Service workers, and HTTPS (or localhost). They are same-origin, so the engine has to be
+  mounted on the app's own domain
+- Hotwire Native is optional. Nothing here requires it
+
+On iOS, service workers only run in `WKWebView` when navigation is limited to app-bound
+domains. See [Hotwire Native on iOS](#hotwire-native-on-ios).
+
+## 1. Add the gem
+
+```ruby
+# Gemfile
+gem "coldwire-rails"
+```
+
+Then `bundle install`.
+
+## 2. Mount the engine
+
+```ruby
+# config/routes.rb
+mount Coldwire::Engine => "/offline"
+```
+
+The worker is served from the mount point, but sends `Service-Worker-Allowed: /` and
+registers at `/`, so it controls the whole origin wherever you mount it. Narrow that with
+[`config.worker_scope`](configuration.md#worker_scope) if you need to.
+
+The mount also exposes:
+
+| Path | What |
+|---|---|
+| `/offline` | The [offline settings page](#the-offline-settings-page) |
+| `/offline/service-worker.js` | The worker script |
+| `/offline/pack` | The precache manifest JSON |
+
+The worker script and the manifest are never intercepted — caching either would strand the
+app on a stale copy of the thing meant to refresh it. The offline settings page is ordinary HTML; list
+it in `cache_as_you_go` if you want it reachable offline.
+
+## 3. Register the Stimulus controller
+
+```js
+// app/javascript/controllers/index.js
+import ColdwireCacheController from "coldwire"
+application.register("coldwire-cache", ColdwireCacheController)
+```
+
+Coldwire pins `"coldwire"` into your importmap itself, so there is nothing to add to
+`config/importmap.rb`.
+
+## 4. Add the tag to your layout
+
+```erb
+<%# app/views/layouts/application.html.erb, inside <head> %>
+<%= coldwire_service_worker_tag %>
+```
+
+This is what registers the worker. A page without the tag does not cache or sync. The helper
+honours [`config.register_if`](configuration.md#register_if), so you can keep the tag in the
+layout and still skip registration for some requests.
+
+## 5. Create an initializer
+
+```ruby
+# config/initializers/coldwire.rb
+Coldwire.configure do |config|
+  config.auto_sync do |sync|
+    sync.enabled = false
+    sync.precache_urls = -> { [] }
+  end
+end
+```
+
+Every option has a working default. The full list, and what each one does, is in
+[Configuration](configuration.md).
+
+## What to set first
+
+**`cache_identity`**, if anyone signs in. Cached pages hold whatever the session that
+fetched them could see. Leave this unset and the cache persists across sessions — fine for
+a single-user or fully public app, wrong for anything else.
+
+```ruby
+config.cache_identity = -> { current_user&.id }
+```
+
+**`auto_sync`**, if there are pages worth having before anyone visits them. Off by default,
+because background fetching is somebody's data plan.
+
+```ruby
+config.auto_sync do |sync|
+  sync.enabled = true
+  sync.precache_urls = -> { Article.published.map { |a| article_path(a) } }
+end
+```
+
+**`never_cache`**, for auth and admin. Put those paths here, not in `never_intercept` — they
+are not the same setting, and they fail very differently offline. See
+[`never_cache`](configuration.md#never_cache) and
+[`never_intercept`](configuration.md#never_intercept).
+
+**Your cold-boot URL must be cacheable.** Whatever URL the app loads at launch has to be
+something the cache can hold. A login path usually is not: signed in, it is a `302` to the
+app root, and a redirect is never cached. Boot into a real page instead; signed out it still
+redirects to login, so nothing about the online flow changes.
+
+## The offline settings page
+
+Mounted at the engine root — `/offline` with the mount above. It inherits your
+`ApplicationController`, so it picks up your layout, authentication, and helpers.
+
+This is the page people use to see connection status, download archives, turn auto-sync
+off for this device, force offline, and manage what is cached. Put it behind whatever
+authentication you use by wrapping the route, or override `app/views/coldwire/caches/show.html.erb`.
+
+To reach it offline, list it in `cache_as_you_go` like any other page. **Sync now** talks to
+the manifest, which is never intercepted, so that button fails while offline; the cached list,
+**Clear cache**, and **Force offline** are client-side and keep working.
+
+## Hotwire Native on iOS
+
+Service workers only run in `WKWebView` when navigation is limited to app-bound domains:
+
+```swift
+Hotwire.config.makeCustomWebView = { config in
+    config.limitsNavigationsToAppBoundDomains = true
+    return WKWebView(frame: .zero, configuration: config)
+}
+```
+
+with every domain you navigate to listed under `WKAppBoundDomains` in `Info.plist`. **Apple
+caps that list at 10 entries**, and an eleventh is silently dropped — which disables
+app-bound mode and takes service workers with it.
+
+## Optional next steps
+
+- Restrict what browsing stores with [`cache_as_you_go`](configuration.md#cache_as_you_go)
+- Nominate other origins or `Range` URLs with [`cache_origins`](configuration.md#cache_origins)
+  and [`cache_ranges`](configuration.md#cache_ranges)
+- Offer large files for download with [`cache_archives`](configuration.md#cache_archives)
+- Override the offline page by creating
+  `app/views/coldwire/service_worker/offline_page.html.erb` (and
+  `offline_frame.html.erb` for frames) in your app. The [project README](../README.md#the-offline-page)
+  covers what those templates have to keep

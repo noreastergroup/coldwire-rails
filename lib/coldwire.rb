@@ -21,7 +21,7 @@ module Coldwire
     #
     # Only two of Coldwire's own endpoints qualify — the worker script and the manifest —
     # because caching either would strand the app on a stale copy of the thing meant to
-    # refresh it. The debug page is ordinary HTML and is left interceptable, so a host that
+    # refresh it. The offline settings page is ordinary HTML and is left interceptable, so a host that
     # wants to reach it offline can list it in `cache_as_you_go` like any other page.
     def never_intercept(*engine_paths)
       normalize(config.never_intercept + engine_paths)

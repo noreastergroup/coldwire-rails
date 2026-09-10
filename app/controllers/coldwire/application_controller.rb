@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Coldwire
-  # Inherits the host's ApplicationController so the debug page picks up its layout,
+  # Inherits the host's ApplicationController so the offline settings page picks up its layout,
   # authentication, and helpers.
   class ApplicationController < ::ApplicationController
     # The engine is isolated, so bare route helpers inside it resolve against the engine's

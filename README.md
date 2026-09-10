@@ -34,6 +34,12 @@ Works the same in a plain Hotwire app, an installed PWA, or Hotwire Native.
 
 <p align="center"><em>The offline settings page that ships with it.</em></p>
 
+<p align="center">
+  <img src="docs/images/offline-fallback.png" alt="The offline fallback: You're offline. This page isn't available offline. Reconnect and try again." width="280">
+</p>
+
+<p align="center"><em>When a page isn't cached and there's no network, this is what people see — not a blank screen or a native error. Override it to match your app.</em></p>
+
 ## Quick start
 
 ```ruby

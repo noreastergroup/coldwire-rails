@@ -160,9 +160,23 @@ app-bound mode and takes service workers with it.
 
 ## The offline page
 
-The fallback carries its own styles and needs no configuration. It deliberately does not
-pull in your stylesheet: a fallback that depends on the cache being healthy is a fallback
-that fails when it is needed.
+When the network is down and there is no cached copy of the page, Coldwire serves this
+fallback instead of letting the request fail. It is a `200` that boots Turbo, which is
+what lets Hotwire Native render it at all — a `503` or a plain-HTML page would show the
+SDK's error screen instead.
+
+<p align="center">
+  <img src="images/offline-fallback.png" alt="The offline fallback: You're offline. This page isn't available offline. Reconnect and try again." width="280">
+</p>
+
+It carries its own styles and needs no configuration. It deliberately does not pull in
+your stylesheet: a fallback that depends on the cache being healthy is a fallback that
+fails when it is needed. Cached pages still look like your app; this is only for URLs
+nobody has, or that `never_cache` refused to store.
+
+**Try again** retries the URL this page stood in for. The template is baked when the
+worker is built, so it cannot know that URL — the page uses `href=""` plus
+`data-turbo="false"` so the browser navigates to wherever it is being shown.
 
 Override either template by creating it in your own app:
 

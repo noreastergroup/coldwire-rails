@@ -4,6 +4,13 @@ Six things break a naive offline cache in a Hotwire app. Four bite you in any br
 are Hotwire Native holding you to a stricter standard. Coldwire handles all six, which is
 what lets one cache serve a plain Hotwire app, a PWA, and Hotwire Native.
 
+When a visit has no cached copy and no network, people see this — a `200` that boots
+Turbo — rather than a native error screen:
+
+<p align="center">
+  <img src="images/offline-fallback.png" alt="The offline fallback: You're offline. This page isn't available offline. Reconnect and try again." width="280">
+</p>
+
 1. **`Vary: Accept` silently defeats precaching.** Rails answers HTML with `Vary: Accept`
    and `cache.match()` honors it. Precaching fetches with `Accept: */*`; Turbo asks for
    `text/html`. So a precached page only ever matches *another precache*, never a real

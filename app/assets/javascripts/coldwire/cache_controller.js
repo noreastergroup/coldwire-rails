@@ -23,7 +23,6 @@ const SYNC_MESSAGE = "coldwire:sync"
 export default class extends Controller {
   static values = { probeUrl: String, autoSync: Boolean, syncInterval: Number }
   static targets = [
-    "status",
     "connection",
     "connectionLight",
     "summary",
@@ -208,7 +207,6 @@ export default class extends Controller {
   // in flight rather than starting a second, so pressing this during a sync joins it.
   async syncNow(event) {
     event?.preventDefault()
-    this.setStatus("")
     this.syncSettled = false
     // Reaching the worker takes a moment, and the ticker keeps ticking while it does.
     this.syncStarting = true
@@ -262,7 +260,7 @@ export default class extends Controller {
     }
 
     this.autoSyncTarget.textContent = this.syncIntervalValue > 0
-      ? `Every ${formatInterval(this.syncIntervalValue)}`
+      ? `Syncs every ${formatInterval(this.syncIntervalValue)}`
       : "On"
   }
 
@@ -271,7 +269,7 @@ export default class extends Controller {
 
     const stamp = this.store.number(this.store.keys.syncedAt)
     const synced = stamp
-      ? `Synced ${formatCachedAt(Math.floor(stamp / 1000))}`
+      ? `Last synced ${formatCachedAt(Math.floor(stamp / 1000))}`
       : "Never synced"
     const next = this.describeNextSync()
 
@@ -313,12 +311,9 @@ export default class extends Controller {
     toggleArchiveBusy(row, true)
 
     try {
-      const result = await sendToWorker("archiveDownload", { url }, 60 * 60 * 1000)
-      if (result && result.ok === false) {
-        this.setStatus(result.offline ? "No connection — the download will resume when there is one." : (result.error || "Download failed"))
-      }
-    } catch (error) {
-      this.setStatus(error.message || "Download failed")
+      await sendToWorker("archiveDownload", { url }, 60 * 60 * 1000)
+    } catch {
+      // The row's own progress is the feedback.
     } finally {
       toggleArchiveBusy(row, false)
       await this.renderArchives()
@@ -334,9 +329,8 @@ export default class extends Controller {
 
     try {
       await sendToWorker("archiveRemove", { url }, 60000)
-      this.setStatus("Deleted.")
-    } catch (error) {
-      this.setStatus(error.message || "Could not remove it")
+    } catch {
+      // The row refreshes either way.
     } finally {
       await this.renderArchives()
       await this.renderCache()
@@ -433,10 +427,9 @@ export default class extends Controller {
 
       await this.syncForcedToWorker()
       await this.catchUpOnSync()
-    } catch (error) {
-      // One unreadable cache entry used to abandon the rest of the refresh with nothing said,
-      // which is indistinguishable from a button that does not work.
-      this.setStatus(error.message || "Could not refresh")
+    } catch {
+      // One unreadable cache entry used to abandon the rest of the refresh. The spinner
+      // stopping is enough; a stray line at the bottom of the page was not.
     } finally {
       this.setRefreshing(false)
     }
@@ -509,16 +502,13 @@ export default class extends Controller {
     // work with offline. Worth one question.
     if (!window.confirm("Delete everything cached? The app will have nothing to show offline until it syncs again.")) return
 
-    this.setStatus("Clearing cache…")
     this.toggleBusy(true)
 
     try {
-      const result = await this.clearCaches()
-      const cleared = result.cleared || 0
-      this.setStatus(cleared === 1 ? "Cleared 1 cache." : `Cleared ${cleared} caches.`)
+      await this.clearCaches()
       await this.renderCache()
-    } catch (error) {
-      this.setStatus(error.message || "Could not clear cache")
+    } catch {
+      // The list re-renders; an empty cache is the confirmation.
     } finally {
       this.toggleBusy(false)
     }
@@ -539,9 +529,8 @@ export default class extends Controller {
 
     try {
       await sendToWorker("setForcedOffline", { value: enabled }, 5000)
-      this.setStatus(enabled ? "Forced offline is on. Requests will use the cache only." : "Forced offline is off.")
-    } catch (error) {
-      this.setStatus(error.message || "Could not update offline mode")
+    } catch {
+      // Worker may not be controlling yet; the checkbox still reflects local state.
     }
   }
 
@@ -573,7 +562,8 @@ export default class extends Controller {
   }
 
   applyCachingVisibility() {
-    if (this.hasWhenOnTarget) this.whenOnTarget.hidden = !this.cachingOn()
+    const on = this.cachingOn()
+    this.whenOnTargets.forEach((el) => { el.hidden = !on })
   }
 
   // The switch itself flips before this runs. Turning off asks first: cancel puts it back.
@@ -589,7 +579,7 @@ export default class extends Controller {
 
   openDisableConfirm() {
     if (!this.hasDisableConfirmTarget) {
-      if (window.confirm("Turn off caching? Everything saved for offline use will be deleted.")) {
+      if (window.confirm("Turn off offline support? Everything saved for offline use will be deleted.")) {
         this.confirmDisableCaching()
       }
       return
@@ -632,7 +622,6 @@ export default class extends Controller {
   async enableCaching() {
     this.store.toggle(this.store.keys.caching, true)
     this.applyCachingVisibility()
-    this.setStatus("Caching is on.")
 
     if (window.coldwireRegister) {
       try { await window.coldwireRegister() } catch { /* registration warns on its own */ }
@@ -648,16 +637,14 @@ export default class extends Controller {
   async disableCaching() {
     this.store.toggle(this.store.keys.caching, false)
     this.applyCachingVisibility()
-    this.setStatus("Turning caching off…")
     this.toggleBusy(true)
 
     try {
       try { await sendToWorker("setCachingEnabled", { value: false }, 5000) } catch { /* worker may already be gone */ }
       await this.clearCaches()
       if (window.coldwireUnregister) await window.coldwireUnregister()
-      this.setStatus("Caching is off. Nothing is being saved for offline use.")
-    } catch (error) {
-      this.setStatus(error.message || "Could not turn caching off")
+    } catch {
+      // The switch is already off; the rest of the page has hidden.
     } finally {
       this.toggleBusy(false)
     }
@@ -681,9 +668,6 @@ export default class extends Controller {
     // countdown beside it both mean something different now.
     this.renderAutoSync()
     this.renderSyncedAt()
-    this.setStatus(this.autoSyncOn()
-      ? "Automatic syncing is on for this device."
-      : "Automatic syncing is off for this device. Sync now still works.")
 
     // Turning it back on with the clock already past due should sync, not wait out an
     // interval that expired while it was off.
@@ -978,11 +962,9 @@ export default class extends Controller {
       await this.forgetUrl(url, cache)
       // Whether this came from the row or the dialog, the entry it was describing is gone.
       this.closeDetail()
-      this.setStatus(`Deleted ${displayUrl(url)}.`)
       await this.renderCache()
-    } catch (error) {
+    } catch {
       button.disabled = false
-      this.setStatus(error.message || "Could not delete that entry")
     }
   }
 
@@ -1058,10 +1040,6 @@ export default class extends Controller {
     }
 
     return sendToWorker("clearCache", {}, 5000)
-  }
-
-  setStatus(text) {
-    if (this.hasStatusTarget) this.statusTarget.textContent = text
   }
 
   toggleBusy(disabled) {

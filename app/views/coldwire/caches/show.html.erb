@@ -4,7 +4,11 @@
 
 <%# Coldwire's offline settings page. Styled with plain CSS on purpose: the gem must not assume
     Tailwind, Bootstrap, or any host framework. Override this template by creating
-    app/views/coldwire/caches/show.html.erb in your own app. %>
+    app/views/coldwire/caches/show.html.erb in your own app. The title goes through
+    `content_for :title` so the host layout can put it in `<title>` (and Hotwire Native's
+    bar) rather than repeating it as a heading on the page. %>
+
+<% content_for :title, "Offline settings" %>
 
 <%= coldwire_debug_styles %>
 
@@ -13,8 +17,6 @@
       is cached, nothing syncs, and force offline has nothing to force. Showing an empty cache
       and a countdown would read as a broken page rather than a switched-off one. %>
   <div class="coldwire">
-    <h1>Offline settings</h1>
-
     <div class="coldwire-card">
       <p class="coldwire-headline">
         <span class="coldwire-light" data-state="disabled" aria-hidden="true"></span>
@@ -33,29 +35,8 @@
      data-coldwire-cache-probe-url-value="<%= Coldwire.config.probe_path %>"
      data-coldwire-cache-auto-sync-value="<%= Coldwire.config.auto_sync.enabled %>"
      data-coldwire-cache-sync-interval-value="<%= Coldwire.config.auto_sync.interval.to_i %>">
-  <h1>Offline settings</h1>
-
   <div class="coldwire-card">
-    <label class="coldwire-setting">
-      <span class="coldwire-switch coldwire-switch--on">
-        <input type="checkbox"
-               data-coldwire-cache-target="cachingToggle"
-               data-action="change->coldwire-cache#toggleCaching">
-        <span aria-hidden="true"></span>
-      </span>
-      <span>
-        <span class="coldwire-setting-title">Caching</span>
-        <span class="coldwire-setting-note">
-          Save pages as you browse so they work without a connection. Turn this off to stop
-          saving and delete what is already stored.
-        </span>
-      </span>
-    </label>
-  </div>
-
-  <div data-coldwire-cache-target="whenOn">
-  <div class="coldwire-card">
-    <div class="coldwire-head">
+    <div class="coldwire-head" data-coldwire-cache-target="whenOn">
       <div>
         <p class="coldwire-headline">
           <span class="coldwire-light" data-coldwire-cache-target="connectionLight" aria-hidden="true"></span>
@@ -89,25 +70,42 @@
         </button>
       </div>
     </div>
-  </div>
 
-  <div class="coldwire-card">
     <label class="coldwire-setting">
-      <span class="coldwire-switch">
+      <span class="coldwire-switch coldwire-switch--on">
         <input type="checkbox"
-               data-coldwire-cache-target="forcedToggle"
-               data-action="change->coldwire-cache#toggleForced">
+               data-coldwire-cache-target="cachingToggle"
+               data-action="change->coldwire-cache#toggleCaching">
         <span aria-hidden="true"></span>
       </span>
       <span>
-        <span class="coldwire-setting-title">Force offline</span>
+        <span class="coldwire-setting-title">Offline support</span>
         <span class="coldwire-setting-note">
-          Turn this on if you have a really slow connection. Cached pages load instantly. Anything not cached won't open.
+          Cache pages so they work without a connection.
         </span>
       </span>
     </label>
+
+    <div data-coldwire-cache-target="whenOn">
+      <hr>
+      <label class="coldwire-setting">
+        <span class="coldwire-switch">
+          <input type="checkbox"
+                 data-coldwire-cache-target="forcedToggle"
+                 data-action="change->coldwire-cache#toggleForced">
+          <span aria-hidden="true"></span>
+        </span>
+        <span>
+          <span class="coldwire-setting-title">Force offline</span>
+          <span class="coldwire-setting-note">
+            Turn this on if you have a really slow connection.
+          </span>
+        </span>
+      </label>
+    </div>
   </div>
 
+  <div data-coldwire-cache-target="whenOn">
   <div class="coldwire-card">
     <h2>Auto Sync</h2>
 
@@ -125,14 +123,13 @@
         <span>
           <span class="coldwire-setting-title">Sync on its own</span>
           <span class="coldwire-setting-note">
-            Downloads the pages you need offline and drops the ones no longer listed. Turn it
-            off to decide for yourself when to download — <strong>Sync now</strong> always works.
+            Automatically runs in the background backing up pages to be used offline.
           </span>
         </span>
       </label>
     <% else %>
       <p class="coldwire-facts" style="margin-top: 0;">
-        Downloads the pages you need offline and drops the ones no longer listed.
+        Automatically runs in the background backing up pages to be used offline.
         <strong>Sync now</strong> runs that pass immediately.
       </p>
     <% end %>
@@ -254,8 +251,6 @@
       </template>
     </div>
   </details>
-
-  <p class="coldwire-status" data-coldwire-cache-target="status"></p>
   </div>
 
   <%# A real <dialog>: Escape, focus handling and the backdrop come with it, and none of that
@@ -283,16 +278,16 @@
     </div>
   </dialog>
 
-  <%# Turning caching off deletes everything stored. Ask first, and keep the switch on
-      until they confirm — cancel is the safe default. %>
+  <%# Turning offline support off deletes everything stored. Ask first, and keep the switch
+      on until they confirm — cancel is the safe default. %>
   <dialog class="coldwire-dialog"
           data-coldwire-cache-target="disableConfirm"
           data-action="cancel->coldwire-cache#cancelDisableCaching
                        click->coldwire-cache#closeDisableOnBackdrop">
-    <h2>Turn off caching?</h2>
+    <h2>Turn off offline support?</h2>
     <p class="coldwire-facts" style="margin-top: 0;">
       Everything saved for offline use will be deleted. Pages will not be available without
-      a connection until you turn caching back on.
+      a connection until you turn this back on.
     </p>
     <div class="coldwire-actions coldwire-actions--spaced">
       <button type="button" class="coldwire-button" data-action="click->coldwire-cache#cancelDisableCaching">

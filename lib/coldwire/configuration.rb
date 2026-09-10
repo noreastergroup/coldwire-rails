@@ -78,9 +78,9 @@ module Coldwire
     #   config.register_if = -> { hotwire_native_app? && current_user.present? }
     attr_writer :register_if
 
-    # Default for the Caching switch on the offline settings page. People can turn it off
-    # there, which deletes what is stored and stops anything new being saved. Unset on a
-    # device follows this; a choice they have already made is remembered.
+    # Default for the Offline support switch on the offline settings page. People can turn
+    # it off there, which deletes what is stored and stops anything new being saved. Unset
+    # on a device follows this; a choice they have already made is remembered.
     attr_accessor :caching_enabled_by_default
 
     # Who the cache belongs to, usually the signed-in user's id. When it changes between page

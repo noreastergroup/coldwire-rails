@@ -22,8 +22,8 @@ Coldwire.configure do |config|
   # are both in scope. A page that does not register does not cache or sync.
   config.register_if = -> { true }
 
-  # Default for the Caching switch on the offline settings page. People can turn it off
-  # there, which deletes what is stored. A fresh device follows this.
+  # Default for the Offline support switch on the offline settings page. People can turn
+  # it off there, which deletes what is stored. A fresh device follows this.
   config.caching_enabled_by_default = true
 
   # The importmap module the offline page loads to boot Turbo. nil if you are not on

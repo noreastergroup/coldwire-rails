@@ -49,7 +49,7 @@ down with it.
 | [`auto_sync.concurrency`](#autosyncconcurrency) | `4` | Fetches in flight at once during a sync |
 | [`cache_identity`](#cache_identity) | `-> { nil }` | Who the cache belongs to; changing it drops the cache |
 | [`register_if`](#register_if) | `-> { true }` | Whether a page registers the worker at all |
-| [`caching_enabled_by_default`](#caching_enabled_by_default) | `true` | Starting position of the Caching switch. Not a master on/off |
+| [`caching_enabled_by_default`](#caching_enabled_by_default) | `true` | Starting position of the Offline support switch. Not a master on/off |
 | [`offline_import`](#offline_import) | `"@hotwired/turbo-rails"` | Importmap module the offline page loads to boot Turbo |
 | [`cache_as_you_go`](#cache_as_you_go) | `["/*"]` | Pages stored as somebody browses. `/*` is everything |
 | [`never_cache`](#never_cache) | `[]` | Never stored, by any route in. The one veto |
@@ -220,9 +220,9 @@ and gate registration here.
 
 **Default:** `true`
 
-Starting position of the Caching switch on the offline settings page. It does not turn
-caching on or off for the app — people do that themselves, and their choice is remembered
-on the device. A fresh device follows this.
+Starting position of the Offline support switch on the offline settings page. It does not
+turn offline support on or off for the app — people do that themselves, and their choice is
+remembered on the device. A fresh device follows this.
 
 ```ruby
 config.caching_enabled_by_default = true
@@ -491,7 +491,7 @@ From JavaScript, `window.Coldwire`:
 ```js
 Coldwire.isOffline()        // this page did not come from the network
 Coldwire.isForcedOffline()  // …because the switch is on, rather than for want of a signal
-Coldwire.isCachingEnabled() // the Caching switch, not navigator.serviceWorker
+Coldwire.isCachingEnabled() // the Offline support switch, not navigator.serviceWorker
 Coldwire.cachedAt()         // a Date, or null if it came from the network
 Coldwire.onChange((state) => { … })  // fires on every Turbo visit and on toggling force
                                      // offline; returns its own unsubscribe

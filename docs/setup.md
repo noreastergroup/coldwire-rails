@@ -135,10 +135,12 @@ redirects to login, so nothing about the online flow changes.
 Mounted at the engine root — `/offline` with the mount above. It inherits your
 `ApplicationController`, so it picks up your layout, authentication, and helpers.
 
-This is the page people use to turn caching on or off, see connection status, download
+This is the page people use to turn offline support on or off, see connection status, download
 archives, turn auto-sync off for this device, force offline, and manage what is cached.
-Turning caching off asks first, then deletes what is stored and hides the rest of the
-page. Put it behind whatever authentication you use by wrapping the route, or override
+Turning offline support off asks first, then deletes what is stored and hides the rest of the
+page. It sets `content_for :title` to `"Offline settings"` — yield that in your layout's
+`<title>` (and any native title bar that reads it) rather than expecting an on-page heading.
+Put it behind whatever authentication you use by wrapping the route, or override
 `app/views/coldwire/caches/show.html.erb`.
 
 <p align="center">

@@ -14,7 +14,7 @@ export function plural(count, one, many = `${one}s`) {
   return `${count} ${count === 1 ? one : many}`
 }
 
-// "Every day", not "Every 1 day".
+// "day", not "1 day" — the caller writes "Syncs every day".
 export function formatInterval(seconds) {
   const text = formatDuration(seconds)
 

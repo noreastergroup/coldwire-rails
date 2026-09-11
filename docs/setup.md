@@ -136,7 +136,8 @@ Mounted at the engine root — `/offline` with the mount above. It inherits your
 `ApplicationController`, so it picks up your layout, authentication, and helpers.
 
 This is the page people use to turn offline support on or off, see connection status, download
-archives, turn auto-sync off for this device, force offline, and manage what is cached.
+archives, turn auto-sync off for this device, set how much storage the cache may use, force
+offline, and manage what is cached.
 Turning offline support off asks first, then deletes what is stored and hides the rest of the
 page. It sets `content_for :title` to `"Offline settings"` — yield that in your layout's
 `<title>` (and any native title bar that reads it) rather than expecting an on-page heading.
@@ -150,7 +151,11 @@ Put it behind whatever authentication you use by wrapping the route, or override
 
 To reach it offline, list it in `cache_as_you_go` like any other page. **Sync now** talks to
 the manifest, which is never intercepted, so that button fails while offline; **Inspect cache**,
-**Clear cache**, and **Force offline** are client-side and keep working. The URL list lives
+**Clear cache**, and **Force offline** are client-side and keep working. **Keep at most** —
+the storage ceiling, from
+[`garbage_collection.max_size`](configuration.md#garbage_collectionmax_size) — is remembered
+straight away, but the sweep it triggers needs a connection like any other, so a lowered
+ceiling applies once there is one. The URL list lives
 under Inspect cache, closed until you open it.
 
 ## Hotwire Native on iOS

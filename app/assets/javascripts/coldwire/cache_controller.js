@@ -1,8 +1,8 @@
 import { Controller } from "@hotwired/stimulus"
-import { formatBytes, formatCachedAt, formatDuration, formatInterval, displayUrl, plural } from "coldwire/format"
+import { formatBytes, formatLimit, formatCachedAt, formatDuration, formatInterval, displayUrl, plural } from "coldwire/format"
 import { sendToWorker } from "coldwire/worker"
 import { renderArchiveStatus, renderArchiveProgress, toggleArchiveBusy } from "coldwire/archives"
-import { describeEntry, describeCached, describeFinishedSync } from "coldwire/entries"
+import { describeEntry, describeCached, describeFinishedSync, isDownload } from "coldwire/entries"
 
 // Storage goes through the one wrapper the head snippet defines, so the page and the snippet
 // cannot disagree about where anything is kept. Without that snippet there is no service
@@ -15,7 +15,8 @@ const INERT_STORE = {
   number: () => 0,
   on: () => false,
   toggle: () => {},
-  cachingOn: () => true
+  cachingOn: () => true,
+  maxSize: () => null
 }
 const SYNC_MESSAGE = "coldwire:sync"
 
@@ -47,6 +48,10 @@ export default class extends Controller {
     "search",
     "sort",
     "inspect",
+    "maxSize",
+    "usage",
+    "usageBar",
+    "usageLabel",
     "forgetTemplate",
     "detail",
     "detailUrl",
@@ -79,6 +84,7 @@ export default class extends Controller {
     this.restoreInspect()
     this.restoreForced()
     this.restoreAutoSync()
+    this.restoreMaxSize()
     if (this.cachingOn()) {
       this.renderArchives()
       this.refresh()
@@ -746,11 +752,12 @@ export default class extends Controller {
       (cache.entries || []).map((entry) => {
         const path = displayUrl(entry.url)
 
-        return { ...entry, cache: cache.name, path, search: path.toLowerCase() }
+        return { ...entry, cache: cache.name, path, search: path.toLowerCase(), download: isDownload(entry.url) }
       }))
     this.cacheCount = cachesInfo.length
 
     this.renderEntries()
+    this.renderStorage()
   }
 
   filterEntries() {
@@ -790,6 +797,111 @@ export default class extends Controller {
 
   totalBytes(entries) {
     return entries.reduce((sum, entry) => sum + (entry.size || 0), 0)
+  }
+
+  // MARK: the storage ceiling
+
+  // How much the cache may grow to before a sweep starts taking the oldest back, chosen here
+  // and remembered on the device. The app sets the starting position; this is the person
+  // holding the phone deciding how much of it to spend.
+  restoreMaxSize() {
+    if (!this.hasMaxSizeTarget) return
+
+    const limit = this.store.maxSize()
+    const value = limit === null ? "none" : String(limit)
+    const options = [ ...this.maxSizeTarget.options ]
+
+    // A ceiling this device chose before the app changed its own is no longer on the menu.
+    // Showing a blank select instead would misreport the setting that is actually in force,
+    // so it joins the list — in order, and labelled from the same figures as the rest.
+    if (!options.some((option) => option.value === value)) {
+      const option = document.createElement("option")
+      option.value = value
+      option.textContent = formatLimit(limit)
+      const after = options.find((candidate) => Number(candidate.value) > limit)
+      this.maxSizeTarget.insertBefore(option, after || null)
+    }
+
+    this.maxSizeTarget.value = value
+  }
+
+  async changeMaxSize(event) {
+    const select = event.currentTarget
+    this.store.set(this.store.keys.maxSize, select.value)
+    this.renderStorage()
+
+    // Held while the sweep runs. It is usually a moment, but picking a second size over a
+    // sweep still measuring the cache would leave two runs racing to a different ceiling.
+    select.disabled = true
+
+    try {
+      // A lowered ceiling that waits for the next scheduled sweep reads as a setting that did
+      // nothing. This is that same sweep, run now — and bound by the same rule, so with no
+      // connection it stands down and the line under the bar says why.
+      await this.collectNow()
+    } finally {
+      select.disabled = false
+    }
+  }
+
+  async collectNow() {
+    let result = null
+
+    try {
+      result = await sendToWorker("collect", { maxSize: this.store.maxSize() }, 60000)
+    } catch {
+      // No worker controlling this page yet. The cache is unchanged and the line already
+      // says where it stands.
+      return
+    }
+
+    // Nothing was swept, so the clock stays where it is and the next page load finds the
+    // sweep still due — exactly as the head snippet treats a refused run.
+    this.sweepWaiting = Boolean(result?.offline)
+    if (!this.sweepWaiting) this.store.set(this.store.keys.collectedAt, Date.now())
+
+    await this.renderCache()
+  }
+
+  // What the ceiling is measured against: everything but the downloads, which are an opt-in
+  // spend of somebody's data plan and are never collected however full the cache gets — a
+  // 300 MB archive counted here would show a bar pinned full of files no sweep can touch.
+  //
+  // The worker also spares the offline page's own assets, which this cannot pick out of a
+  // list of URLs. That is a handful of files, and erring towards the larger figure is the
+  // right way round for a number somebody is deciding a limit from.
+  managedBytes(entries) {
+    return this.totalBytes((entries || []).filter((entry) => !entry.download))
+  }
+
+  renderStorage() {
+    if (!this.hasUsageLabelTarget) return
+
+    const limit = this.store.maxSize()
+    const used = this.managedBytes(this.entries)
+
+    if (this.hasUsageTarget) this.usageTarget.hidden = limit === null
+
+    if (limit === null) {
+      this.usageLabelTarget.textContent = `${formatBytes(used)} of cached pages, with no limit set.`
+      return
+    }
+
+    const percent = Math.round(Math.min(used / limit, 1) * 100)
+    if (this.hasUsageBarTarget) this.usageBarTarget.style.width = `${percent}%`
+    if (this.hasUsageTarget) this.usageTarget.setAttribute("aria-valuenow", String(percent))
+
+    const parts = [ `${formatBytes(used)} of ${formatLimit(limit)}` ]
+    if (used > limit) {
+      // Over the ceiling is not a fault and not a promise of instant deletion: a sweep needs
+      // a connection, and says so rather than leaving somebody watching a bar that will not
+      // move.
+      parts.push(this.sweepWaiting || this.online === false
+        ? "over, waiting for a connection to sweep"
+        : "over, the oldest go on the next sweep")
+    }
+
+    this.usageLabelTarget.textContent = `${parts.join(" · ")}.`
   }
 
   renderEntries() {

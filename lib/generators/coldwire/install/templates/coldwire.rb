@@ -19,6 +19,7 @@ Coldwire.configure do |config|
   config.garbage_collection do |gc|
     gc.enabled = true
     gc.max_age = 60.days          # keep comfortably longer than auto_sync.max_age
+    gc.max_size = 250.megabytes   # over this the least recently read go first; nil for no ceiling
     gc.interval = 1.day
   end
 

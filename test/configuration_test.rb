@@ -39,8 +39,44 @@ class ConfigurationTest < Minitest::Test
   # grows on somebody's phone forever.
   def test_collection_is_on_by_default_with_a_timeframe
     assert config.garbage_collection.enabled
-    assert_equal 30 * 24 * 60 * 60, config.garbage_collection.max_age
+    assert_equal 60 * 24 * 60 * 60, config.garbage_collection.max_age
     assert_equal 24 * 60 * 60, config.garbage_collection.interval
+  end
+
+  # A ceiling as well as a deadline: a device that browses far more than it revisits never
+  # trips the age rule, and its cache grows until the browser evicts the lot.
+  def test_collection_has_a_ceiling_by_default
+    assert_equal 250 * 1024 * 1024, config.garbage_collection.max_size
+  end
+
+  def test_a_max_size_of_nil_is_no_ceiling
+    config.garbage_collection { |gc| gc.max_size = nil }
+
+    assert_nil config.garbage_collection.max_size
+  end
+
+  # Bytes, and a figure that reads like megabytes is a unit mistake rather than a tiny cache.
+  def test_a_max_size_under_a_megabyte_is_refused
+    error = assert_raises(ArgumentError) { config.garbage_collection { |gc| gc.max_size = 250 } }
+
+    assert_match(/max_size/, error.message)
+  end
+
+  # The settings page offers a ladder. Whatever the app configured has to be on it, or nobody
+  # who picks another rung can get back to the app's own answer.
+  def test_the_offered_sizes_include_the_configured_one
+    config.garbage_collection { |gc| gc.max_size = 300 * 1024 * 1024 }
+    choices = config.garbage_collection.size_choices
+
+    assert_includes choices, 300 * 1024 * 1024
+    assert_equal choices.sort, choices
+    assert_equal choices.uniq, choices
+  end
+
+  def test_no_ceiling_still_offers_the_ladder
+    config.garbage_collection { |gc| gc.max_size = nil }
+
+    assert_includes config.garbage_collection.size_choices, 250 * 1024 * 1024
   end
 
   # Renewal has to be frequent enough that nothing in use drifts into collection range, and

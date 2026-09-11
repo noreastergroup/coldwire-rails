@@ -8,8 +8,14 @@ First release. The API may still change before 1.0.
   with every option and its default, registers the Stimulus controller, and tags the
   layout. Safe to run twice.
 - **Garbage collection.** `config.garbage_collection` sweeps entries nothing has used in
-  `max_age` (30 days by default), so a cache that fills as people browse does not fill
-  forever. On by default, unlike syncing: it spends no data. A sweep runs only with a
+  `max_age` (60 days by default) and, once the cache is over `max_size` (250 MB by default),
+  the least recently read of what is left until it fits — so a cache that fills as people
+  browse does not fill forever, on a device that revisits nothing as much as on one that
+  revisits everything. The ceiling is offered as a ladder of sizes on the offline settings
+  page and remembered per device, since how much of a phone to spend is not something an app
+  can know. It measures only what a sweep may take: downloaded archives are an opt-in spend
+  of somebody's data plan, so they are neither counted nor evicted.
+  On by default, unlike syncing: it spends no data. A sweep runs only with a
   connection it has confirmed by pinging `probe_path`, because deleting is the one cache
   operation with no way back. Age is measured from last use, not from when an entry was
   fetched — storing a page renews everything it names, so the stylesheet every page loads

@@ -10,6 +10,10 @@ class WorkerSourceTest < Minitest::Test
     @worker ||= Coldwire::Source.worker
   end
 
+  def collection
+    @collection ||= worker[/async function runCollection\(maxSize\) \{(.*?)\n\}/m, 1]
+  end
+
   def test_the_parts_are_concatenated_in_order
     rules = worker.index("function matchesRules")
     serve = worker.index("async function handleFetch")
@@ -96,15 +100,19 @@ class WorkerSourceTest < Minitest::Test
     assert_includes body, "MANAGED_HEADER", "a renewed manifest entry must stay a manifest entry"
   end
 
-  # Deleting is the one operation with no way back, so a sweep proves the connection first.
+  # Deleting is the one operation with no way back, so a sweep proves the connection first —
+  # for the size pass as much as the age pass, which is why trimming is reached from inside
+  # runCollection rather than from the message handler.
   def test_a_sweep_will_not_run_without_a_connection
-    body = worker[/async function runCollection\(\) \{(.*?)\n\}/m, 1]
+    body = collection
 
     refute_nil body
     assert_includes body, "if (forcedOffline) return"
     assert_includes body, "if (!(await reachable())) return"
     assert body.index("reachable()") < body.index("cache.delete"),
            "the connection has to be proven before anything is deleted"
+    assert body.index("reachable()") < body.index("trimToSize"),
+           "the connection has to be proven before the ceiling is applied"
   end
 
   def test_the_probe_is_a_real_request
@@ -117,9 +125,39 @@ class WorkerSourceTest < Minitest::Test
 
   # An entry with no stamp is from an older worker. Age unknown is not age exceeded.
   def test_an_unstamped_entry_is_kept
-    body = worker[/async function runCollection\(\) \{(.*?)\n\}/m, 1]
+    assert_includes collection, "at === null || now - at <= COLLECT_MAX_AGE"
+  end
 
-    assert_includes body, "at === null || now - at <= COLLECT_MAX_AGE"
+  # The ceiling is the device's, not the build's: it lives in localStorage, which a worker
+  # cannot read, so it arrives with the request. A page that says nothing about it — an older
+  # client — must get the app's default rather than no ceiling at all.
+  def test_the_ceiling_comes_from_the_page_and_falls_back_to_the_configured_one
+    body = worker[/function collectGarbage\(\{ maxSize \} = \{\}\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "maxSize === undefined ? COLLECT_MAX_SIZE : maxSize"
+    assert_includes body, "runCollection(limit)"
+  end
+
+  # Only what the age pass left, because an entry it already deleted cannot be evicted again —
+  # and only after the measurement, since a cache under its ceiling must cost no deletions.
+  def test_the_oldest_go_first_and_only_while_the_cache_is_over
+    body = worker[/async function trimToSize\(cache, entries, maxSize\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "if (maxSize === null || entries.length === 0) return"
+    assert_includes body, "if (total <= maxSize) return { evicted: 0, bytes: total }"
+    assert_includes body, "sized.sort((a, b) => (a.at || 0) - (b.at || 0))"
+    assert_includes body, "if (total <= maxSize) break"
+    refute_includes body, "fetch(", "the ceiling only ever deletes"
+  end
+
+  # An age of nil with a ceiling set still has work to do, and the survivors of the age pass
+  # are exactly what the ceiling may take from.
+  def test_a_ceiling_alone_still_sweeps
+    assert_includes collection, "if (COLLECT_MAX_AGE === null && maxSize === null) return"
+    assert_includes collection, "survivors.push({ key, at })"
+    assert_includes collection, "trimToSize(cache, survivors, maxSize)"
   end
 
   # Two things no amount of disuse makes safe to take: what the offline page needs, which

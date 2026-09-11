@@ -166,6 +166,53 @@
     </div>
   </div>
 
+  <% gc = Coldwire.config.garbage_collection %>
+  <% if gc.enabled %>
+    <%# What the cache is allowed to grow to on this device. The choice is remembered here the
+        way Force offline and Sync on its own are — the app sets the starting point, the person
+        holding the phone decides how much of it to spend. %>
+    <% size_label = ->(bytes) do
+         gigabytes = bytes.to_f / (1024 * 1024 * 1024)
+         next "#{bytes / (1024 * 1024)} MB" if gigabytes < 1
+         "#{gigabytes == gigabytes.round ? gigabytes.round : gigabytes.round(1)} GB"
+       end %>
+
+    <div class="coldwire-card">
+      <h2>Storage</h2>
+
+      <label class="coldwire-choice">
+        <span>
+          <span class="coldwire-setting-title">Keep at most</span>
+          <span class="coldwire-setting-note">
+            Over this, the pages you have not opened in longest are deleted first.
+          </span>
+        </span>
+        <select class="coldwire-select"
+                aria-label="How much storage cached pages may use"
+                data-coldwire-cache-target="maxSize"
+                data-action="change->coldwire-cache#changeMaxSize">
+          <% gc.size_choices.each do |bytes| %>
+            <option value="<%= bytes %>"><%= size_label.call(bytes) %></option>
+          <% end %>
+          <option value="none">No limit</option>
+        </select>
+      </label>
+
+      <div style="margin-top: 0.9rem;"
+           role="progressbar"
+           aria-valuemin="0"
+           aria-valuemax="100"
+           data-coldwire-cache-target="usage"
+           hidden>
+        <div class="coldwire-track">
+          <div class="coldwire-bar" data-coldwire-cache-target="usageBar"></div>
+        </div>
+      </div>
+
+      <p class="coldwire-facts" data-coldwire-cache-target="usageLabel">Reading the cache…</p>
+    </div>
+  <% end %>
+
   <% if Coldwire.config.cache_archives.any? %>
     <%# One row per configured file. The words are the app's — the page knows only that these
         are large, optional, and worth keeping. %>

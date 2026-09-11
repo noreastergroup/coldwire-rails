@@ -6,6 +6,21 @@ import { formatBytes, formatCachedAt } from "coldwire/format"
 // of its own.
 export const TIMESTAMP_HEADER = "timestamp"
 
+// The query params the worker keys a downloaded archive and its byte ranges under. A download
+// is a deliberate spend of somebody's data plan and is never collected, so anything measuring
+// what a sweep can take has to leave it out.
+const DOWNLOAD_PARAMS = [ "__coldwire_chunk", "__coldwire_range" ]
+
+export function isDownload(href) {
+  try {
+    const url = new URL(href)
+
+    return DOWNLOAD_PARAMS.some((param) => url.searchParams.has(param))
+  } catch {
+    return false
+  }
+}
+
 export function describeEntry(entry) {
   const parts = [ formatBytes(entry.size) ]
   if (entry.timestamp) parts.push(`cached ${formatCachedAt(entry.timestamp)}`)

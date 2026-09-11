@@ -16,6 +16,8 @@ Works the same in a plain Hotwire app, an installed PWA, or Hotwire Native.
 > change before 1.0.
 
 > [!TIP]
+> <a href="https://noreastergroup.com"><img src="docs/images/noreaster-group.png" alt="Noreaster Group" width="220"></a>
+>
 > **Need help going offline?** Coldwire is built by [Noreaster Group](https://noreastergroup.com).
 > If you want a hand adding offline to your Hotwire or Hotwire Native app,
 > [talk to us](https://noreastergroup.com).

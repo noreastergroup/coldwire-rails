@@ -36,7 +36,7 @@ Coldwire.configure do |config|
   config.never_cache = []
   config.never_intercept = [ "/up" ]
 
-  config.cache_origins = []
+  config.cache_domains = []
   config.cache_ranges = []
   config.cache_archives = []
 
@@ -71,7 +71,7 @@ down with it.
 | [`cache_as_you_go`](#cache_as_you_go) | `["/*"]` | Pages stored as somebody browses. `/*` is everything |
 | [`never_cache`](#never_cache) | `[]` | Never stored, by any route in. The one veto |
 | [`never_intercept`](#never_intercept) | `["/up"]` | Paths the worker does not touch at all |
-| [`cache_origins`](#cache_origins) | `[]` | Other origins the worker may cache |
+| [`cache_domains`](#cache_domains) | `[]` | Other domains the worker may cache |
 | [`cache_ranges`](#cache_ranges) | `[]` | URLs whose `Range` requests are cached piece by piece |
 | [`cache_archives`](#cache_archives) | `[]` | Large files somebody can choose to download |
 | [`ignore_query_params`](#ignore_query_params) | `true` | Treat `/map` and `/map?zoom=9` as one page |
@@ -497,22 +497,27 @@ config.never_cache = [ %r{^/admin(/|$)}, %r{^/users/[^/]+/edit$} ]
 
 ---
 
-## `cache_origins`
+## `cache_domains`
 
 **Default:** `[]`
 
-Origins besides your own that the worker may cache. Each has to send CORS headers naming
+Domains besides your own that the worker may cache. Each has to send CORS headers naming
 your app, or the response arrives opaque — status 0, no headers, no readable body — and
 there is nothing worth storing. Ranged sources must also expose `Content-Range`.
 
 ```ruby
-config.cache_origins = [ "https://tiles.example.com" ]
+config.cache_domains = [ "tiles.example.com" ]
 ```
 
-Bare origins only: a scheme and a host, no path, no trailing slash. Anything else raises at
-boot, because a malformed origin silently fails to match a request's origin.
+Just the domain. No scheme: a worker only runs on a secure page, and a secure page cannot
+fetch `http`, so there was never a second scheme to tell apart. Write one anyway and it is
+dropped rather than refused — pasting a URL is the obvious mistake to make.
 
-Cross-origin requests are passed through unless the origin is listed here.
+Add a port only where it is not the default, `localhost:3001`, which is what a URL's `host`
+reads as and so what a request is compared against. A path raises at boot, because a host
+never has one and the entry could only ever fail to match.
+
+Requests to anywhere else are passed through.
 
 ---
 
@@ -530,7 +535,7 @@ config.cache_ranges = [ "/tiles/*", %r{\.pmtiles$} ]
 
 Patterns match the URL path, same as the other lists — not the full URL. A cross-origin
 tile at `https://tiles.example.com/basemap.pmtiles` is allowed only when that origin is in
-[`cache_origins`](#cache_origins) *and* its path matches a rule here.
+[`cache_domains`](#cache_domains) *and* its path matches a rule here.
 
 This pairs with [`cache_archives`](#cache_archives): `cache_ranges` caches the slices
 actually read, so the places you have already opened work offline, and downloading the
@@ -561,7 +566,7 @@ Files arrive in 8 MB chunks, which is what makes a dropped connection cost secon
 of the whole download. A `Range` request against a downloaded archive is answered by
 slicing the chunks.
 
-If the file lives on another origin, list that origin in [`cache_origins`](#cache_origins).
+If the file lives on another domain, list it in [`cache_domains`](#cache_domains).
 
 ---
 

@@ -88,13 +88,19 @@ module Coldwire
     # cached pages hold whatever the previous session could see.
     attr_writer :cache_identity
 
-    # Origins besides your own that the worker may cache. Each has to send CORS headers naming
+    # Domains besides your own that the worker may cache. Each has to send CORS headers naming
     # your app, or the response arrives opaque — status 0, no headers, no readable body — and
     # there is nothing worth storing. Ranged sources must also expose Content-Range.
-    attr_reader :cache_origins
+    #
+    #   config.cache_domains = [ "tiles.example.com" ]
+    #
+    # Bare domains, with a port where it is not the default. No scheme: a worker only runs on
+    # a secure page and a secure page cannot fetch http, so there was never a second scheme to
+    # tell apart. One written anyway is dropped rather than refused.
+    attr_reader :cache_domains
 
-    def cache_origins=(origins)
-      @cache_origins = Array(origins).map { |origin| validate_origin(origin) }
+    def cache_domains=(domains)
+      @cache_domains = Array(domains).map { |domain| validate_domain(domain) }
     end
 
     # URLs whose Range requests are cached piece by piece, keyed by the range — for a large
@@ -278,7 +284,7 @@ module Coldwire
       @register_if = -> { true }
       @caching_enabled_by_default = true
       @cache_identity = -> { nil }
-      @cache_origins = []
+      @cache_domains = []
       @cache_ranges = []
       @cache_archives = []
     end
@@ -330,19 +336,17 @@ module Coldwire
 
     # An origin and nothing more: no path, no trailing slash. Anything else silently fails to
     # match a request's origin, which is the same quiet failure as a malformed path pattern.
-    def validate_origin(origin)
-      value = origin.to_s
+    # A host, and a port only where it is not the default — which is exactly what a URL's
+    # `host` reads as, so the worker compares what you wrote against what it is given.
+    DOMAIN = /\A[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*(?::\d+)?\z/
 
-      begin
-        uri = URI.parse(value)
-      rescue URI::InvalidURIError
-        uri = nil
-      end
+    def validate_domain(domain)
+      value = domain.to_s.strip.downcase.sub(%r{\A[a-z][a-z0-9+.\-]*://}, "").chomp("/")
 
-      unless uri&.scheme && uri.host && uri.path.to_s.empty? && uri.query.nil?
+      unless value.match?(DOMAIN)
         raise ArgumentError,
-              "Coldwire cache_origins takes bare origins like " \
-              "\"https://tiles.example.com\": #{origin.inspect}"
+              "Coldwire cache_domains takes bare domains like " \
+              "\"tiles.example.com\": #{domain.inspect}"
       end
 
       value

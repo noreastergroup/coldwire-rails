@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+- **`cache_origins` is `cache_domains`**, and takes bare domains: `"tiles.example.com"` rather
+  than `"https://tiles.example.com"`. The scheme was never doing anything — a worker only runs
+  on a secure page, and a secure page cannot fetch `http` — so there was no second scheme for
+  it to tell apart. A scheme written anyway is dropped rather than refused. Ports are kept
+  where they are not the default, which is what a URL's `host` reads as and what a request is
+  now compared against.
+
 ## [0.1.0]
 
 First release. The API may still change before 1.0.

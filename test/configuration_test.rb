@@ -105,4 +105,37 @@ class ConfigurationTest < Minitest::Test
   def test_the_default_sweep_outlives_the_default_refetch
     assert_operator config.auto_sync.max_age, :<, config.garbage_collection.max_age
   end
+
+  def test_domains_are_bare
+    config.cache_domains = [ "tiles.example.com", "localhost:3001" ]
+
+    assert_equal [ "tiles.example.com", "localhost:3001" ], config.cache_domains
+  end
+
+  # A scheme is what everybody will type, having pasted a URL. Dropped rather than refused:
+  # a worker only runs on a secure page, and a secure page cannot fetch http, so there was
+  # never a second scheme to tell apart.
+  def test_a_scheme_is_dropped_rather_than_refused
+    config.cache_domains = [ "https://tiles.example.com", "http://localhost:3001/" ]
+
+    assert_equal [ "tiles.example.com", "localhost:3001" ], config.cache_domains
+  end
+
+  def test_domains_are_compared_as_written_so_case_does_not_matter
+    config.cache_domains = [ "Tiles.Example.COM" ]
+
+    assert_equal [ "tiles.example.com" ], config.cache_domains
+  end
+
+  # Anything with a path would never match: the worker compares a URL's host, which has none.
+  def test_a_path_is_refused_rather_than_silently_ignored
+    error = assert_raises(ArgumentError) { config.cache_domains = [ "tiles.example.com/maps" ] }
+
+    assert_match(/bare domains/, error.message)
+  end
+
+  def test_nonsense_is_refused
+    assert_raises(ArgumentError) { config.cache_domains = [ "not a domain" ] }
+    assert_raises(ArgumentError) { config.cache_domains = [ "" ] }
+  end
 end

@@ -54,8 +54,9 @@ Coldwire.configure do |config|
   # Never intercepted, so these fail outright offline. Coldwire's own routes are added for you.
   config.never_intercept = [ "/up" ]  # probe_path is added for you
 
-  # Origins besides your own the worker may cache, and URLs whose Range requests it caches.
-  config.cache_origins = []
+  # Domains besides your own the worker may cache, and URLs whose Range requests it caches.
+  # Bare domains — "tiles.example.com" — with a port only where it is not the default.
+  config.cache_domains = []
   config.cache_ranges = []
 
   # Large files somebody can download for offline use. Nothing downloads on its own.

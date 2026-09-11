@@ -21,7 +21,7 @@ const CACHE_AS_YOU_GO = compileRules(<%= raw Coldwire.cache_rules(Coldwire.confi
 const NEVER_CACHE = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.never_cache).to_json %>)
 // Origins besides ours that may be cached at all, and the URLs whose byte ranges are cached
 // piece by piece.
-const CACHE_ORIGINS = <%= raw Coldwire.config.cache_origins.to_json %>
+const CACHE_DOMAINS = <%= raw Coldwire.config.cache_domains.to_json %>
 const CACHE_RANGES = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.cache_ranges).to_json %>)
 // A range entry is stored under its own key, with the range in the query and the archive's
 // total size in a header — the two things needed to rebuild a 206 that was never storable.

@@ -1,4 +1,8 @@
-# ☁️🧊 Coldwire
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/coldwire-logo-dark.svg">
+  <img src="docs/images/coldwire-logo.svg" alt="Coldwire" width="380">
+</picture>
+
 **When your Hotwire wires go cold.**
 
 [![Gem](https://img.shields.io/gem/v/coldwire-rails.svg)](https://rubygems.org/gems/coldwire-rails)

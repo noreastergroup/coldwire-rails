@@ -33,17 +33,12 @@ Works the same in a plain Hotwire app, an installed PWA, or Hotwire Native.
 - **[Easy Tailwind Variants](docs/configuration.md#tailwind-variants):** Easily show or hide content with an `online:` or `offline:` Tailwind variant.
 
 <p align="center">
-  <img src="docs/images/offline-settings.png" alt="Offline settings: status, force offline, auto sync, and downloads" width="280">
-  <img src="docs/images/offline-settings-cached.png" alt="Offline settings: every cached entry, with search, sort, and delete" width="280">
+  <img src="docs/images/offline-settings.png" alt="Offline settings: status, force offline, auto sync, and downloads" width="240">
+  <img src="docs/images/offline-settings-cached.png" alt="Offline settings: every cached entry, with search, sort, and delete" width="240">
+  <img src="docs/images/offline-fallback.png" alt="The offline fallback: You're offline. This page isn't available offline. Reconnect and try again." width="240">
 </p>
 
-<p align="center"><em>The offline settings page that ships with it. The URL list is under Inspect cache.</em></p>
-
-<p align="center">
-  <img src="docs/images/offline-fallback.png" alt="The offline fallback: You're offline. This page isn't available offline. Reconnect and try again." width="280">
-</p>
-
-<p align="center"><em>When a page isn't cached and there's no network, this is what people see — not a blank screen or a native error. Override it to match your app.</em></p>
+<p align="center"><em>The offline settings page (Inspect cache is the URL list), and the fallback when a page isn't cached.</em></p>
 
 ## Quick start
 

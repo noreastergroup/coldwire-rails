@@ -2,12 +2,20 @@
 
 ## [Unreleased]
 
+## [0.3.0]
+
 - **`cache_origins` is `cacheable_hosts`**, and takes bare hosts: `"tiles.example.com"` rather
   than `"https://tiles.example.com"`. The scheme was never carrying information — a worker
   runs only on a secure page, and a secure page cannot fetch `http` — so it was a required
   prefix with exactly one possible value. Requests are matched on a URL's `host`, so a port
   belongs where it is not the default and `localhost:3001` matches that port and no other.
   A scheme raises at boot, naming what to write instead.
+
+## [0.2.0]
+
+- **Garbage collection** is on by default. `config.garbage_collection` periodically sweeps the cache, deleting entries that haven't been accessed for `max_age` (default: 60 days), and if the cache grows over `max_size` (default: 250 MB), it continues pruning the least recently accessed until the cache fits. Sweeps run only when confirmed online by pinging `probe_path`, since deletions are irreversible. Cached archives and offline page assets are never collected, and the age of an entry is renewed anytime it or its referenced subresources are accessed or stored. The size ceiling can be adjusted in the offline settings page and is remembered per device.
+- The garbage collector runs safely and automatically; you generally do not need to configure it. But you can tune `max_age`, `max_size`, and `interval` to fit your app's needs.
+
 
 ## [0.1.0]
 

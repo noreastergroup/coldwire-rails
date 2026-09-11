@@ -1,5 +1,5 @@
-# Coldwire
-<img src="docs/images/tagline.svg" alt="When your Hotwire wires go cold.">
+# 🧊 Coldwire
+**When your Hotwire wires go cold.**
 
 [![Gem](https://img.shields.io/gem/v/coldwire-rails.svg)](https://rubygems.org/gems/coldwire-rails)
 [![Gem](https://img.shields.io/gem/dt/coldwire-rails.svg)](https://rubygems.org/gems/coldwire-rails)

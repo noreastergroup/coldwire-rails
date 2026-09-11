@@ -2,7 +2,7 @@
 
 Six things break a naive offline cache in a Hotwire app. Four bite you in any browser; two
 are Hotwire Native holding you to a stricter standard. Coldwire handles all six, which is
-what lets one cache serve a plain Hotwire app, a PWA, and Hotwire Native.
+what lets one cache serve a plain Hotwire web app, a PWA, and Hotwire Native.
 
 When a visit has no cached copy and no network, people see this — a `200` that boots
 Turbo — rather than a native error screen:

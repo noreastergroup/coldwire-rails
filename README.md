@@ -14,7 +14,7 @@ tag in your layout — pages start working without a network. A service worker p
 what you nominate, keeps pages as people browse, and falls back to a view
 [Turbo](https://turbo.hotwired.dev) will actually render.
 
-Works the same in a plain Hotwire app, an installed PWA, or Hotwire Native.
+Works the same in a plain  web app, an installed PWA, or Hotwire Native.
 
 > [!TIP]
 > <a href="https://noreastergroup.com"><img src="docs/images/noreaster-group.png" alt="Noreaster Group" width="220"></a>

@@ -6,7 +6,7 @@ provides `Turbo`. Add the gem, then let the installer wire the rest.
 ## Requirements
 
 - Rails 7.1+
-- Turbo — a plain Hotwire app, a PWA, or Hotwire Native
+- Turbo — a plain Hotwire web app, a PWA, or Hotwire Native
 - Service workers, and HTTPS (or localhost). They are same-origin, so the engine has to be
   mounted on the app's own domain
 - Hotwire Native is optional. Nothing here requires it

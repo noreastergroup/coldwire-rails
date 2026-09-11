@@ -15,7 +15,7 @@ Gem::Specification.new do |spec|
                      "Cache API service worker, precaches the pages you nominate, and " \
                      "falls back to an offline view Turbo will actually render. Built " \
                      "against Hotwire Native's rules, which are stricter than a browser's, " \
-                     "so the same cache works in a plain Hotwire app and an installed PWA."
+                     "so the same cache works in a plain Hotwire web app and an installed PWA."
   spec.homepage    = "https://github.com/noreastergroup/coldwire-rails"
   spec.license     = "MIT"
 

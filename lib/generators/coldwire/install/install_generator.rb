@@ -88,7 +88,7 @@ module Coldwire
       def next_steps
         say ""
         say "Coldwire is mounted at /offline.", :green
-        say "Set config.cache_identity if anyone signs in."
+        say "cache_identity uses current_user or Current.user when either is in scope."
         say "Turn on config.auto_sync to precache pages."
       end
 

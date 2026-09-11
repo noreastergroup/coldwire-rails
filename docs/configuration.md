@@ -14,7 +14,13 @@ Coldwire.configure do |config|
     sync.concurrency = 4
   end
 
-  config.cache_identity = -> { nil }
+  config.cache_identity = -> {
+    if respond_to?(:current_user)
+      current_user&.id
+    elsif defined?(Current) && Current.respond_to?(:user)
+      Current.user&.id
+    end
+  }
   config.register_if = -> { true }
   config.caching_enabled_by_default = true
   config.offline_import = "@hotwired/turbo-rails"
@@ -50,7 +56,7 @@ down with it.
 | [`garbage_collection.enabled`](#garbage_collectionenabled) | `true` | Sweep entries nothing has used in a long time |
 | [`garbage_collection.max_age`](#garbage_collectionmax_age) | `30.days` | How long an entry may go untouched before it is collected |
 | [`garbage_collection.interval`](#garbage_collectioninterval) | `1.day` | How long to leave between sweeps |
-| [`cache_identity`](#cache_identity) | `-> { nil }` | Who the cache belongs to; changing it drops the cache |
+| [`cache_identity`](#cache_identity) | `current_user` / `Current.user` | Who the cache belongs to; changing it drops the cache |
 | [`register_if`](#register_if) | `-> { true }` | Whether a page registers the worker at all |
 | [`caching_enabled_by_default`](#caching_enabled_by_default) | `true` | Starting position of the Offline support switch. Not a master on/off |
 | [`offline_import`](#offline_import) | `"@hotwired/turbo-rails"` | Importmap module the offline page loads to boot Turbo |
@@ -246,18 +252,26 @@ than about cost.
 
 ## `cache_identity`
 
-**Default:** `-> { nil }`
+**Default:** `current_user&.id` or `Current.user&.id` when either is in scope
 
 Who the cache belongs to, usually the signed-in user's id. Evaluated in the view, so
-`current_user` is in scope. Recorded in `localStorage`; when it changes between page loads
-the cache is dropped — which is what makes signing out, and switching accounts, safe.
+`current_user` is in scope — and `Current.user` if you keep the user there instead.
+Recorded in `localStorage`; when it changes between page loads the cache is dropped —
+which is what makes signing out, and switching accounts, safe.
 
 ```ruby
-config.cache_identity = -> { current_user&.id }
+config.cache_identity = -> {
+  if respond_to?(:current_user)
+    current_user&.id
+  elsif defined?(Current) && Current.respond_to?(:user)
+    Current.user&.id
+  end
+}
 ```
 
-Leave it unset and the cache persists across sessions: fine for a single-user or fully
-public app, wrong for anything else.
+That is what the installer writes. If neither helper exists, the identity is empty and the
+cache persists across sessions — fine for a single-user or fully public app. Override it
+if your signed-in user lives somewhere else.
 
 A few edges the setting already handles:
 

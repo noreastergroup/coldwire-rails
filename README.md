@@ -56,8 +56,9 @@ That mounts the engine at `/offline`, writes `config/initializers/coldwire.rb`, 
 the Stimulus controller, and adds the tag to your layout. Visit `/offline` to see what's
 cached.
 
-For signed-in apps, set `cache_identity`. To have pages ready before anyone visits them,
-turn on `auto_sync`. Both are in the [configuration reference](docs/configuration.md).
+For signed-in apps that do not use `current_user` or `Current.user`, set `cache_identity`.
+To have pages ready before anyone visits them, turn on `auto_sync`. Both are in the
+[configuration reference](docs/configuration.md).
 
 ## Docs
 

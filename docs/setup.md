@@ -102,9 +102,9 @@ Every option has a working default. The full list, and what each one does, is in
 
 ## What to set first
 
-**`cache_identity`**, if anyone signs in. Cached pages hold whatever the session that
-fetched them could see. Leave this unset and the cache persists across sessions — fine for
-a single-user or fully public app, wrong for anything else.
+**`cache_identity`**, if the signed-in user is not `current_user` or `Current.user`. Cached
+pages hold whatever the session that fetched them could see. The installer already uses
+those two when they are in scope; override it if yours lives somewhere else.
 
 ```ruby
 config.cache_identity = -> { current_user&.id }

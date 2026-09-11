@@ -22,13 +22,12 @@ Works the same in a plain Hotwire app, an installed PWA, or Hotwire Native.
 
 ## What you get
 
-- **Minutes to wire.** `bin/rails coldwire:install`. The rest has working defaults.
-- **Precaching in Ruby.** Nominate URLs with your own route helpers; assets come with them.
-- **Cache as you go.** Pages someone visits are kept, with the styles, scripts, and images
-  they need to render.
-- **An offline fallback** Turbo — and Hotwire Native — will actually show.
-- **Offline settings** at `/offline`: turn offline support off, force offline, sync, downloads, what's cached.
-- **Safe when people sign in.** The cache drops when the user changes.
+- **Setup in 30 seconds:** Instal gem, then `bin/rails coldwire:install`. The rest has working defaults.
+- **Cache as you go:** Defaults to all pages get cached as your navigate, customize to only cache certain parts of the app.
+- **Auto Sycn precaching:** Define urls that can be pre-cached automatically in the background.
+- **Offline fallback page:** A customizable page when a user is offline and no page is cached for that given url.
+- **Offline settings page:** at `/offline`: turn offline support off, force offline, sync, downloads, inspect what's cached.
+- **[Easy Tailwind Variants](docs/configuration.md#tailwind-variants):** Easily show or hide content with an `online:` or `offline:` Tailwind variant.
 
 <p align="center">
   <img src="docs/images/offline-settings.png" alt="Offline settings: status, force offline, auto sync, and downloads" width="280">

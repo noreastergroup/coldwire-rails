@@ -478,12 +478,22 @@ for the first paint of a cold boot, before any JS runs, and a `<meta name="coldw
 for Turbo visits, since Turbo merges the head but never copies `<html>` attributes.
 `coldwire_service_worker_tag` mirrors the meta onto `<html>` on each `turbo:load`.
 
-Any CSS can key off the attribute. With Tailwind v4, two custom variants give you
-`offline:` and `online:`:
+Any CSS can key off the attribute.
+
+### Tailwind variants
+
+With Tailwind v4, two custom variants give you `offline:` and `online:`:
 
 ```css
 @custom-variant offline (html[data-coldwire-offline] &);
 @custom-variant online (html:not([data-coldwire-offline]) &);
+```
+
+Then show or hide content from the markup:
+
+```html
+<p class="offline:hidden">You're online.</p>
+<p class="online:hidden">You're looking at a cached page.</p>
 ```
 
 From JavaScript, `window.Coldwire`:

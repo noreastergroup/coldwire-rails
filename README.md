@@ -1,19 +1,16 @@
 # Coldwire
+<img src="docs/images/tagline.svg" alt="When your Hotwire wires go cold.">
 
 [![Gem](https://img.shields.io/gem/v/coldwire-rails.svg)](https://rubygems.org/gems/coldwire-rails)
 [![Gem](https://img.shields.io/gem/dt/coldwire-rails.svg)](https://rubygems.org/gems/coldwire-rails)
 
-**When your Hotwire wires go cold.**
 
-Offline caching for Rails. Add a gem, mount it, drop a tag in your layout — pages start
-working without a network. A service worker precaches what you nominate, keeps pages as
-people browse, and falls back to a view [Turbo](https://turbo.hotwired.dev) will actually
-render.
+Offline caching for Rails, extracted from a production app. Add a gem, mount it, drop a
+tag in your layout — pages start working without a network. A service worker precaches
+what you nominate, keeps pages as people browse, and falls back to a view
+[Turbo](https://turbo.hotwired.dev) will actually render.
 
 Works the same in a plain Hotwire app, an installed PWA, or Hotwire Native.
-
-> **Status: early.** Extracted from a production app but young as a library. The API may
-> change before 1.0.
 
 > [!TIP]
 > <a href="https://noreastergroup.com"><img src="docs/images/noreaster-group.png" alt="Noreaster Group" width="220"></a>

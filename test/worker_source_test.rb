@@ -160,31 +160,16 @@ class WorkerSourceTest < Minitest::Test
     assert_includes collection, "trimToSize(cache, survivors, maxSize)"
   end
 
-  # Nothing disuse makes safe to take: what the offline page needs, which browsing never
-  # touches; the chunks and ranges of an archive somebody spent a data plan on; and the small
-  # files that came with that archive, which look like ordinary entries and whose loss leaves
-  # the download unusable.
-  def test_the_offline_page_and_every_file_of_an_archive_are_spared
+  # Two things no amount of disuse makes safe to take: what the offline page needs, which
+  # browsing never touches, and archives somebody spent a data plan downloading.
+  def test_the_offline_page_and_downloaded_archives_are_spared
     body = worker[/function isSpared\(key, spared\) \{(.*?)\n\}/m, 1]
 
     refute_nil body
     assert_includes body, "CHUNK_PARAM"
     assert_includes body, "RANGE_PARAM"
-    assert_includes body, "spared.has(bareHref(url.href))"
-
-    spared = worker[/function neverCollected\(\) \{(.*?)\n\}/m, 1]
-    refute_nil spared
-    assert_includes spared, "CACHE_ARCHIVES.map(bareHref)"
-    assert_includes spared, "OFFLINE_PAGE"
-  end
-
-  # A companion is stored under its own address, so the only thing distinguishing it from any
-  # other entry is the configured list. Compared bare, because ignore_query_params means a
-  # style asked for as `style.json?v=1` is stored as `style.json`.
-  def test_a_companion_is_spared_by_address_not_by_shape
-    spared = worker[/function neverCollected\(\) \{(.*?)\n\}/m, 1]
-
-    assert_includes spared, "bareHref"
+    assert_includes body, "spared.has(url.href)"
+    assert_includes worker[/function offlinePageAssets\(\) \{(.*?)\n\}/m, 1], "OFFLINE_PAGE"
   end
 
   # One veto, and it has to hold on every route in — browsing, a page that references it, and
@@ -218,61 +203,5 @@ class WorkerSourceTest < Minitest::Test
 
     refute_nil body
     assert_includes body, "index === 0 && pattern.length === 1"
-  end
-
-  # These hosts answer Range for a stylesheet as readily as for a 300 MB archive, so probing
-  # the server cannot be what decides. What decides is whether anything could read the result
-  # back: handleRange only stitches chunks for a cache_ranges URL.
-  def test_only_a_ranged_file_is_stored_in_chunks
-    body = worker[/function isChunked\(url\) \{(.*?)\n\}/m, 1]
-
-    refute_nil body
-    assert_includes body, "matchesRules(new URL(url), CACHE_RANGES)"
-    refute_includes body, "fetch", "what to chunk is not a question to ask the server"
-  end
-
-  # Planned in full before anything is fetched, or progress restarts at each file and a
-  # download of seven things reports itself finished six times.
-  def test_a_download_is_planned_before_it_starts
-    body = worker[/async function downloadArchive\(url\) \{(.*?)\n\}/m, 1]
-
-    refute_nil body
-    assert body.index("const plan = []") < body.index("for (const step of plan)")
-    assert_includes body, "total: count"
-  end
-
-  # The small files go through the ordinary store path, under their own addresses, because
-  # that is the only form the map can read them back in.
-  def test_companions_are_stored_whole
-    body = worker[/async function downloadArchive\(url\) \{(.*?)\n\}/m, 1]
-
-    assert_includes body, "if (!step.chunked) {\n        await fetchAndCache(cache, step.member)"
-  end
-
-  # Chunks already held are skipped, which is what makes an interrupted download resumable.
-  def test_a_download_resumes_from_what_is_held
-    body = worker[/async function downloadArchive\(url\) \{(.*?)\n\}/m, 1]
-
-    assert_includes body, "await cache.match(chunkKey(step.member, step.index))"
-  end
-
-  # Remove has to take the whole set. Leaving the style behind leaves an entry no page will
-  # ever ask for again and nothing offers to delete.
-  def test_remove_takes_every_file_of_the_set
-    body = worker[/async function removeArchive\(url\) \{(.*?)\n\}/m, 1]
-
-    refute_nil body
-    assert_includes body, "archive.urls.map(bareHref)"
-    refute_includes body, "CHUNK_PARAM", "companions are not chunks and would be left behind"
-  end
-
-  # Complete means every piece: the chunks and each of the small files. A map whose sprite
-  # sheet is missing is not a downloaded map.
-  def test_status_counts_the_small_files_as_pieces
-    body = worker[/async function archiveStatus\(url\) \{(.*?)\n\}/m, 1]
-
-    refute_nil body
-    assert_includes body, "expected += 1"
-    assert_includes body, "complete: sized && pieces === expected"
   end
 end

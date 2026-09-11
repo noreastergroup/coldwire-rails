@@ -29,11 +29,7 @@ const RANGE_PARAM = "__coldwire_range"
 // Archives offered for download in full, and the size of the pieces they arrive in. 8 MB is
 // small enough that a dropped connection loses seconds rather than minutes, and large enough
 // that a 300 MB archive is tens of requests rather than thousands.
-// Every file of every archive, flat — what a ranged read checks itself against and what a
-// sweep is forbidden to take. ARCHIVE_SETS keeps the grouping: one download may be an archive
-// plus the style and sprites that make it usable.
 const CACHE_ARCHIVES = <%= raw Coldwire.config.cache_archive_urls.to_json %>
-const ARCHIVE_SETS = <%= raw Coldwire.config.cache_archives.map { |a| a.slice(:url, :urls) }.to_json %>
 const ARCHIVE_CHUNK = 8 * 1024 * 1024
 const CHUNK_PARAM = "__coldwire_chunk"
 const ARCHIVE_MESSAGE = "coldwire:archive"

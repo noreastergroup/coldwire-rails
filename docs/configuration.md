@@ -557,47 +557,11 @@ config.cache_archives = [
 
 A bare URL string works too, and the filename becomes the title. Each URL must be absolute.
 
-### One download, several files
+Files arrive in 8 MB chunks, which is what makes a dropped connection cost seconds instead
+of the whole download. A `Range` request against a downloaded archive is answered by
+slicing the chunks.
 
-A big file is often useless on its own. A map archive is tiles; what draws them is a style
-and a sprite sheet. Give an entry `urls` and it is offered, counted and deleted as one thing:
-
-```ruby
-config.cache_archives = [
-  { title: "Offline map",
-    description: "The whole coast, rather than only the places you have opened.",
-    urls: [ "https://tiles.example.com/basemap.pmtiles",
-            "https://tiles.example.com/style.json",
-            "https://tiles.example.com/sprite.json",
-            "https://tiles.example.com/sprite.png" ] }
-]
-```
-
-The **first URL is the archive's identity** — what the buttons are keyed on and what progress
-is reported against. Reordering the list renames the download.
-
-How each file is stored depends on whether it matches [`cache_ranges`](#cache_ranges):
-
-| | |
-|---|---|
-| **Matches `cache_ranges`** | Stored in 8 MB chunks, resumable, and a later `Range` request is answered by slicing them |
-| **Everything else** | Stored whole, under its own address, which is the only form an ordinary request can read back |
-
-That is not a preference. A worker only stitches chunks back together for a `cache_ranges`
-URL; anything else is looked up under its own address, so chunking a style sheet would write
-a download nothing could ever read. Note that it is not up to the server either — plenty of
-hosts answer `Range` for a 4 KB JSON file just as willingly as for a 300 MB archive.
-
-The small files are refetched each time rather than skipped, which is what makes **Download
-again** worth pressing: a style that changed is picked up without anybody having to delete
-hundreds of megabytes and pull it all down again. Chunks already held are always skipped, so
-an interrupted download still resumes.
-
-Every file of every archive is exempt from [`garbage_collection`](#garbage_collection) —
-including the small ones, which otherwise look like any other entry, and whose loss would
-leave hundreds of megabytes on the device that cannot draw.
-
-If the files live on another origin, list that origin in [`cache_origins`](#cache_origins).
+If the file lives on another origin, list that origin in [`cache_origins`](#cache_origins).
 
 ---
 

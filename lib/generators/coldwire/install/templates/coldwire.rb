@@ -58,9 +58,7 @@ Coldwire.configure do |config|
   config.cache_origins = []
   config.cache_ranges = []
 
-  # Large files somebody can download for offline use. Nothing downloads on its own. An entry
-  # can take `urls:` instead of `url:` when one download is several files — a tile archive
-  # plus the style and sprites that make it draw.
+  # Large files somebody can download for offline use. Nothing downloads on its own.
   config.cache_archives = []
 
   config.probe_path = "/up"          # pinged to tell online from offline

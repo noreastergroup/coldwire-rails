@@ -15,7 +15,8 @@ Works the same in a plain Hotwire app, an installed PWA, or Hotwire Native.
 > **Status: early.** Extracted from a production app but young as a library. The API may
 > change before 1.0.
 
-> [!TIP]
+> **Need Help**
+>
 > <a href="https://noreastergroup.com"><img src="docs/images/noreaster-group.png" alt="Noreaster Group" width="220"></a>
 >
 > **Need help going offline?** Coldwire is built by [Noreaster Group](https://noreastergroup.com).

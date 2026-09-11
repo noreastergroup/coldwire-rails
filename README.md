@@ -22,11 +22,11 @@ Works the same in a plain Hotwire app, an installed PWA, or Hotwire Native.
 
 ## What you get
 
-- **Setup in 30 seconds:** Instal gem, then `bin/rails coldwire:install`. The rest has working defaults.
-- **Cache as you go:** Defaults to all pages get cached as your navigate, customize to only cache certain parts of the app.
-- **Auto Sycn precaching:** Define urls that can be pre-cached automatically in the background.
-- **Offline fallback page:** A customizable page when a user is offline and no page is cached for that given url.
-- **Offline settings page:** at `/offline`: turn offline support off, force offline, sync, downloads, inspect what's cached.
+- **[Setup in 30 seconds](docs/setup.md):** Instal gem, then `bin/rails coldwire:install`. The rest has working defaults.
+- **[Cache as you go](docs/configuration.md#cache_as_you_go):** Defaults to all pages get cached as your navigate, customize to only cache certain parts of the app.
+- **[Auto Sycn precaching](docs/configuration.md#auto_sync):** Define urls that can be pre-cached automatically in the background.
+- **[Offline fallback page](docs/setup.md#the-offline-page):** A customizable page when a user is offline and no page is cached for that given url.
+- **[Offline settings page](docs/setup.md#the-offline-settings-page):** at `/offline`: turn offline support off, force offline, sync, downloads, inspect what's cached.
 - **[Easy Tailwind Variants](docs/configuration.md#tailwind-variants):** Easily show or hide content with an `online:` or `offline:` Tailwind variant.
 
 <p align="center">

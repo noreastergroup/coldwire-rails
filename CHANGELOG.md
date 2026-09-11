@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+- **An archive can be several files.** `cache_archives` entries take `urls` as well as `url`,
+  and the set is offered, counted, resumed and deleted as one download — a tile archive plus
+  the style and sprite sheet that make it draw. Files matching `cache_ranges` are stored in
+  chunks as before; everything else is stored whole under its own address, which is the only
+  form an ordinary request can read back. Every file of an archive is exempt from collection,
+  the small ones included.
+
 ## [0.1.0]
 
 First release. The API may still change before 1.0.

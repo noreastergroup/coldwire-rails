@@ -123,8 +123,10 @@ module Coldwire
     end
 
     # Just the URLs, for the worker — it downloads and serves; the words are the page's job.
+    # Every file of every archive, flat. What a sweep must never take, and what the worker
+    # checks a download request against.
     def cache_archive_urls
-      cache_archives.map { |archive| archive[:url] }
+      cache_archives.flat_map { |archive| archive[:urls] }
     end
 
     # Keeping the cache current on its own. Grouped because these only mean anything together:
@@ -350,15 +352,36 @@ module Coldwire
 
     # A Hash with a url, or a bare URL string. Title falls back to the filename, which is a
     # poor title but a better one than a blank card.
+    # One download, however many files it takes. A map is an archive plus the style that
+    # describes it and the sprite sheet it draws with — all or nothing, from somebody's point
+    # of view, so they are offered and counted as one thing.
     def normalize_archive(archive)
       archive = { url: archive } unless archive.is_a?(Hash)
       archive = archive.transform_keys(&:to_sym)
-      url = archive[:url].to_s
+      urls = Array(archive[:urls].presence || archive[:url]).map(&:to_s).reject(&:empty?)
 
-      begin
-        uri = URI.parse(url)
+      if urls.empty?
+        raise ArgumentError,
+              "Coldwire cache_archives needs a url or urls for each entry: #{archive.inspect}"
+      end
+
+      uris = urls.map { |url| archive_uri(url, archive) }
+
+      {
+        # The first URL is the archive's identity: what the download button is keyed on, and
+        # what progress is reported against. Reordering the list renames the download.
+        url: urls.first,
+        urls: urls,
+        title: archive[:title].presence || File.basename(uris.first.path.to_s).presence || urls.first,
+        description: archive[:description].presence
+      }
+    end
+
+    def archive_uri(url, archive)
+      uri = begin
+        URI.parse(url)
       rescue URI::InvalidURIError
-        uri = nil
+        nil
       end
 
       unless uri&.scheme && uri.host
@@ -366,11 +389,7 @@ module Coldwire
               "Coldwire cache_archives needs an absolute url for each entry: #{archive.inspect}"
       end
 
-      {
-        url: url,
-        title: archive[:title].presence || File.basename(uri.path.to_s).presence || url,
-        description: archive[:description].presence
-      }
+      uri
     end
 
     # Path patterns are route-shaped: literal segments, ":name" for exactly one segment, and a

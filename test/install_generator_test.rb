@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+# The generated files are UTF-8 and Rails' assert_file reads with the default external
+# encoding, which is US-ASCII when the shell has no locale set.
+Encoding.default_external = Encoding::UTF_8
+
 require "minitest/autorun"
 require "fileutils"
 require "rails/generators"
@@ -25,7 +29,7 @@ class InstallGeneratorTest < Rails::Generators::TestCase
     assert_file "config/initializers/coldwire.rb" do |content|
       assert_match "Coldwire.configure do |config|", content
       assert_match "sync.enabled = false", content
-      assert_match "config.cache_identity = -> { nil }", content
+      assert_match "respond_to?(:current_user)", content
       assert_match "config.caching_enabled_by_default = true", content
       assert_match 'config.cache_as_you_go = [ "/*" ]', content
       assert_match 'config.worker_scope = "/"', content

@@ -142,6 +142,96 @@ module Coldwire
       @auto_sync
     end
 
+    # Clearing out what has gone unused, so a cache that fills as people browse does not fill
+    # forever. Only ever removes; never fetches.
+    #
+    #   config.garbage_collection do |gc|
+    #     gc.max_age = 60 * 60 * 24 * 60
+    #     gc.max_size = 500 * 1024 * 1024
+    #   end
+    def garbage_collection
+      @garbage_collection ||= GarbageCollection.new
+      yield(@garbage_collection) if block_given?
+
+      @garbage_collection
+    end
+
+    # Deleting is the one cache operation with no way back: whatever goes is gone until the
+    # network can be reached again. So a sweep happens only with a connection confirmed, and
+    # only for entries nothing has asked for in a long time — or, once the cache is over its
+    # ceiling, for whatever has gone longest unread.
+    class GarbageCollection
+      # On by default, unlike syncing. A sweep costs no data and takes nothing anybody has
+      # used lately — where an unbounded cache costs storage on somebody's phone forever.
+      attr_accessor :enabled
+
+      # How long an entry may go untouched before it is collected. Anything read while a page
+      # is being stored is renewed, so this measures disuse rather than age.
+      attr_accessor :max_age
+
+      # How much the cache may hold, in bytes. Past it a sweep takes the least recently used
+      # entries first, until what is left fits — so a device that browses a great deal more
+      # than it revisits has a ceiling rather than only a deadline. nil is no ceiling.
+      #
+      # Measured over what a sweep is allowed to take, which is everything but the offline
+      # page's own assets and downloaded archives: counting a 300 MB download somebody chose
+      # to keep would empty the rest of the cache to make room for it.
+      attr_reader :max_size
+
+      def max_size=(bytes)
+        @max_size = validate_size(bytes)
+      end
+
+      # How long to leave between sweeps. Also how long the cache may sit over `max_size`,
+      # since that is when the ceiling is applied.
+      attr_accessor :interval
+
+      # What the offline settings page offers, as bytes. A ladder rather than a text field:
+      # somebody adjusting this on a phone is choosing roughly how much of their device to
+      # spend, not typing a number. The configured default is always among them, or an app
+      # that set 300 MB would have no way back to it once somebody had picked something else.
+      def size_choices
+        choices = [ 50, 100, 250, 500, 1024, 2048 ].map { |mb| mb * 1024 * 1024 }
+        choices << max_size if max_size
+
+        choices.uniq.sort
+      end
+
+      def initialize
+        @enabled = true
+        @max_age = 60 * 24 * 60 * 60
+        @max_size = 250 * 1024 * 1024
+        @interval = 24 * 60 * 60
+      end
+
+      # An entry read again while a page is stored is renewed rather than refetched — but not
+      # on every navigation, or every visit would rewrite every asset the page names. A
+      # quarter of the lifetime leaves three quarters of headroom before a collection.
+      def renew_after
+        return nil unless enabled && max_age
+
+        (max_age.to_i / 4).clamp(1, max_age.to_i)
+      end
+
+      private
+
+      # Bytes, and enough of them to be a cache rather than a rounding error. A megabyte
+      # ceiling is almost always a unit mistake — someone reaching for `250.megabytes` and
+      # writing `250` — and it would sweep away all but the last page or two visited.
+      def validate_size(bytes)
+        return nil if bytes.nil?
+
+        size = bytes.to_i
+        unless size >= 1024 * 1024
+          raise ArgumentError,
+                "Coldwire garbage_collection.max_size is in bytes and has to leave room for a " \
+                "page and what it loads, so it cannot be under a megabyte: #{bytes.inspect}"
+        end
+
+        size
+      end
+    end
+
     # WebKit has no Background Sync, Periodic Background Sync or Background Fetch, so nothing
     # can wake a worker. What a page load can do is hand work to one, which then runs on
     # without it — so syncing is triggered by an open page and paced, not scheduled.
@@ -167,8 +257,8 @@ module Coldwire
       def initialize
         @enabled = false
         @precache_urls = -> { [] }
-        @interval = 6 * 60 * 60
-        @max_age = 7 * 24 * 60 * 60
+        @interval = 24 * 60 * 60
+        @max_age = 30 * 24 * 60 * 60
         @concurrency = 4
       end
     end

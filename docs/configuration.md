@@ -9,12 +9,25 @@ Coldwire.configure do |config|
   config.auto_sync do |sync|
     sync.enabled = false
     sync.precache_urls = -> { [] }
-    sync.interval = 6.hours
-    sync.max_age = 7.days
+    sync.interval = 1.day
+    sync.max_age = 30.days
     sync.concurrency = 4
   end
 
-  config.cache_identity = -> { nil }
+  config.garbage_collection do |gc|
+    gc.enabled = true
+    gc.max_age = 60.days
+    gc.max_size = 250.megabytes
+    gc.interval = 1.day
+  end
+
+  config.cache_identity = -> {
+    if respond_to?(:current_user)
+      current_user&.id
+    elsif defined?(Current) && Current.respond_to?(:user)
+      Current.user&.id
+    end
+  }
   config.register_if = -> { true }
   config.caching_enabled_by_default = true
   config.offline_import = "@hotwired/turbo-rails"
@@ -44,10 +57,14 @@ down with it.
 |---|---|---|
 | [`auto_sync.enabled`](#autosyncenabled) | `false` | Keep the precache manifest current on an interval |
 | [`auto_sync.precache_urls`](#autosyncprecache_urls) | `-> { [] }` | The pages to fetch, evaluated against your URL helpers |
-| [`auto_sync.interval`](#autosyncinterval) | `6.hours` | How long to leave between syncs |
-| [`auto_sync.max_age`](#autosyncmax_age) | `7.days` | Refetch a cached manifest page once it is older than this |
+| [`auto_sync.interval`](#autosyncinterval) | `1.day` | How long to leave between syncs |
+| [`auto_sync.max_age`](#autosyncmax_age) | `30.days` | Refetch a cached manifest page once it is older than this |
 | [`auto_sync.concurrency`](#autosyncconcurrency) | `4` | Fetches in flight at once during a sync |
-| [`cache_identity`](#cache_identity) | `-> { nil }` | Who the cache belongs to; changing it drops the cache |
+| [`garbage_collection.enabled`](#garbage_collectionenabled) | `true` | Sweep entries nothing has used in a long time |
+| [`garbage_collection.max_age`](#garbage_collectionmax_age) | `60.days` | How long an entry may go untouched before it is collected |
+| [`garbage_collection.max_size`](#garbage_collectionmax_size) | `250.megabytes` | How much the cache may hold; over it the least recently read go first |
+| [`garbage_collection.interval`](#garbage_collectioninterval) | `1.day` | How long to leave between sweeps |
+| [`cache_identity`](#cache_identity) | `current_user` / `Current.user` | Who the cache belongs to; changing it drops the cache |
 | [`register_if`](#register_if) | `-> { true }` | Whether a page registers the worker at all |
 | [`caching_enabled_by_default`](#caching_enabled_by_default) | `true` | Starting position of the Offline support switch. Not a master on/off |
 | [`offline_import`](#offline_import) | `"@hotwired/turbo-rails"` | Importmap module the offline page loads to boot Turbo |
@@ -74,8 +91,8 @@ fetched, an interval with no manifest has nothing to fetch.
 config.auto_sync do |sync|
   sync.enabled = true
   sync.precache_urls = -> { Site.published.map { |site| site_path(site) } }
-  sync.interval = 6.hours
-  sync.max_age = 7.days
+  sync.interval = 1.day
+  sync.max_age = 30.days
   sync.concurrency = 4
 end
 ```
@@ -105,7 +122,7 @@ The offline settings page has a per-device switch that turns automatic syncing o
 `localStorage`. Switched off, no page holds a sync timer; **Sync now** still runs a pass.
 
 <p align="center">
-  <img src="images/offline-settings.png" alt="Offline settings: status, force offline, auto sync, and downloads" width="280">
+  <img src="images/offline-settings.png" alt="Offline settings: status, force offline, the storage limit, auto sync, and downloads" width="280">
   <img src="images/offline-settings-cached.png" alt="Offline settings: every cached entry, with search, sort, and delete" width="280">
 </p>
 
@@ -139,7 +156,7 @@ A stored page's stylesheets, scripts, and images are fetched with it, whatever t
 
 ### `auto_sync.interval`
 
-**Default:** `6.hours`
+**Default:** `1.day`
 
 How long to leave between syncs. An ActiveSupport duration works; the worker receives
 seconds. Leave this long — a sync is a burst of fetches, not something to run on every
@@ -150,7 +167,7 @@ config change follows the new value rather than the one it was born with.
 
 ### `auto_sync.max_age`
 
-**Default:** `7.days`
+**Default:** `30.days`
 
 Refetch a manifest page once its cached copy is older than this. `nil` fetches only what is
 missing, so pages already cached are never noticed to have changed.
@@ -164,20 +181,141 @@ once would stall the app's own requests behind hundreds of connections.
 
 ---
 
-## `cache_identity`
+## `garbage_collection`
 
-**Default:** `-> { nil }`
-
-Who the cache belongs to, usually the signed-in user's id. Evaluated in the view, so
-`current_user` is in scope. Recorded in `localStorage`; when it changes between page loads
-the cache is dropped — which is what makes signing out, and switching accounts, safe.
+A cache that fills as people browse fills forever. Collection takes back what nothing has
+asked for in a long time.
 
 ```ruby
-config.cache_identity = -> { current_user&.id }
+config.garbage_collection do |gc|
+  gc.enabled = true
+  gc.max_age = 60.days
+  gc.max_size = 250.megabytes
+  gc.interval = 1.day
+end
 ```
 
-Leave it unset and the cache persists across sessions: fine for a single-user or fully
-public app, wrong for anything else.
+Two limits, and a sweep applies both: `max_age` takes what has gone unused, then `max_size`
+takes the least recently read of what is left until the cache fits. The second is the one that
+binds on a device that browses far more than it revisits, where nothing is ever old enough to
+collect and the cache grows until the browser evicts the lot.
+
+**Only ever with a connection.** Deleting is the one cache operation with no way back:
+whatever goes is gone until the network can be reached again. So a sweep pings
+[`probe_path`](#probe_path) first and stands down if it cannot be reached, and stands down
+under force offline. `navigator.onLine` is not consulted — a web view answers it wrongly often
+enough to be worthless for a decision this expensive to get wrong.
+
+**Untouched, not old.** Age is measured from when an entry was last *used*, not when it was
+first fetched. Storing a page renews everything it names, so the stylesheet every page in your
+app loads keeps a fresh date even though nothing ever refetches it. Without that, an asset
+would carry the date of the very first page that pulled it in and be collected while the whole
+app was still using it.
+
+Renewal rewrites from the cache — it is never a network request — and only once an entry has
+aged past a quarter of `max_age`. Under that it costs a lookup, so an ordinary navigation is
+not rewriting every asset the page names.
+
+Two things are never collected, whatever their age or how full the cache is — and neither is
+counted against `max_size`, since the ceiling has to measure what a sweep can actually act on:
+
+| | |
+|---|---|
+| **What the offline page needs** | browsing never touches it, and it is wanted precisely when there is no network |
+| **Downloaded archives** | somebody chose to spend a data plan on those; disuse does not make them safe to throw away |
+
+A sweep is paced by an open page the same way a sync is, for the same reason: nothing can wake
+a worker in a WebKit web view. It is not recorded unless it actually ran, so a device that has
+been offline for a week sweeps on its next page load with a connection.
+
+### `garbage_collection.enabled`
+
+```ruby
+config.garbage_collection { |gc| gc.enabled = false }
+```
+
+On by default, unlike [`auto_sync`](#auto_sync). Syncing spends somebody's data plan, which is
+theirs to opt into; a sweep spends nothing and the alternative is a cache that grows on their
+phone until the browser evicts the whole thing. Off, nothing is collected and nothing is
+renewed.
+
+### `garbage_collection.max_age`
+
+```ruby
+config.garbage_collection { |gc| gc.max_age = 60.days }
+```
+
+How long an entry may go untouched before a sweep takes it. `nil` collects nothing, which is
+the same as `enabled = false`.
+
+Keep it comfortably longer than [`auto_sync.max_age`](#autosyncmax_age). A manifest page is
+refetched once its copy is older than that, so as long as collection outlives refetching, a
+sync brings a page back up to date well before a sweep would consider it. The defaults leave
+60 days against 30.
+
+### `garbage_collection.max_size`
+
+```ruby
+config.garbage_collection { |gc| gc.max_size = 500.megabytes }
+```
+
+How much the cache may hold, in bytes. Past it a sweep deletes the least recently read entry,
+then the next, until what is left fits — the same clock `max_age` works from, so an entry
+renewed because a page still loads it is among the last to go rather than the first. `nil` is
+no ceiling.
+
+Measured over what a sweep is allowed to take, which is everything but the offline page's own
+assets and downloaded archives. Counting a 300 MB download somebody deliberately kept would
+empty the rest of the cache to make room for a file no sweep may touch.
+
+The ceiling is applied when a sweep runs, so [`interval`](#garbage_collectioninterval) is also
+how long the cache may sit over it. Lower the interval if a tighter bound matters more than
+the work.
+
+**People can change it.** The offline settings page offers a ladder of sizes — the configured
+default always among them — and the choice is remembered in `localStorage` for that device,
+the way Force offline and the Auto Sync switch are. It travels to the worker with each sweep,
+since a worker cannot read `localStorage`. Changing it there sweeps immediately rather than
+waiting out the interval.
+
+### `garbage_collection.interval`
+
+```ruby
+config.garbage_collection { |gc| gc.interval = 12.hours }
+```
+
+How long to leave between sweeps. A sweep reads the cache index and deletes; there is nothing
+to pace against a network, so this is about not doing pointless work on every page load rather
+than about cost.
+
+It is also how long the cache may exceed [`max_size`](#garbage_collectionmax_size), since that
+is when the ceiling is applied. A sweep with a ceiling set costs a `match` per entry to measure
+what is there, which is why it is worth pacing at all.
+
+---
+
+## `cache_identity`
+
+**Default:** `current_user&.id` or `Current.user&.id` when either is in scope
+
+Who the cache belongs to, usually the signed-in user's id. Evaluated in the view, so
+`current_user` is in scope — and `Current.user` if you keep the user there instead.
+Recorded in `localStorage`; when it changes between page loads the cache is dropped —
+which is what makes signing out, and switching accounts, safe.
+
+```ruby
+config.cache_identity = -> {
+  if respond_to?(:current_user)
+    current_user&.id
+  elsif defined?(Current) && Current.respond_to?(:user)
+    Current.user&.id
+  end
+}
+```
+
+That is what the installer writes. If neither helper exists, the identity is empty and the
+cache persists across sessions — fine for a single-user or fully public app. Override it
+if your signed-in user lives somewhere else.
 
 A few edges the setting already handles:
 

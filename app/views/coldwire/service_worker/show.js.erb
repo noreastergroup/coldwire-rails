@@ -44,6 +44,15 @@ const REFETCH_AFTER = <%= raw Coldwire.config.auto_sync.max_age ? Coldwire.confi
 const SYNC_CONCURRENCY = <%= raw Coldwire.config.auto_sync.concurrency.to_i.to_json %>
 // Marks entries the manifest owns, so a sync can retire the ones it dropped without
 // touching assets or pages picked up by ordinary browsing.
+// Collection. A null max age never collects and a null max size never evicts; the probe is
+// how the worker tells a real connection from a hopeful one before it deletes anything. The
+// ceiling here is the app's default — a device that has chosen its own sends that instead.
+<%- gc = Coldwire.config.garbage_collection -%>
+const COLLECT_MAX_AGE = <%= raw gc.enabled && gc.max_age ? gc.max_age.to_i.to_json : "null" %>
+const COLLECT_MAX_SIZE = <%= raw gc.enabled && gc.max_size ? gc.max_size.to_i.to_json : "null" %>
+const RENEW_AFTER = <%= raw gc.renew_after ? gc.renew_after.to_json : "null" %>
+const PROBE_PATH = <%= raw Coldwire.config.probe_path.to_json %>
+
 const MANAGED_HEADER = "coldwire-managed"
 // One message type for the whole sync, carrying `state`. Two types would mean the page
 // stamping the clock and the page drawing progress could drift apart.

@@ -8,15 +8,31 @@ Coldwire.configure do |config|
     sync.enabled = false          # off by default: background fetching is somebody's data plan
     sync.precache_urls = -> { [] }
     # sync.precache_urls = -> { Article.published.map { |a| article_path(a) } }
-    sync.interval = 6.hours
-    sync.max_age = 7.days
+    sync.interval = 1.day
+    sync.max_age = 30.days
     sync.concurrency = 4
   end
 
+  # Taking back what nothing has used lately, so the cache does not grow forever. Runs only
+  # with a connection, and never takes the offline page's assets or a downloaded archive.
+  # Anything a stored page still loads is renewed, so age means disuse rather than age.
+  config.garbage_collection do |gc|
+    gc.enabled = true
+    gc.max_age = 60.days          # keep comfortably longer than auto_sync.max_age
+    gc.max_size = 250.megabytes   # over this the least recently read go first; nil for no ceiling
+    gc.interval = 1.day
+  end
+
   # Who the cache belongs to. Evaluated in the view. When it changes, the cache is dropped —
-  # which is what makes signing out, and switching accounts, safe.
-  config.cache_identity = -> { nil }
-  # config.cache_identity = -> { current_user&.id }
+  # which is what makes signing out, and switching accounts, safe. Uses current_user or
+  # Current.user when either is around; otherwise nobody, and the cache stays put.
+  config.cache_identity = -> {
+    if respond_to?(:current_user)
+      current_user&.id
+    elsif defined?(Current) && Current.respond_to?(:user)
+      Current.user&.id
+    end
+  }
 
   # Where the worker registers at all. Evaluated in the view, so `request` and `current_user`
   # are both in scope. A page that does not register does not cache or sync.

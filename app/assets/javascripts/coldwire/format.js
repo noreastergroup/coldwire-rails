@@ -37,7 +37,17 @@ export function formatBytes(bytes) {
     const kb = bytes / 1024
     return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`
   }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+
+  // A storage ceiling is the one figure here that reaches gigabytes, and "2048.0 MB" is a
+  // number somebody has to convert in their head before it means anything.
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(bytes % (1024 * 1024 * 1024) === 0 ? 0 : 1)} GB`
+}
+
+// A ceiling somebody picked off a menu should read back the way the menu wrote it. Beside a
+// select saying "250 MB", a line saying "250.0 MB" reads as a different number.
+export function formatLimit(bytes) {
+  return formatBytes(bytes).replace(".0 ", " ")
 }
 
 // Built once. Constructing an Intl formatter is expensive, and this is called for every row

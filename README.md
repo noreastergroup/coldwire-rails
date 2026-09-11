@@ -28,12 +28,13 @@ Works the same in a plain  web app, an installed PWA, or Hotwire Native.
 - **[Setup in 30 seconds](docs/setup.md):** Instal gem, then `bin/rails coldwire:install`. The rest has working defaults.
 - **[Cache as you go](docs/configuration.md#cache_as_you_go):** Defaults to all pages get cached as your navigate, customize to only cache certain parts of the app.
 - **[Auto Sycn precaching](docs/configuration.md#auto_sync):** Define urls that can be pre-cached automatically in the background.
+- **[Garbage collection](docs/configuration.md#garbage_collection):** Entries nothing has used in two months are swept, and anything over the storage ceiling goes least recently read first — so the cache doesn't grow forever. Only with a connection; anything a page still loads is renewed on the way past. People can set the ceiling for their own device on `/offline`.
 - **[Offline fallback page](docs/setup.md#the-offline-page):** A customizable page when a user is offline and no page is cached for that given url.
 - **[Offline settings page](docs/setup.md#the-offline-settings-page):** at `/offline`: turn offline support off, force offline, sync, downloads, inspect what's cached.
 - **[Easy Tailwind Variants](docs/configuration.md#tailwind-variants):** Easily show or hide content with an `online:` or `offline:` Tailwind variant.
 
 <p align="center">
-  <img src="docs/images/offline-settings.png" alt="Offline settings: status, force offline, auto sync, and downloads" width="240">
+  <img src="docs/images/offline-settings.png" alt="Offline settings: status, force offline, the storage limit, auto sync, and downloads" width="240">
   <img src="docs/images/offline-settings-cached.png" alt="Offline settings: every cached entry, with search, sort, and delete" width="240">
   <img src="docs/images/offline-fallback.png" alt="The offline fallback: You're offline. This page isn't available offline. Reconnect and try again." width="240">
 </p>
@@ -55,8 +56,9 @@ That mounts the engine at `/offline`, writes `config/initializers/coldwire.rb`, 
 the Stimulus controller, and adds the tag to your layout. Visit `/offline` to see what's
 cached.
 
-For signed-in apps, set `cache_identity`. To have pages ready before anyone visits them,
-turn on `auto_sync`. Both are in the [configuration reference](docs/configuration.md).
+For signed-in apps that do not use `current_user` or `Current.user`, set `cache_identity`.
+To have pages ready before anyone visits them, turn on `auto_sync`. Both are in the
+[configuration reference](docs/configuration.md).
 
 ## Docs
 

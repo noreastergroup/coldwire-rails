@@ -102,9 +102,9 @@ Every option has a working default. The full list, and what each one does, is in
 
 ## What to set first
 
-**`cache_identity`**, if anyone signs in. Cached pages hold whatever the session that
-fetched them could see. Leave this unset and the cache persists across sessions — fine for
-a single-user or fully public app, wrong for anything else.
+**`cache_identity`**, if the signed-in user is not `current_user` or `Current.user`. Cached
+pages hold whatever the session that fetched them could see. The installer already uses
+those two when they are in scope; override it if yours lives somewhere else.
 
 ```ruby
 config.cache_identity = -> { current_user&.id }
@@ -136,7 +136,8 @@ Mounted at the engine root — `/offline` with the mount above. It inherits your
 `ApplicationController`, so it picks up your layout, authentication, and helpers.
 
 This is the page people use to turn offline support on or off, see connection status, download
-archives, turn auto-sync off for this device, force offline, and manage what is cached.
+archives, turn auto-sync off for this device, set how much storage the cache may use, force
+offline, and manage what is cached.
 Turning offline support off asks first, then deletes what is stored and hides the rest of the
 page. It sets `content_for :title` to `"Offline settings"` — yield that in your layout's
 `<title>` (and any native title bar that reads it) rather than expecting an on-page heading.
@@ -144,13 +145,17 @@ Put it behind whatever authentication you use by wrapping the route, or override
 `app/views/coldwire/caches/show.html.erb`.
 
 <p align="center">
-  <img src="images/offline-settings.png" alt="Offline settings: status, force offline, auto sync, and downloads" width="280">
+  <img src="images/offline-settings.png" alt="Offline settings: status, force offline, the storage limit, auto sync, and downloads" width="280">
   <img src="images/offline-settings-cached.png" alt="Offline settings: every cached entry, with search, sort, and delete" width="280">
 </p>
 
 To reach it offline, list it in `cache_as_you_go` like any other page. **Sync now** talks to
 the manifest, which is never intercepted, so that button fails while offline; **Inspect cache**,
-**Clear cache**, and **Force offline** are client-side and keep working. The URL list lives
+**Clear cache**, and **Force offline** are client-side and keep working. **Keep at most** —
+the storage ceiling, from
+[`garbage_collection.max_size`](configuration.md#garbage_collectionmax_size) — is remembered
+straight away, but the sweep it triggers needs a connection like any other, so a lowered
+ceiling applies once there is one. The URL list lives
 under Inspect cache, closed until you open it.
 
 ## Hotwire Native on iOS

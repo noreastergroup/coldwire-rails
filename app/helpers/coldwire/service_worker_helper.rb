@@ -34,6 +34,10 @@ module Coldwire
         workerPath: coldwire.service_worker_path,
         workerScope: Coldwire.config.worker_scope,
         syncInterval: Coldwire.config.auto_sync.interval.to_i * 1000,
+        collectInterval: Coldwire.config.garbage_collection.interval.to_i * 1000,
+        # The app's ceiling, in bytes. A device that has chosen its own overrides it; without
+        # this the page would have nothing to fall back to when it has not.
+        maxSize: Coldwire.config.garbage_collection.max_size,
         cachingEnabledByDefault: Coldwire.config.caching_enabled_by_default,
         userAgentCookie: USER_AGENT_COOKIE
       }
@@ -45,6 +49,7 @@ module Coldwire
       parts << "marker" if Coldwire.config.mark_cached_pages
       parts += %w[cookie forced]
       parts << "sync" if Coldwire.config.auto_sync.enabled
+      parts << "collect" if Coldwire.config.garbage_collection.enabled
       parts << "register"
     end
 

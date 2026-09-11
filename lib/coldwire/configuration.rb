@@ -142,6 +142,50 @@ module Coldwire
       @auto_sync
     end
 
+    # Clearing out what has gone unused, so a cache that fills as people browse does not fill
+    # forever. Only ever removes; never fetches.
+    #
+    #   config.garbage_collection do |gc|
+    #     gc.max_age = 60 * 60 * 24 * 60
+    #   end
+    def garbage_collection
+      @garbage_collection ||= GarbageCollection.new
+      yield(@garbage_collection) if block_given?
+
+      @garbage_collection
+    end
+
+    # Deleting is the one cache operation with no way back: whatever goes is gone until the
+    # network can be reached again. So a sweep happens only with a connection confirmed, and
+    # only for entries nothing has asked for in a long time.
+    class GarbageCollection
+      # On by default, unlike syncing. A sweep costs no data and takes nothing anybody has
+      # used lately — where an unbounded cache costs storage on somebody's phone forever.
+      attr_accessor :enabled
+
+      # How long an entry may go untouched before it is collected. Anything read while a page
+      # is being stored is renewed, so this measures disuse rather than age.
+      attr_accessor :max_age
+
+      # How long to leave between sweeps.
+      attr_accessor :interval
+
+      def initialize
+        @enabled = true
+        @max_age = 30 * 24 * 60 * 60
+        @interval = 24 * 60 * 60
+      end
+
+      # An entry read again while a page is stored is renewed rather than refetched — but not
+      # on every navigation, or every visit would rewrite every asset the page names. A
+      # quarter of the lifetime leaves three quarters of headroom before a collection.
+      def renew_after
+        return nil unless enabled && max_age
+
+        (max_age.to_i / 4).clamp(1, max_age.to_i)
+      end
+    end
+
     # WebKit has no Background Sync, Periodic Background Sync or Background Fetch, so nothing
     # can wake a worker. What a page load can do is hand work to one, which then runs on
     # without it — so syncing is triggered by an open page and paced, not scheduled.

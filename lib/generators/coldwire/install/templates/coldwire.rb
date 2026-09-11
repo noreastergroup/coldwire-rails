@@ -13,6 +13,15 @@ Coldwire.configure do |config|
     sync.concurrency = 4
   end
 
+  # Taking back what nothing has used lately, so the cache does not grow forever. Runs only
+  # with a connection, and never takes the offline page's assets or a downloaded archive.
+  # Anything a stored page still loads is renewed, so age means disuse rather than age.
+  config.garbage_collection do |gc|
+    gc.enabled = true
+    gc.max_age = 30.days          # keep comfortably longer than auto_sync.max_age
+    gc.interval = 1.day
+  end
+
   # Who the cache belongs to. Evaluated in the view. When it changes, the cache is dropped —
   # which is what makes signing out, and switching accounts, safe.
   config.cache_identity = -> { nil }

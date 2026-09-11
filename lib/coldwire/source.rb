@@ -11,7 +11,7 @@ module Coldwire
     # The worker is served as one script but written as several. Concatenated rather than
     # imported, so the browser still fetches one file and function declarations hoist across
     # the whole of it.
-    WORKER = %w[rules serve ranges archives inspect sync events].freeze
+    WORKER = %w[rules serve ranges archives inspect sync collect events].freeze
 
     class << self
       def worker

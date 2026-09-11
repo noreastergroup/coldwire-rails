@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+# The generated files are UTF-8 and Rails' assert_file reads with the default external
+# encoding, which is US-ASCII when the shell has no locale set.
+Encoding.default_external = Encoding::UTF_8
+
 require "minitest/autorun"
 require "fileutils"
 require "rails/generators"

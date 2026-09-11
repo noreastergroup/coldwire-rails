@@ -70,13 +70,68 @@ class WorkerSourceTest < Minitest::Test
     assert_includes guard, "event.waitUntil(stored)"
   end
 
-  # Only what is missing, or every navigation refetches every asset on the page.
-  def test_a_subresource_already_held_is_not_fetched_again
+  # Only what is missing is fetched, or every navigation refetches every asset on the page.
+  # What is held is renewed instead, which is what keeps the collector off an asset the whole
+  # app is using but nothing ever refetches.
+  def test_a_subresource_already_held_is_renewed_rather_than_refetched
     body = worker[/async function storeSubresource\(cache, href\) \{(.*?)\n\}/m, 1]
 
     refute_nil body
-    assert_includes body, "if (await cache.match(href, MATCH_OPTIONS)) return"
+    assert_includes body, "await cache.keys(href, MATCH_OPTIONS)"
+    assert_includes body, "if (key) return renew(cache, key)"
     assert_includes body, "if (isNeverCached(new URL(href))) return"
+    refute_includes body, "fetch(", "a held subresource must not go back to the network"
+  end
+
+  # Renewal rewrites from the cache, and only past RENEW_AFTER: doing it on every navigation
+  # would rewrite every asset every page names, which is the cost this exists to avoid.
+  def test_renewal_costs_a_lookup_until_the_entry_is_actually_old
+    body = worker[/async function renew\(cache, key\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "if (RENEW_AFTER === null) return"
+    assert_includes body, "< RENEW_AFTER) return"
+    assert_includes body, "cache.match(key)"
+    refute_includes body, "fetch(", "renewal must not refetch"
+    assert_includes body, "MANAGED_HEADER", "a renewed manifest entry must stay a manifest entry"
+  end
+
+  # Deleting is the one operation with no way back, so a sweep proves the connection first.
+  def test_a_sweep_will_not_run_without_a_connection
+    body = worker[/async function runCollection\(\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "if (forcedOffline) return"
+    assert_includes body, "if (!(await reachable())) return"
+    assert body.index("reachable()") < body.index("cache.delete"),
+           "the connection has to be proven before anything is deleted"
+  end
+
+  def test_the_probe_is_a_real_request
+    body = worker[/async function reachable\(\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "PROBE_PATH"
+    assert_includes body, 'cache: "no-store"'
+  end
+
+  # An entry with no stamp is from an older worker. Age unknown is not age exceeded.
+  def test_an_unstamped_entry_is_kept
+    body = worker[/async function runCollection\(\) \{(.*?)\n\}/m, 1]
+
+    assert_includes body, "at === null || now - at <= COLLECT_MAX_AGE"
+  end
+
+  # Two things no amount of disuse makes safe to take: what the offline page needs, which
+  # browsing never touches, and archives somebody spent a data plan downloading.
+  def test_the_offline_page_and_downloaded_archives_are_spared
+    body = worker[/function isSpared\(key, spared\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "CHUNK_PARAM"
+    assert_includes body, "RANGE_PARAM"
+    assert_includes body, "spared.has(url.href)"
+    assert_includes worker[/function offlinePageAssets\(\) \{(.*?)\n\}/m, 1], "OFFLINE_PAGE"
   end
 
   # One veto, and it has to hold on every route in — browsing, a page that references it, and

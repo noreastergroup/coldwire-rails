@@ -36,22 +36,22 @@
 <path d="M 590.00 88.00 L 546.00 88"/>
 <path d="M 590.00 88.00 A 22 22 0 1 0 579.00 107.05"/>
 </g>
-<g fill="none" stroke="#64748B" stroke-width="9" stroke-linecap="round" transform="translate(445.64 111.80) scale(0.42)">
-<path d="M 0.00 72 A 38 38 0 1 0 76.00 72 A 38 38 0 1 0 0.00 72"/>
-<path d="M 105 110 L 105 48"/>
-<path d="M 105 48 A 17 17 0 0 1 122 34"/>
-<path d="M 92 66 L 121 66"/>
-<path d="M 151 110 L 151 48"/>
-<path d="M 151 48 A 17 17 0 0 1 168 34"/>
-<path d="M 138 66 L 167 66"/>
-<path d="M 188 34 L 188 110"/>
+<g fill="none" stroke="#64748B" stroke-width="9" stroke-linecap="round" transform="translate(445.12 107.40) scale(0.46)">
+<path d="M 0.00 88 A 22 22 0 1 0 44.00 88 A 22 22 0 1 0 0.00 88"/>
+<path d="M 75 110 L 75 48"/>
+<path d="M 75 48 A 17 17 0 0 1 92 34"/>
+<path d="M 62 66 L 91 66"/>
+<path d="M 121 110 L 121 48"/>
+<path d="M 121 48 A 17 17 0 0 1 138 34"/>
+<path d="M 108 66 L 137 66"/>
+<path d="M 158 34 L 158 110"/>
+<path d="M 188 66 L 188 110"/>
+<path d="M 188 42 L 188 42"/>
 <path d="M 218 66 L 218 110"/>
-<path d="M 218 42 L 218 42"/>
-<path d="M 248 66 L 248 110"/>
-<path d="M 248 86 A 20 20 0 0 1 288 86"/>
-<path d="M 288 86 L 288 110"/>
-<path d="M 352.00 88.00 L 308.00 88"/>
-<path d="M 352.00 88.00 A 22 22 0 1 0 341.00 107.05"/>
+<path d="M 218 86 A 20 20 0 0 1 258 86"/>
+<path d="M 258 86 L 258 110"/>
+<path d="M 322.00 88.00 L 278.00 88"/>
+<path d="M 322.00 88.00 A 22 22 0 1 0 311.00 107.05"/>
 </g>
 </g>
 </svg>

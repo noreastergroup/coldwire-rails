@@ -145,7 +145,7 @@ Put it behind whatever authentication you use by wrapping the route, or override
 `app/views/coldwire/caches/show.html.erb`.
 
 <p align="center">
-  <img src="images/offline-settings.png" alt="Offline settings: status, force offline, auto sync, and downloads" width="280">
+  <img src="images/offline-settings.png" alt="Offline settings: status, force offline, the storage limit, auto sync, and downloads" width="280">
   <img src="images/offline-settings-cached.png" alt="Offline settings: every cached entry, with search, sort, and delete" width="280">
 </p>
 

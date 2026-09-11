@@ -4,7 +4,7 @@ Setup and configuration for [Coldwire](../README.md): the mountable Rails engine
 caches pages for Hotwire, PWAs, and Hotwire Native.
 
 <p align="center">
-  <img src="images/offline-settings.png" alt="Offline settings: status, force offline, auto sync, and downloads" width="280">
+  <img src="images/offline-settings.png" alt="Offline settings: status, force offline, the storage limit, auto sync, and downloads" width="280">
   <img src="images/offline-settings-cached.png" alt="Offline settings: every cached entry, with search, sort, and delete" width="280">
 </p>
 

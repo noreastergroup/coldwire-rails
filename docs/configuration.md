@@ -122,7 +122,7 @@ The offline settings page has a per-device switch that turns automatic syncing o
 `localStorage`. Switched off, no page holds a sync timer; **Sync now** still runs a pass.
 
 <p align="center">
-  <img src="images/offline-settings.png" alt="Offline settings: status, force offline, auto sync, and downloads" width="280">
+  <img src="images/offline-settings.png" alt="Offline settings: status, force offline, the storage limit, auto sync, and downloads" width="280">
   <img src="images/offline-settings-cached.png" alt="Offline settings: every cached entry, with search, sort, and delete" width="280">
 </p>
 

@@ -34,7 +34,7 @@ Works the same in a plain  web app, an installed PWA, or Hotwire Native.
 - **[Easy Tailwind Variants](docs/configuration.md#tailwind-variants):** Easily show or hide content with an `online:` or `offline:` Tailwind variant.
 
 <p align="center">
-  <img src="docs/images/offline-settings.png" alt="Offline settings: status, force offline, auto sync, and downloads" width="240">
+  <img src="docs/images/offline-settings.png" alt="Offline settings: status, force offline, the storage limit, auto sync, and downloads" width="240">
   <img src="docs/images/offline-settings-cached.png" alt="Offline settings: every cached entry, with search, sort, and delete" width="240">
   <img src="docs/images/offline-fallback.png" alt="The offline fallback: You're offline. This page isn't available offline. Reconnect and try again." width="240">
 </p>

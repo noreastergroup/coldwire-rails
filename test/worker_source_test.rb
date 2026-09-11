@@ -184,7 +184,7 @@ class WorkerSourceTest < Minitest::Test
     body = worker[/function isAutoCacheable\(request\) \{(.*?)\n\}/m, 1]
 
     refute_nil body
-    assert_includes body, "CACHE_DOMAINS.includes(url.host)"
+    assert_includes body, "CACHEABLE_HOSTS.includes(url.host)"
   end
 
   # An empty list used to mean "store everything". That made [] and ["/*"] the same, and

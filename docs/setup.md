@@ -176,7 +176,7 @@ app-bound mode and takes service workers with it.
 ## Optional next steps
 
 - Restrict what browsing stores with [`cache_as_you_go`](configuration.md#cache_as_you_go)
-- Nominate other domains or `Range` URLs with [`cache_domains`](configuration.md#cache_domains)
+- Nominate other hosts or `Range` URLs with [`cacheable_hosts`](configuration.md#cacheable_hosts)
   and [`cache_ranges`](configuration.md#cache_ranges)
 - Offer large files for download with [`cache_archives`](configuration.md#cache_archives)
 - Override the offline fallback by creating

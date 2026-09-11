@@ -2,12 +2,12 @@
 
 ## [Unreleased]
 
-- **`cache_origins` is `cache_domains`**, and takes bare domains: `"tiles.example.com"` rather
-  than `"https://tiles.example.com"`. The scheme was never doing anything — a worker only runs
-  on a secure page, and a secure page cannot fetch `http` — so there was no second scheme for
-  it to tell apart. A scheme written anyway is dropped rather than refused. Ports are kept
-  where they are not the default, which is what a URL's `host` reads as and what a request is
-  now compared against.
+- **`cache_origins` is `cacheable_hosts`**, and takes bare hosts: `"tiles.example.com"` rather
+  than `"https://tiles.example.com"`. The scheme was never carrying information — a worker
+  runs only on a secure page, and a secure page cannot fetch `http` — so it was a required
+  prefix with exactly one possible value. Requests are matched on a URL's `host`, so a port
+  belongs where it is not the default and `localhost:3001` matches that port and no other.
+  A scheme raises at boot, naming what to write instead.
 
 ## [0.1.0]
 

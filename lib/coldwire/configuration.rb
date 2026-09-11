@@ -88,19 +88,19 @@ module Coldwire
     # cached pages hold whatever the previous session could see.
     attr_writer :cache_identity
 
-    # Domains besides your own that the worker may cache. Each has to send CORS headers naming
+    # The hosts besides your own that the worker may cache. Each has to send CORS headers naming
     # your app, or the response arrives opaque — status 0, no headers, no readable body — and
     # there is nothing worth storing. Ranged sources must also expose Content-Range.
     #
-    #   config.cache_domains = [ "tiles.example.com" ]
+    #   config.cacheable_hosts = [ "tiles.example.com" ]
     #
-    # Bare domains, with a port where it is not the default. No scheme: a worker only runs on
-    # a secure page and a secure page cannot fetch http, so there was never a second scheme to
-    # tell apart. One written anyway is dropped rather than refused.
-    attr_reader :cache_domains
+    # A hostname, with a port only where it is not the default — which is what a URL's `host`
+    # reads as. No scheme: a worker runs only on a secure page, and a secure page cannot fetch
+    # http, so there was never a second scheme for one to tell apart.
+    attr_reader :cacheable_hosts
 
-    def cache_domains=(domains)
-      @cache_domains = Array(domains).map { |domain| validate_domain(domain) }
+    def cacheable_hosts=(hosts)
+      @cacheable_hosts = Array(hosts).map { |host| validate_host(host) }
     end
 
     # URLs whose Range requests are cached piece by piece, keyed by the range — for a large
@@ -284,7 +284,7 @@ module Coldwire
       @register_if = -> { true }
       @caching_enabled_by_default = true
       @cache_identity = -> { nil }
-      @cache_domains = []
+      @cacheable_hosts = []
       @cache_ranges = []
       @cache_archives = []
     end
@@ -337,16 +337,26 @@ module Coldwire
     # An origin and nothing more: no path, no trailing slash. Anything else silently fails to
     # match a request's origin, which is the same quiet failure as a malformed path pattern.
     # A host, and a port only where it is not the default — which is exactly what a URL's
-    # `host` reads as, so the worker compares what you wrote against what it is given.
-    DOMAIN = /\A[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*(?::\d+)?\z/
+    # `host` reads as, so the worker compares what you wrote against what it is handed.
+    HOST = /\A[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*(?::\d+)?\z/
+    SCHEME = %r{\A[a-z][a-z0-9+.\-]*://}
 
-    def validate_domain(domain)
-      value = domain.to_s.strip.downcase.sub(%r{\A[a-z][a-z0-9+.\-]*://}, "").chomp("/")
+    # Raised rather than quietly stripped. Everyone arriving here is renaming `cache_origins`,
+    # and a scheme silently accepted is a config that looks migrated and is not — the next
+    # person to read it learns the wrong shape.
+    def validate_host(host)
+      value = host.to_s.strip.downcase
 
-      unless value.match?(DOMAIN)
+      if value.match?(SCHEME)
         raise ArgumentError,
-              "Coldwire cache_domains takes bare domains like " \
-              "\"tiles.example.com\": #{domain.inspect}"
+              "Coldwire cacheable_hosts takes a host with no scheme — " \
+              "#{value.sub(SCHEME, '').chomp('/').inspect} rather than #{host.inspect}"
+      end
+
+      unless value.match?(HOST)
+        raise ArgumentError,
+              "Coldwire cacheable_hosts takes bare hosts like " \
+              "\"tiles.example.com\": #{host.inspect}"
       end
 
       value

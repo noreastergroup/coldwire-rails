@@ -36,7 +36,7 @@ Coldwire.configure do |config|
   config.never_cache = []
   config.never_intercept = [ "/up" ]
 
-  config.cache_domains = []
+  config.cacheable_hosts = []
   config.cache_ranges = []
   config.cache_archives = []
 
@@ -71,7 +71,7 @@ down with it.
 | [`cache_as_you_go`](#cache_as_you_go) | `["/*"]` | Pages stored as somebody browses. `/*` is everything |
 | [`never_cache`](#never_cache) | `[]` | Never stored, by any route in. The one veto |
 | [`never_intercept`](#never_intercept) | `["/up"]` | Paths the worker does not touch at all |
-| [`cache_domains`](#cache_domains) | `[]` | Other domains the worker may cache |
+| [`cacheable_hosts`](#cacheable_hosts) | `[]` | Other hosts the worker may cache |
 | [`cache_ranges`](#cache_ranges) | `[]` | URLs whose `Range` requests are cached piece by piece |
 | [`cache_archives`](#cache_archives) | `[]` | Large files somebody can choose to download |
 | [`ignore_query_params`](#ignore_query_params) | `true` | Treat `/map` and `/map?zoom=9` as one page |
@@ -497,27 +497,28 @@ config.never_cache = [ %r{^/admin(/|$)}, %r{^/users/[^/]+/edit$} ]
 
 ---
 
-## `cache_domains`
+## `cacheable_hosts`
 
 **Default:** `[]`
 
-Domains besides your own that the worker may cache. Each has to send CORS headers naming
-your app, or the response arrives opaque — status 0, no headers, no readable body — and
-there is nothing worth storing. Ranged sources must also expose `Content-Range`.
+The hosts besides your own that the worker may cache. Each has to send CORS headers naming
+your app, or the response arrives opaque — status 0, no headers, no readable body — and there
+is nothing worth storing. Ranged sources must also expose `Content-Range`.
 
 ```ruby
-config.cache_domains = [ "tiles.example.com" ]
+config.cacheable_hosts = [ "tiles.example.com", "localhost:3001" ]
 ```
 
-Just the domain. No scheme: a worker only runs on a secure page, and a secure page cannot
-fetch `http`, so there was never a second scheme to tell apart. Write one anyway and it is
-dropped rather than refused — pasting a URL is the obvious mistake to make.
+Just the host. No scheme: a worker runs only on a secure page, and a secure page cannot fetch
+`http`, so there was never a second scheme for one to tell apart. Writing one raises at boot
+rather than being stripped — a scheme quietly accepted is a config that looks migrated and is
+not, and the error names what to write instead.
 
-Add a port only where it is not the default, `localhost:3001`, which is what a URL's `host`
-reads as and so what a request is compared against. A path raises at boot, because a host
-never has one and the entry could only ever fail to match.
+A port only where it is not the default. A request is matched on its URL's `host`, against
+exactly what you wrote: `localhost:3001` matches that port and no other, and a subdomain is a
+different host.
 
-Requests to anywhere else are passed through.
+Requests to anywhere else are passed straight through — not intercepted, not stored.
 
 ---
 
@@ -535,7 +536,7 @@ config.cache_ranges = [ "/tiles/*", %r{\.pmtiles$} ]
 
 Patterns match the URL path, same as the other lists — not the full URL. A cross-origin
 tile at `https://tiles.example.com/basemap.pmtiles` is allowed only when that origin is in
-[`cache_domains`](#cache_domains) *and* its path matches a rule here.
+[`cacheable_hosts`](#cacheable_hosts) *and* its path matches a rule here.
 
 This pairs with [`cache_archives`](#cache_archives): `cache_ranges` caches the slices
 actually read, so the places you have already opened work offline, and downloading the
@@ -566,7 +567,7 @@ Files arrive in 8 MB chunks, which is what makes a dropped connection cost secon
 of the whole download. A `Range` request against a downloaded archive is answered by
 slicing the chunks.
 
-If the file lives on another domain, list it in [`cache_domains`](#cache_domains).
+If the file lives on another host, list it in [`cacheable_hosts`](#cacheable_hosts).
 
 ---
 

@@ -269,6 +269,12 @@ Measured over what a sweep is allowed to take, which is everything but the offli
 assets and downloaded archives. Counting a 300 MB download somebody deliberately kept would
 empty the rest of the cache to make room for a file no sweep may touch.
 
+Which leaves two figures on the settings page that do not match: the header counts everything
+on the device, the limit governs only part of it. So Storage and Downloads are separate cards,
+each carrying one line about the other. Storage says its figure is cached pages only and that
+downloads are counted below; Downloads says the limit never counts a download and never clears
+one to make room.
+
 The ceiling is applied when a sweep runs, so [`interval`](#garbage_collectioninterval) is also
 how long the cache may sit over it. Lower the interval if a tighter bound matters more than
 the work.
@@ -555,10 +561,19 @@ archive is how the rest does.
 
 **Default:** `[]`
 
-Large files somebody can choose to keep — a tile archive, an audio guide, a reference PDF.
-Nothing downloads on its own: hundreds of megabytes over somebody's connection is their
-decision. The offline settings page shows **Download**, then **Download again** and **Delete** once it
-is on the device, or **Resume** where a download stopped part way.
+Large files somebody can choose to keep: a tile archive, an audio guide, a reference PDF.
+Nothing downloads on its own, because hundreds of megabytes over somebody's connection is
+their decision. Each appears in the Downloads card on the offline settings page: the title
+with the button hard right, **Download**, then **Download again** once it is on the device or
+**Resume** where one stopped part way, with a trash button beside it to remove it. The
+description, the size and the progress of a running download read underneath, at the full width
+of the card.
+
+They live in that card rather than one of their own because they answer the same question the
+storage limit does: what is on this device, and how much of it do you want to keep? What the
+limit governs is at the top, these sit under it with their own sizes, and the card ends on a
+total that reconciles with the header. A download is never deleted to make room and never
+counted against the limit, so removing one is something only the person who chose it does.
 
 ```ruby
 config.cache_archives = [

@@ -43,6 +43,7 @@ export default class extends Controller {
     "autoSync",
     "syncedAt",
     "syncStatus",
+    "syncDetails",
     "syncButton",
     "syncLabel",
     "search",
@@ -129,6 +130,7 @@ export default class extends Controller {
 
     if (data.state === "started") {
       this.syncRunning = true
+      this.revealSync()
       const retired = data.retired ? `, retired ${data.retired}` : ""
       this.setSyncStatus(data.pending
         ? `Syncing ${data.pending} file${data.pending === 1 ? "" : "s"}${retired}…`
@@ -143,6 +145,7 @@ export default class extends Controller {
       // A page that opened mid-run arrives here without ever having seen "started", so this
       // branch has to be able to put the page into the running state on its own.
       this.syncRunning = true
+      this.revealSync()
       this.toggleSyncing(true)
       if (this.hasProgressTarget) this.progressTarget.hidden = false
       // The bar carries the live count; the line above stays on the high-level "what".
@@ -214,6 +217,7 @@ export default class extends Controller {
   async syncNow(event) {
     event?.preventDefault()
     this.syncSettled = false
+    this.revealSync()
     // Reaching the worker takes a moment, and the ticker keeps ticking while it does.
     this.syncStarting = true
     this.toggleBusy(true)
@@ -243,6 +247,13 @@ export default class extends Controller {
     }
   }
 
+  // Everything a sync has to say lives behind the disclosure, so a run has to open it — a bar
+  // filling where nobody can see it is the same as no bar. Left open afterwards: somebody who
+  // has just watched a sync is the one person who might want the detail.
+  revealSync() {
+    if (this.hasSyncDetailsTarget) this.syncDetailsTarget.open = true
+  }
+
   setSyncStatus(text) {
     if (!this.hasSyncStatusTarget) return
 
@@ -250,24 +261,24 @@ export default class extends Controller {
     this.syncStatusTarget.hidden = !text
   }
 
+  // Inside the details, under the switch that says whether syncing is on at all. This says
+  // how often, and when it is off, that the button below still works.
   renderAutoSync() {
     if (!this.hasAutoSyncTarget) return
 
-    // The switch beside this already says whether it is on, so this line carries the one
-    // thing the switch cannot: how often.
     if (!this.autoSyncValue) {
-      this.autoSyncTarget.textContent = "Automatic syncing is off"
+      this.autoSyncTarget.textContent = "Runs only when you press Sync now."
       return
     }
 
     if (!this.autoSyncOn()) {
-      this.autoSyncTarget.textContent = "Off for this device"
+      this.autoSyncTarget.textContent = "Off for this device. Sync now still runs a pass."
       return
     }
 
     this.autoSyncTarget.textContent = this.syncIntervalValue > 0
-      ? `Syncs every ${formatInterval(this.syncIntervalValue)}`
-      : "On"
+      ? `Syncs every ${formatInterval(this.syncIntervalValue)}.`
+      : "On."
   }
 
   renderSyncedAt() {
@@ -880,17 +891,17 @@ export default class extends Controller {
   }
 
   // What the ceiling is measured against, which has to be what a sweep can actually take, or
-  // the bar shows an overage nothing will ever bring down. Two exclusions:
+  // the bar shows an overage nothing will ever bring down. Three exclusions:
   //
   // Downloads, an opt-in spend of somebody's data plan, are never collected however full the
   // cache gets — a 300 MB archive counted here would pin the bar full of untouchable files.
+  // Their sizes are on their own rows, which is where somebody reclaims that space.
+  //
+  // The offline page's own assets, which the worker spares and names for us: working them out
+  // means parsing the offline page, and only the worker holds it.
   //
   // Any cache but the worker's own. Bumping cache_name leaves the old one behind, and the
   // worker only ever sweeps the one it is configured with.
-  //
-  // The worker also spares the offline page's own assets, which this cannot pick out of a
-  // list of URLs. That is a handful of files, and erring towards the larger figure is the
-  // right way round for a number somebody is deciding a limit from.
   managedBytes(entries) {
     const swept = window.COLDWIRE?.cacheName
     const spared = this.spared
@@ -905,25 +916,24 @@ export default class extends Controller {
     if (!this.hasUsageLabelTarget) return
 
     const limit = this.store.maxSize()
-    const used = this.managedBytes(this.entries)
+    const managed = this.managedBytes(this.entries)
 
     if (this.hasUsageTarget) this.usageTarget.hidden = limit === null
 
     if (limit === null) {
-      this.usageLabelTarget.textContent = `${formatBytes(used)} of cached pages, with no limit set.`
-      return
+      this.usageLabelTarget.textContent = `${formatBytes(managed)} of cached pages, with no limit set.`
+    } else {
+      const percent = Math.round(Math.min(managed / limit, 1) * 100)
+      if (this.hasUsageBarTarget) this.usageBarTarget.style.width = `${percent}%`
+      if (this.hasUsageTarget) this.usageTarget.setAttribute("aria-valuenow", String(percent))
+
+      const parts = [ `${formatBytes(managed)} of ${formatLimit(limit)} used by cached pages` ]
+      // Choosing a ceiling applies it on the spot, so this is what is left between sweeps: a
+      // cache that has grown past a ceiling nobody has touched since. The next sweep takes it.
+      if (managed > limit) parts.push("over, the oldest go on the next sweep")
+
+      this.usageLabelTarget.textContent = `${parts.join(" · ")}.`
     }
-
-    const percent = Math.round(Math.min(used / limit, 1) * 100)
-    if (this.hasUsageBarTarget) this.usageBarTarget.style.width = `${percent}%`
-    if (this.hasUsageTarget) this.usageTarget.setAttribute("aria-valuenow", String(percent))
-
-    const parts = [ `${formatBytes(used)} of ${formatLimit(limit)}` ]
-    // Choosing a ceiling applies it on the spot, so this is what is left between sweeps: a
-    // cache that has grown past a ceiling nobody has touched since. The next sweep takes it.
-    if (used > limit) parts.push("over, the oldest go on the next sweep")
-
-    this.usageLabelTarget.textContent = `${parts.join(" · ")}.`
   }
 
   renderEntries() {

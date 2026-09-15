@@ -81,7 +81,7 @@
       <span>
         <span class="coldwire-setting-title">Offline support</span>
         <span class="coldwire-setting-note">
-          Cache pages so they work without a connection.
+          Enable page caching so they work without a connection.
         </span>
       </span>
     </label>
@@ -102,11 +102,84 @@
           </span>
         </span>
       </label>
+
+      <%# Syncing sits with the other two switches rather than in a card of its own: all three
+          are the same kind of thing, a choice this device makes about how Coldwire behaves. %>
+      <hr>
+
+      <% if Coldwire.config.auto_sync.enabled %>
+        <%# Only where the app configured automatic syncing at all: a switch for something that
+            was never going to happen is a switch that lies. %>
+        <label class="coldwire-setting">
+          <span class="coldwire-switch coldwire-switch--on">
+            <input type="checkbox"
+                   data-coldwire-cache-target="autoSyncToggle"
+                   data-action="change->coldwire-cache#toggleAutoSync">
+            <span aria-hidden="true"></span>
+          </span>
+          <span>
+            <span class="coldwire-setting-title">Sync on its own</span>
+            <span class="coldwire-setting-note">
+              Automatically back up pages in the background.
+            </span>
+          </span>
+        </label>
+      <% else %>
+        <p class="coldwire-facts" style="margin-top: 0;">
+          Automatically back up pages in the background.
+          <strong>Sync now</strong> runs a pass immediately.
+        </p>
+      <% end %>
+
+      <%# The clock, the button and the bar behind a disclosure. They are worth having, and
+          worth going to: under a switch you are not using they are three lines of furniture
+          on every visit. It opens itself while a sync runs, so progress is never hidden
+          behind a tap nobody knew to make. %>
+      <details class="coldwire-sync" data-coldwire-cache-target="syncDetails">
+        <summary><span>Sync details</span></summary>
+
+        <div class="coldwire-sync-body">
+          <%# How often, which the switch cannot show and the note above no longer says. %>
+          <p class="coldwire-facts" data-coldwire-cache-target="autoSync">Checking…</p>
+          <p class="coldwire-facts" data-coldwire-cache-target="syncedAt">Never synced</p>
+
+          <%# Empty until a sync has something to say, so the card does not carry a permanent
+              "Idle" that reads like debug output left in by accident. %>
+          <p class="coldwire-facts" data-coldwire-cache-target="syncStatus" hidden></p>
+
+          <div class="coldwire-actions coldwire-actions--spaced">
+            <button type="button"
+                    data-coldwire-cache-target="syncButton"
+                    class="coldwire-button"
+                    data-action="click->coldwire-cache#syncNow">
+              <span class="coldwire-spinner" data-coldwire-cache-target="spinner" aria-hidden="true" hidden></span>
+              <span data-coldwire-cache-target="syncLabel">Sync now</span>
+            </button>
+          </div>
+
+          <div style="margin-top: 0.75rem;"
+               role="progressbar"
+               aria-valuemin="0"
+               aria-valuemax="100"
+               data-coldwire-cache-target="progress"
+               hidden>
+            <div class="coldwire-track">
+              <div class="coldwire-bar" data-coldwire-cache-target="progressBar"></div>
+            </div>
+            <div class="coldwire-progress-label" data-coldwire-cache-target="progressLabel"></div>
+          </div>
+        </div>
+      </details>
     </div>
   </div>
 
   <div data-coldwire-cache-target="whenOn">
   <% gc = Coldwire.config.garbage_collection %>
+  <% archives = Coldwire.config.cache_archives %>
+  <%# Two cards, because they answer two questions. This one is what the app keeps as you
+      browse and how much of it you will allow; the next is what you chose to keep yourself.
+      One card had the first card's figure sitting a finger's width from files it does not
+      count, which read as an error in the figure. %>
   <% if gc.enabled %>
     <%# What the cache is allowed to grow to on this device. The choice is remembered here the
         way Force offline and Sync on its own are — the app sets the starting point, the person
@@ -150,94 +223,61 @@
       </div>
 
       <p class="coldwire-facts" data-coldwire-cache-target="usageLabel">Reading the cache…</p>
+
+      <% if archives.any? %>
+        <%# Said where the question comes up. Somebody reading a figure that does not match the
+            one in the header is owed the reason on the spot, not a card further down. This
+            line is about what the figure counts; what becomes of a download is the other
+            card's business, and saying it twice made both cards read as hedging. %>
+        <p class="coldwire-downloads-note">
+          Cached pages only. Downloads are counted separately, under Downloads below.
+        </p>
+      <% end %>
     </div>
   <% end %>
 
-  <div class="coldwire-card">
-    <h2>Auto Sync</h2>
+  <% if archives.any? %>
+    <%# One row per configured file, each reporting its own size. The words are the app's — the
+        page knows only that these are large, optional, and worth keeping. %>
+    <div class="coldwire-card coldwire-downloads" data-coldwire-cache-target="archives">
+      <h2>Downloads</h2>
 
-    <% if Coldwire.config.auto_sync.enabled %>
-      <%# Only where the app configured automatic syncing at all: a switch for something that
-          was never going to happen is a switch that lies. The card leads with it and lets its
-          note do the explaining, the way Force offline does. %>
-      <label class="coldwire-setting">
-        <span class="coldwire-switch coldwire-switch--on">
-          <input type="checkbox"
-                 data-coldwire-cache-target="autoSyncToggle"
-                 data-action="change->coldwire-cache#toggleAutoSync">
-          <span aria-hidden="true"></span>
-        </span>
-        <span>
-          <span class="coldwire-setting-title">Sync on its own</span>
-          <span class="coldwire-setting-note">
-            Automatically runs in the background backing up pages to be used offline.
-          </span>
-        </span>
-      </label>
-    <% else %>
-      <p class="coldwire-facts" style="margin-top: 0;">
-        Automatically runs in the background backing up pages to be used offline.
-        <strong>Sync now</strong> runs that pass immediately.
-      </p>
-    <% end %>
-
-    <p class="coldwire-facts">
-      <span data-coldwire-cache-target="autoSync">Checking…</span><br>
-      <span data-coldwire-cache-target="syncedAt">Never synced</span>
-    </p>
-
-    <%# Empty until a sync has something to say, so the card does not carry a permanent
-        "Idle" that reads like debug output left in by accident. %>
-    <p class="coldwire-facts" data-coldwire-cache-target="syncStatus" hidden></p>
-
-    <div class="coldwire-actions coldwire-actions--spaced">
-      <button type="button"
-              data-coldwire-cache-target="syncButton"
-              class="coldwire-button"
-              data-action="click->coldwire-cache#syncNow">
-        <span class="coldwire-spinner" data-coldwire-cache-target="spinner" aria-hidden="true" hidden></span>
-        <span data-coldwire-cache-target="syncLabel">Sync now</span>
-      </button>
-    </div>
-
-    <div style="margin-top: 0.75rem;"
-         role="progressbar"
-         aria-valuemin="0"
-         aria-valuemax="100"
-         data-coldwire-cache-target="progress"
-         hidden>
-      <div class="coldwire-track">
-        <div class="coldwire-bar" data-coldwire-cache-target="progressBar"></div>
-      </div>
-      <div class="coldwire-progress-label" data-coldwire-cache-target="progressLabel"></div>
-    </div>
-  </div>
-
-  <% if Coldwire.config.cache_archives.any? %>
-    <%# One row per configured file. The words are the app's — the page knows only that these
-        are large, optional, and worth keeping. %>
-    <div class="coldwire-card" data-coldwire-cache-target="archives">
-      <% Coldwire.config.cache_archives.each do |archive| %>
+      <%# The name and what you can do about it on one line, the words underneath. The button
+          sits hard right, where the eye goes for the action, and what is happening reads under
+          both when a download is running. %>
+      <% archives.each do |archive| %>
         <div class="coldwire-archive" data-archive-url="<%= archive[:url] %>">
-          <div class="coldwire-archive-title"><%= archive[:title] %></div>
+          <div class="coldwire-archive-head">
+            <div class="coldwire-archive-title"><%= archive[:title] %></div>
+
+            <div class="coldwire-actions coldwire-archive-actions">
+              <button type="button" class="coldwire-button"
+                      data-url="<%= archive[:url] %>"
+                      data-action="click->coldwire-cache#downloadArchive">
+                <span class="coldwire-spinner" data-archive-spinner aria-hidden="true" hidden></span>
+                <span data-archive-download-label>Download</span>
+              </button>
+              <%# Unlabelled but for its shape, as the trash is everywhere else on this page,
+                  so the pair fits beside the title rather than under it. %>
+              <button type="button"
+                      class="coldwire-button coldwire-icon-button coldwire-button--danger"
+                      title="Delete this download"
+                      aria-label="Delete <%= archive[:title] %>"
+                      data-url="<%= archive[:url] %>"
+                      data-action="click->coldwire-cache#removeArchive"
+                      data-archive-remove hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="<%= trash_path %>" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <%# The words run the full width under both, rather than in a column the button has
+              squeezed to three syllables a line. %>
           <% if archive[:description].present? %>
             <p class="coldwire-facts"><%= archive[:description] %></p>
           <% end %>
-          <div class="coldwire-actions">
-            <button type="button" class="coldwire-button"
-                    data-url="<%= archive[:url] %>"
-                    data-action="click->coldwire-cache#downloadArchive">
-              <span class="coldwire-spinner" data-archive-spinner aria-hidden="true" hidden></span>
-              <span data-archive-download-label>Download</span>
-            </button>
-            <button type="button" class="coldwire-button coldwire-button--danger"
-                    data-url="<%= archive[:url] %>"
-                    data-action="click->coldwire-cache#removeArchive"
-                    data-archive-remove hidden>
-              Delete
-            </button>
-          </div>
-
           <p class="coldwire-facts coldwire-archive-meta" data-archive-status>Checking…</p>
 
           <div style="margin-top: 0.75rem;" role="progressbar" aria-valuemin="0" aria-valuemax="100"
@@ -246,6 +286,15 @@
             <div class="coldwire-progress-label" data-archive-progress-label></div>
           </div>
         </div>
+      <% end %>
+
+      <% if gc.enabled %>
+        <%# The reassurance belongs with the files it is about: a 300 MB download sitting under
+            a storage limit raises the question of whether the app is about to take it back. %>
+        <p class="coldwire-downloads-note">
+          Yours until you delete them. <strong>Keep at most</strong> never counts a download,
+          and never clears one to make room.
+        </p>
       <% end %>
     </div>
   <% end %>

@@ -428,6 +428,7 @@ export default class extends Controller {
       // What this page can answer by itself comes first: the cache is read directly and the
       // probe is one request. Behind the worker questions they waited out a registration that
       // may never arrive, and the page sat on "Checking…" with an empty list.
+      await this.loadSpared()
       await this.renderCache()
       await this.renderConnection()
 
@@ -835,43 +836,69 @@ export default class extends Controller {
     select.disabled = true
 
     try {
-      // A lowered ceiling that waits for the next scheduled sweep reads as a setting that did
-      // nothing. This is that same sweep, run now — and bound by the same rule, so with no
-      // connection it stands down and the line under the bar says why.
-      await this.collectNow()
+      // A ceiling that waits for the next scheduled sweep reads as a setting that did nothing,
+      // so it is applied here and now. Deliberate, so it does not stand down for want of a
+      // connection the way an automatic sweep does.
+      await this.applyCeiling()
     } finally {
       select.disabled = false
     }
   }
 
-  async collectNow() {
-    let result = null
+  async applyCeiling() {
+    // A trim over a thousand entries is a second or two, and a silent pause reads as a
+    // setting that did nothing.
+    if (this.hasUsageLabelTarget) this.usageLabelTarget.textContent = "Applying…"
 
     try {
-      result = await sendToWorker("collect", { maxSize: this.store.maxSize() }, 60000)
-    } catch {
-      // No worker controlling this page yet. The cache is unchanged and the line already
-      // says where it stands.
+      await sendToWorker("trim", { maxSize: this.store.maxSize() }, 60000)
+    } catch (error) {
+      // Say so. Swallowing this is what turned a stale worker — one registered before the app
+      // knew what a ceiling was, and still controlling this page until it is reloaded — into
+      // a setting that silently refused to bite.
+      if (this.hasUsageLabelTarget) {
+        this.usageLabelTarget.textContent = `Could not apply it: ${error.message}. Reload and try again.`
+      }
       return
     }
 
-    // Nothing was swept, so the clock stays where it is and the next page load finds the
-    // sweep still due — exactly as the head snippet treats a refused run.
-    this.sweepWaiting = Boolean(result?.offline)
-    if (!this.sweepWaiting) this.store.set(this.store.keys.collectedAt, Date.now())
-
+    await this.loadSpared()
     await this.renderCache()
   }
 
-  // What the ceiling is measured against: everything but the downloads, which are an opt-in
-  // spend of somebody's data plan and are never collected however full the cache gets — a
-  // 300 MB archive counted here would show a bar pinned full of files no sweep can touch.
+  // The worker is the only thing that knows what the offline page needs, and those entries are
+  // never collected. Read once and kept: it does not change while this page is open.
+  async loadSpared() {
+    try {
+      const result = await sendToWorker("spared", {}, 5000)
+      this.spared = new Set(result?.urls || [])
+    } catch {
+      // An older worker, or none yet. Falling back to counting everything overstates what a
+      // sweep can take, which is the safer direction for a figure somebody sets a limit from.
+      this.spared = this.spared || new Set()
+    }
+  }
+
+  // What the ceiling is measured against, which has to be what a sweep can actually take, or
+  // the bar shows an overage nothing will ever bring down. Two exclusions:
+  //
+  // Downloads, an opt-in spend of somebody's data plan, are never collected however full the
+  // cache gets — a 300 MB archive counted here would pin the bar full of untouchable files.
+  //
+  // Any cache but the worker's own. Bumping cache_name leaves the old one behind, and the
+  // worker only ever sweeps the one it is configured with.
   //
   // The worker also spares the offline page's own assets, which this cannot pick out of a
   // list of URLs. That is a handful of files, and erring towards the larger figure is the
   // right way round for a number somebody is deciding a limit from.
   managedBytes(entries) {
-    return this.totalBytes((entries || []).filter((entry) => !entry.download))
+    const swept = window.COLDWIRE?.cacheName
+    const spared = this.spared
+
+    return this.totalBytes((entries || []).filter((entry) =>
+      !entry.download &&
+      !(spared && spared.has(entry.url)) &&
+      (!swept || !entry.cache || entry.cache === swept)))
   }
 
   renderStorage() {
@@ -892,14 +919,9 @@ export default class extends Controller {
     if (this.hasUsageTarget) this.usageTarget.setAttribute("aria-valuenow", String(percent))
 
     const parts = [ `${formatBytes(used)} of ${formatLimit(limit)}` ]
-    if (used > limit) {
-      // Over the ceiling is not a fault and not a promise of instant deletion: a sweep needs
-      // a connection, and says so rather than leaving somebody watching a bar that will not
-      // move.
-      parts.push(this.sweepWaiting || this.online === false
-        ? "over, waiting for a connection to sweep"
-        : "over, the oldest go on the next sweep")
-    }
+    // Choosing a ceiling applies it on the spot, so this is what is left between sweeps: a
+    // cache that has grown past a ceiling nobody has touched since. The next sweep takes it.
+    if (used > limit) parts.push("over, the oldest go on the next sweep")
 
     this.usageLabelTarget.textContent = `${parts.join(" · ")}.`
   }

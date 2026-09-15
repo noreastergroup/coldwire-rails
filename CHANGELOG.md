@@ -31,7 +31,10 @@ First release. The API may still change before 1.0.
   revisits everything. The ceiling is offered as a ladder of sizes on the offline settings
   page and remembered per device, since how much of a phone to spend is not something an app
   can know. It measures only what a sweep may take: downloaded archives are an opt-in spend
-  of somebody's data plan, so they are neither counted nor evicted.
+  of somebody's data plan, so they are neither counted nor evicted. Choosing a size applies it
+  at once rather than at the next sweep, and that pass does not wait for a connection: it is a
+  deliberate instruction about somebody's own storage, which is how Clear cache has always
+  behaved.
   On by default, unlike syncing: it spends no data. A sweep runs only with a
   connection it has confirmed by pinging `probe_path`, because deleting is the one cache
   operation with no way back. Age is measured from last use, not from when an entry was

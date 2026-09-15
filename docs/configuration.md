@@ -203,7 +203,8 @@ collect and the cache grows until the browser evicts the lot.
 **Only ever with a connection.** Deleting is the one cache operation with no way back:
 whatever goes is gone until the network can be reached again. So a sweep pings
 [`probe_path`](#probe_path) first and stands down if it cannot be reached, and stands down
-under force offline. `navigator.onLine` is not consulted — a web view answers it wrongly often
+under force offline. The one exception is somebody choosing a storage limit on the settings
+page, which applies right away: see [`max_size`](#garbage_collectionmax_size). `navigator.onLine` is not consulted — a web view answers it wrongly often
 enough to be worthless for a decision this expensive to get wrong.
 
 **Untouched, not old.** Age is measured from when an entry was last *used*, not when it was
@@ -272,11 +273,17 @@ The ceiling is applied when a sweep runs, so [`interval`](#garbage_collectionint
 how long the cache may sit over it. Lower the interval if a tighter bound matters more than
 the work.
 
-**People can change it.** The offline settings page offers a ladder of sizes — the configured
-default always among them — and the choice is remembered in `localStorage` for that device,
-the way Force offline and the Auto Sync switch are. It travels to the worker with each sweep,
-since a worker cannot read `localStorage`. Changing it there sweeps immediately rather than
-waiting out the interval.
+**People can change it.** The offline settings page offers a ladder of sizes, the configured
+default always among them, and the choice is remembered in `localStorage` for that device the
+way Force offline and the Auto Sync switch are. It travels to the worker with each sweep,
+since a worker cannot read `localStorage`.
+
+Picking a size applies it on the spot: if the cache is over the new ceiling, the least
+recently read entries go immediately, until it fits. That one pass does **not** wait for a
+connection, and runs under Force offline, because it is a deliberate instruction about
+somebody's own storage rather than an automatic sweep. Clear cache has always worked the same
+way. Only the ceiling is applied; age collection still waits for a connection it has
+confirmed.
 
 ### `garbage_collection.interval`
 

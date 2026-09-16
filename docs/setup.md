@@ -135,9 +135,11 @@ redirects to login, so nothing about the online flow changes.
 Mounted at the engine root — `/offline` with the mount above. It inherits your
 `ApplicationController`, so it picks up your layout, authentication, and helpers.
 
-This is the page people use to turn offline support on or off, see connection status, download
-archives, turn auto-sync off for this device, set how much storage the cache may use, force
-offline, and manage what is cached.
+This is the page people use to turn offline support on or off, see connection status, turn
+auto-sync off for this device, force offline, and manage what is cached. The three switches
+sit together in the status card at the top, since each is a choice this device makes about how
+Coldwire behaves. Storage and Downloads are separate cards, since the storage limit governs
+cached pages and never touches a download.
 Turning offline support off asks first, then deletes what is stored and hides the rest of the
 page. It sets `content_for :title` to `"Offline settings"` — yield that in your layout's
 `<title>` (and any native title bar that reads it) rather than expecting an on-page heading.

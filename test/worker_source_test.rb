@@ -139,6 +139,53 @@ class WorkerSourceTest < Minitest::Test
     assert_includes body, "runCollection(limit)"
   end
 
+  # Choosing a ceiling is a deliberate instruction about somebody's own storage, the same kind
+  # Clear cache is, and that has never waited for a network to agree. Standing down here left
+  # the setting looking like it did nothing.
+  def test_applying_a_chosen_ceiling_does_not_wait_for_a_connection
+    body = worker[/async function runTrim\(maxSize\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    refute_includes body, "reachable()", "an explicit ceiling must not wait on the probe"
+    refute_includes body, "forcedOffline", "force offline is not a reason to refuse it"
+    assert_includes body, "trimToSize(cache, await collectable(cache), maxSize)"
+    # What it may take comes from one place, so an explicit trim spares what a sweep spares.
+    assert_includes worker[/async function collectable\(cache\) \{(.*?)\n\}/m, 1],
+                    "filter((key) => !isSpared(key, spared))"
+  end
+
+  # The age pass keeps its probe: nothing asked for it, so the cost of getting it wrong falls
+  # on somebody who never requested it.
+  def test_the_automatic_sweep_still_proves_the_connection
+    assert_includes collection, "if (!(await reachable())) return"
+  end
+
+  # A sweep in flight is working to the ceiling this call replaces, so joining it would answer
+  # the old question — which is exactly what made a changed setting look inert.
+  def test_an_explicit_ceiling_queues_behind_a_sweep_rather_than_joining_it
+    body = worker[/function applyCeiling\(maxSize\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "collecting ? collecting.catch"
+    assert_includes body, "queued.then(() => runTrim(maxSize))"
+    refute_includes body, "return collecting", "it must not hand back the run already going"
+  end
+
+  # Number(null) is 0, and 0 is finite and not negative, so a missing Content-Length used to
+  # sail through the guard and report the entry as weighing nothing. Rails sends much of its
+  # HTML chunked, with no Content-Length at all, so that was most pages: the collector measured
+  # a cache of hundreds of megabytes at zero, never reached its ceiling, deleted nothing, and
+  # reported success every time.
+  def test_an_entry_with_no_content_length_is_weighed_not_assumed_empty
+    body = worker[/async function entrySize\(response\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    refute_includes body, "Number(response.headers.get",
+                    "Number(null) is 0, which reports a chunked response as empty"
+    assert_includes body, "declared === null ? NaN : Number(declared)"
+    assert_includes body, "blob()).size", "an undeclared body has to be read to be measured"
+  end
+
   # Only what the age pass left, because an entry it already deleted cannot be evicted again —
   # and only after the measurement, since a cache under its ceiling must cost no deletions.
   def test_the_oldest_go_first_and_only_while_the_cache_is_over

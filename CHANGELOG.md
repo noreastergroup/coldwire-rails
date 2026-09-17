@@ -2,31 +2,21 @@
 
 ## [Unreleased]
 
-- **A Turbo Frame is cached apart from its page.** Turbo sends `Turbo-Frame` on a frame
-  navigation, and an app answering it with `turbo_frame_request?` returns just the frame.
-  Keyed on the URL alone, that body took the slot its page occupied, so a later cold visit was
-  served a fragment as a whole document: a blank screen, and in Hotwire Native a page where
-  `window.Turbo` never appears. `Vary` cannot separate the two, since a frame and its page are
-  both `text/html` answering the same `Accept` and Rails does not name `Turbo-Frame` in `Vary`,
-  so the frame is named in the key as `__coldwire_frame`. A frame request takes its own entry
-  first and the page second, because Turbo pulls a frame out of a document exactly as it does
-  online; an ordinary visit never takes the reverse trade.
-- **Every `respond_to` format is cached apart from the page.** One URL answering a visit, a
-  `fetch`, a CSV export and an RSS feed held one of the four. The format is now named in the
-  key as `__coldwire_format`, worked out from the request's `Accept` because the same name has
-  to be produced again when the entry is looked for. A path that already names its format
-  keeps a clean key, so `/report.json`, `/app.css` and `/logo.png` are untouched and only
-  `/report` is told apart. A request asking for data gets data or nothing, never the page.
-- **The precache manifest can name a frame or a format.** A URL is one field short of naming a
-  body, so a listing may be a Hash: `{ url: feature_path(f), frame: "map_feature_popup" }`
-  fetches with Turbo's own header and stores the frame, and `{ url: report_path(r), format:
-  :json }` resolves the format through Rails' Mime registry, sends it as `Accept`, and stores
-  the JSON. `accept:` takes a media type outright. A bare URL is still the page, and listing one
-  URL twice precaches both. Previously a frame URL was precached as its whole page, which works
-  offline only while that page contains the frame, and stores a document where a fragment would
-  do.
-- **A Turbo Stream is never stored.** It is a list of changes to make to a page rather than a
-  page, and replaying a stale one applies yesterday's mutations to today's DOM.
+## [0.5.0]
+
+- **A Turbo Frame is cached apart from its page.** A frame navigation used to overwrite the
+  page at the same URL, so a later visit got a fragment as a whole document — a blank screen,
+  and in Hotwire Native no `window.Turbo`. Frame requests now take their own entry first and
+  the page second, the way Turbo does online.
+- **Every `respond_to` format is cached apart from the page.** One URL answering HTML, JSON,
+  CSV, or RSS no longer shares a single slot. A path that already names its format
+  (`/report.json`, `/app.css`) is left alone. A request asking for data gets data or nothing,
+  never the page.
+- **The precache manifest can name a frame or a format.** A listing may be a Hash:
+  `{ url: feature_path(f), frame: "map_feature_popup" }` or `{ url: report_path(r), format: :json }`.
+  `accept:` takes a media type outright. A bare URL is still the page.
+- **A Turbo Stream is never stored.** It is a list of mutations, not a page, and replaying a
+  stale one would apply yesterday's changes to today's DOM.
 
 ## [0.4.0]
 

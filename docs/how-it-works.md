@@ -23,6 +23,27 @@ Turbo — rather than a native error screen:
 3. **Turbo Frames need a frame.** A frame request discards any response without a matching
    `<turbo-frame>`, leaving the frame loading forever. Coldwire reads the `Turbo-Frame`
    header and answers with one.
+
+   **And a frame is not the page it came from.** Turbo sends that header on every frame
+   navigation, and an app answering it with `turbo_frame_request?` returns just the frame.
+   Keyed on the URL alone, that body lands in the slot the page occupies: a later cold visit
+   is then served a fragment as a whole document, which is a blank screen, and in Hotwire
+   Native a page where `window.Turbo` never appears. Whichever was cached last wins, so it
+   also happens in reverse. `Vary` cannot fix this, because matching is URL-only by design
+   (see 1), so Coldwire puts the frame in the key instead. A frame takes its own entry first
+   and the page second, since Turbo pulls a frame out of a document exactly as it does
+   online. An ordinary visit never takes the reverse trade.
+
+   **And neither is any other format.** The same URL answers a `respond_to` block in as many
+   formats as the app defines: `/report` is a page to Turbo, JSON to a `fetch`, a CSV to an
+   export link and an RSS feed to a reader. Coldwire names the format in the key too, with the
+   page left unnamed so anything cached before this keeps the key it had. The name is worked
+   out from the request's `Accept`, not the response's type, because the same name has to be
+   produced again when the entry is looked for, and there is no response to read then. A
+   request asking for data gets data or nothing, since handing it a page is the mistake in 6
+   wearing a different hat. A path that names its own format is left alone: `/report.json` is
+   JSON and nothing else, so only `/report` needs telling apart. A Turbo Stream is never stored at all: it is a list of changes to
+   make to a page, and replaying a stale one applies yesterday's mutations to today's DOM.
 4. **A followed redirect poisons the cache.** A signed-out request to `/` gets a `302` that
    `fetch` follows; the result looks fine and `cache.put()` stores it without complaint.
    Now `/` holds the sign-in page and keeps `redirected: true` — and serving a redirected

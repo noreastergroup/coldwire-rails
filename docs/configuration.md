@@ -154,6 +154,36 @@ Listing a URL here is an explicit instruction: `cache_as_you_go` does not filter
 
 A stored page's stylesheets, scripts, and images are fetched with it, whatever the lists say.
 
+**Naming a frame or a format.** A URL is one field short of naming a body: the same path
+answers a visit, a Turbo Frame and a `respond_to` format with three different things, and a
+bare listing asks for the page. A Hash says which one you mean:
+
+```ruby
+sync.precache_urls = -> {
+  Feature.published.map { |f| { url: feature_path(f), frame: "map_feature_popup" } } +
+  Report.all.map { |r| { url: report_path(r), format: :json } } +
+  [ root_path ]
+}
+```
+
+`frame:` is the frame tag's own id, which is what Turbo puts in the `Turbo-Frame` header. The
+worker fetches with that header, so an app branching on `turbo_frame_request?` answers with the
+frame, and the body is stored where a frame request will look for it.
+
+`format:` is any registered Rails format, including one your app registered itself. It is
+resolved to that format's media type here and sent as `Accept`, so the worker never has to know
+what `:json` means. `accept:` takes a media type directly, for anything with no registered name.
+
+Without this, a frame URL is precached as its whole page. That still works offline, since a
+frame request falls back to the page and Turbo pulls the frame out of it, but only while the
+page actually contains that frame, and it stores the whole document where a fragment would do.
+
+List a URL twice to precache both:
+
+```ruby
+[ feature_path(f), { url: feature_path(f), frame: "map_feature_popup" } ]
+```
+
 ### `auto_sync.interval`
 
 **Default:** `1.day`

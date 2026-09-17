@@ -12,7 +12,7 @@ module Coldwire
     def pack
       response.headers["Cache-Control"] = "no-store, private"
 
-      render json: { urls: Array(precache_urls) }
+      render json: { urls: Coldwire.precache_entries(precache_urls) }
     end
 
     private

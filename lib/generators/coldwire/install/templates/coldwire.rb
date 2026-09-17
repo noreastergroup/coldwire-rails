@@ -8,6 +8,8 @@ Coldwire.configure do |config|
     sync.enabled = false          # off by default: background fetching is somebody's data plan
     sync.precache_urls = -> { [] }
     # sync.precache_urls = -> { Article.published.map { |a| article_path(a) } }
+    # A Hash names a Turbo Frame or a format, for URLs that answer more than one way:
+    # sync.precache_urls = -> { Article.published.map { |a| { url: article_path(a), frame: "preview" } } }
     sync.interval = 1.day
     sync.max_age = 30.days
     sync.concurrency = 4

@@ -48,8 +48,8 @@ class WorkerSourceTest < Minitest::Test
     body = worker[/async function offlineFallback\(cache, request\) \{(.*?)\n\}/m, 1]
 
     refute_nil body
-    assert_includes body, "cache.match(request, MATCH_OPTIONS)"
-    assert_includes body, "cachedPageResponse(cache, request, cached)"
+    assert_includes body, "matchStored(cache, request)"
+    assert_includes body, "cachedPageResponse(request, key, cached)"
     assert_includes body, "offlineResponse(request)"
   end
 
@@ -60,10 +60,10 @@ class WorkerSourceTest < Minitest::Test
     body = worker[/async function storeResponse\(cache, request, response\) \{(.*?)\n\}/m, 1]
 
     refute_nil body
-    assert_includes body, "putFresh(cache, cacheKey(request), response.clone())"
-    assert_includes body, "urlsFromHtml(await response.text(), request.url)"
+    assert_includes body, "bodyKey(cache, request, response)"
+    assert_includes body, "urlsFromHtml(body, request.url)"
     assert_includes body, "storeSubresource"
-    assert_includes body, 'if (!type.includes("text/html")) return'
+    assert_includes body, 'if (!type.includes("text/html")) {'
   end
 
   # In waitUntil, not left running: a worker can be stopped as soon as it has answered.
@@ -98,6 +98,146 @@ class WorkerSourceTest < Minitest::Test
     assert_includes body, "cache.match(key)"
     refute_includes body, "fetch(", "renewal must not refetch"
     assert_includes body, "MANAGED_HEADER", "a renewed manifest entry must stay a manifest entry"
+  end
+
+  # Turbo sends `Turbo-Frame` on a frame navigation and an app may answer it with just the
+  # frame. Keyed on the URL alone, that body lands in the slot the page occupies, and a later
+  # cold visit is served a fragment as a document: no <html>, a blank screen, and in Hotwire
+  # Native a page where window.Turbo never appears. Vary is not available to us — matching is
+  # URL-only by design, so precached `*/*` responses match real `text/html` visits — so the
+  # frame goes in the key.
+  def test_a_frame_body_is_keyed_apart_from_its_page
+    body = worker[/\nfunction cacheKey\(request,(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "variantUrl(request.url, { frame, format })"
+    # The early return keeps an untouched URL untouched, which naming a frame cannot do.
+    assert_includes body, "if (!IGNORE_SEARCH && !named) return new Request(request, { headers })"
+
+    # One place builds that URL, because the other half of the job is looking for it again.
+    built = worker[/\nfunction variantUrl\(url,(.*?)\n\}/m, 1]
+    refute_nil built
+    assert_includes built, "target.searchParams.set(FRAME_PARAM, frame)"
+  end
+
+  # What the response turned out to be, not what the request asked for. An app that ignores the
+  # header and returns the whole document would otherwise store those bytes twice, and leave
+  # the next ordinary visit unable to find them.
+  def test_a_frame_request_answered_with_a_document_is_stored_as_the_page
+    body = worker[/async function storeResponse\(cache, request, response\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, 'const frame = /<html\b/i.test(body) ? null : request.headers.get("Turbo-Frame")'
+    assert_includes body, "putFresh(cache, cacheKey(request, { frame }), response.clone())"
+    assert body.index("response.clone().text()") < body.index("cacheKey(request, { frame })"),
+           "what it is has to be known before there is anywhere to put it"
+  end
+
+  # A frame takes a page when it has no entry of its own, because Turbo pulls the frame out of
+  # a document exactly as it does online. A document never takes a frame.
+  def test_matching_asks_for_the_kind_of_body_the_request_wants
+    body = worker[/async function matchStored\(cache, request\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, 'const frame = request.headers.get("Turbo-Frame")'
+    assert_includes body, "cache.keys(variantUrl(request.url, { frame }), { ignoreVary: true })"
+    assert_includes body, 'keys.find((candidate) => variantOf(candidate) === "page")'
+    assert_includes body, "cache.keys(variantUrl(request.url, { format }), { ignoreVary: true })"
+
+    variant = worker[/function variantOf\(key\) \{(.*?)\n\}/m, 1]
+    refute_nil variant
+    assert_includes variant, "CHUNK_PARAM", "ignoreSearch would otherwise let a chunk answer a page"
+    assert_includes variant, "if (frame) return `frame:${frame}`"
+    assert_includes variant, 'params.get(FORMAT_PARAM) || "page"'
+  end
+
+  # One URL, three bodies: the page a visit gets, the frame a frame navigation gets, and the
+  # JSON a fetch gets. The Rails side of this is pinned in variant_responses_test.rb; this is
+  # the half that has to keep them apart.
+  def test_a_format_is_keyed_apart_from_the_page
+    body = worker[/\nfunction variantUrl\(url,(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "target.searchParams.set(FORMAT_PARAM, format)"
+    # The page is the default and writes nothing, which is what leaves every entry stored
+    # before formats existed exactly where it was, assets included.
+    assert_includes body, 'if (format && format !== "page")'
+  end
+
+  # Read off the request, not the response, and not by choice: the same derivation has to run
+  # when the entry is looked for again, and there is no response to read at that moment. A name
+  # the request cannot produce is a name nothing ever finds.
+  def test_a_format_is_read_off_the_request
+    body = worker[/\nfunction negotiatedFormat\(request\)(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, 'request.headers.get("Accept")'
+    # Nothing definite asked for keeps the key it has always had.
+    assert_includes body, 'if (!accept || accept === "*/*" || accept.includes("html")) return "page"'
+    # image/avif and image/webp are one question asked two ways.
+    assert_includes body, 'if (top && top !== "text" && top !== "application") return top'
+    # "application/vnd.api+json" is JSON.
+    assert_includes body, "parts.length > 1 ? parts[parts.length - 1] : parts[0]"
+  end
+
+  # A path that names its own format needs no param saying it again: "/report.json" is JSON and
+  # nothing else. "/report" is a page, a JSON body and a CSV depending on who asks, and that is
+  # the one that needs telling apart.
+  def test_a_path_that_names_its_format_keeps_a_clean_key
+    body = worker[/\nfunction formatOf\(request\)(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, 'return extensionFormat(request.url) === token ? "page" : token'
+
+    # Only where the extension agrees with what was asked for: "/sites/acme.com" is a page whose
+    # last segment merely contains a dot, and it still needs its param.
+    lookup = worker[/function extensionFormat\(url\) \{(.*?)\n\}/m, 1]
+    refute_nil lookup
+    assert_includes lookup, "EXTENSION_FORMATS[name.slice(dot + 1).toLowerCase()]"
+    assert_includes lookup, 'if (dot < 1) return "page"'
+    # An unknown extension says nothing and keeps its param, which is never wrong.
+    assert_includes worker, '|| "page"'
+  end
+
+  # One entry per file. A precache carries no Accept and lands unnamed; the browser then asks
+  # for the same stylesheet by type. Left alone, that is two of every stylesheet and image.
+  def test_one_body_per_url_whichever_asked_first
+    body = worker[/async function bodyKey\(cache, request, response\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "cache.keys(variantUrl(request.url, {}), { ignoreVary: true })"
+    assert_includes body, "formatFromType(response)"
+    assert_includes body, "cache.keys(variantUrl(request.url, { format: guess })"
+  end
+
+  # A fetch asking for data gets data or nothing. Handing it the page is the mistake that gives
+  # a stylesheet an HTML body, so the unnamed entry is only taken once it says what it holds.
+  def test_a_data_request_is_never_handed_a_page
+    body = worker[/async function matchStored\(cache, request\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, 'if (format === "page") return page'
+    assert_includes body, 'held.headers.get("Content-Type") || "").includes("text/html")'
+  end
+
+  # A stream is a list of changes to make to a page, not a page. Stored, it would take the
+  # page's slot and be replayed later against a DOM it was never written for.
+  def test_a_turbo_stream_is_never_stored
+    body = worker[/function isCacheable\(request, response\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "STREAM_TYPE"
+  end
+
+  # Renewal rebuilds the key from the URL, and a frame entry that lost its param on the way
+  # would land on its own page's key: the collision this exists to prevent, caused by the
+  # thing meant to preserve it.
+  def test_renewing_a_frame_entry_puts_it_back_where_it_was
+    body = worker[/async function renew\(cache, key\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "params.get(FRAME_PARAM)"
+    assert_includes body, "{ managed, frame, format }"
   end
 
   # Deleting is the one operation with no way back, so a sweep proves the connection first —

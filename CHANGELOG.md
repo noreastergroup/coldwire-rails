@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+- **A Turbo Frame is cached apart from its page.** Turbo sends `Turbo-Frame` on a frame
+  navigation, and an app answering it with `turbo_frame_request?` returns just the frame.
+  Keyed on the URL alone, that body took the slot its page occupied, so a later cold visit was
+  served a fragment as a whole document: a blank screen, and in Hotwire Native a page where
+  `window.Turbo` never appears. `Vary` cannot separate the two, since a frame and its page are
+  both `text/html` answering the same `Accept` and Rails does not name `Turbo-Frame` in `Vary`,
+  so the frame is named in the key as `__coldwire_frame`. A frame request takes its own entry
+  first and the page second, because Turbo pulls a frame out of a document exactly as it does
+  online; an ordinary visit never takes the reverse trade.
+- **Every `respond_to` format is cached apart from the page.** One URL answering a visit, a
+  `fetch`, a CSV export and an RSS feed held one of the four. The format is now named in the
+  key as `__coldwire_format`, worked out from the request's `Accept` because the same name has
+  to be produced again when the entry is looked for. A path that already names its format
+  keeps a clean key, so `/report.json`, `/app.css` and `/logo.png` are untouched and only
+  `/report` is told apart. A request asking for data gets data or nothing, never the page.
+- **A Turbo Stream is never stored.** It is a list of changes to make to a page rather than a
+  page, and replaying a stale one applies yesterday's mutations to today's DOM.
+
 ## [0.4.0]
 
 - Updated the offline page to restructure storage and downloads.
@@ -30,17 +48,8 @@ First release. The API may still change before 1.0.
   with every option and its default, registers the Stimulus controller, and tags the
   layout. Safe to run twice.
 - **Garbage collection.** `config.garbage_collection` sweeps entries nothing has used in
-  `max_age` (60 days by default) and, once the cache is over `max_size` (250 MB by default),
-  the least recently read of what is left until it fits — so a cache that fills as people
-  browse does not fill forever, on a device that revisits nothing as much as on one that
-  revisits everything. The ceiling is offered as a ladder of sizes on the offline settings
-  page and remembered per device, since how much of a phone to spend is not something an app
-  can know. It measures only what a sweep may take: downloaded archives are an opt-in spend
-  of somebody's data plan, so they are neither counted nor evicted. Choosing a size applies it
-  at once rather than at the next sweep, and that pass does not wait for a connection: it is a
-  deliberate instruction about somebody's own storage, which is how Clear cache has always
-  behaved.
-  On by default, unlike syncing: it spends no data. A sweep runs only with a
+  `max_age` (30 days by default), so a cache that fills as people browse does not fill
+  forever. On by default, unlike syncing: it spends no data. A sweep runs only with a
   connection it has confirmed by pinging `probe_path`, because deleting is the one cache
   operation with no way back. Age is measured from last use, not from when an entry was
   fetched — storing a page renews everything it names, so the stylesheet every page loads

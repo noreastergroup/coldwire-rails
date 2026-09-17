@@ -26,6 +26,17 @@ const CACHE_RANGES = compileRules(<%= raw Coldwire.cache_rules(Coldwire.config.c
 // A range entry is stored under its own key, with the range in the query and the archive's
 // total size in a header — the two things needed to rebuild a 206 that was never storable.
 const RANGE_PARAM = "__coldwire_range"
+// Turbo sends `Turbo-Frame` on a frame navigation, and an app that answers it with just the
+// frame returns something that is not the page at that URL. Keyed apart, the same way, or one
+// would answer for the other: a fragment served to a cold visit is a document with no <html>.
+const FRAME_PARAM = "__coldwire_frame"
+// And the same URL answers a `respond_to` block in as many formats as the app defines. A page
+// is the default and carries no param, so every entry stored before this existed keeps the key
+// it already had; anything else names what it is.
+const FORMAT_PARAM = "__coldwire_format"
+// A stream is a list of changes to make to a page, not a page. Replaying a stale one later
+// would apply yesterday's mutations to today's DOM, so it is never stored at all.
+const STREAM_TYPE = "text/vnd.turbo-stream.html"
 // Archives offered for download in full, and the size of the pieces they arrive in. 8 MB is
 // small enough that a dropped connection loses seconds rather than minutes, and large enough
 // that a 300 MB archive is tens of requests rather than thousands.

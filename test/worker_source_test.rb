@@ -240,6 +240,38 @@ class WorkerSourceTest < Minitest::Test
     assert_includes body, "{ managed, frame, format }"
   end
 
+  # A manifest listing is one field short of naming a body, so it can now carry the other two:
+  # the frame it is loaded into, and the Accept it is fetched with. The key it will be stored
+  # under is worked out from the request that fetches it, so the two cannot disagree.
+  def test_a_manifest_listing_can_name_a_frame_or_a_format
+    body = worker[/function manifestEntry\(value\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, 'if (listing.frame) headers["Turbo-Frame"] = listing.frame'
+    assert_includes body, "headers.Accept = listing.accept"
+    assert_includes body, "variantUrl(href, { frame: listing.frame, format: formatOf(request) })"
+  end
+
+  # A page and a frame of it are two listings, and holding one says nothing about the other.
+  def test_the_manifest_asks_for_each_listing_by_its_own_key
+    body = worker[/async function runSync\(\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "const entries = manifest.map(manifestEntry)"
+    assert_includes body, "cache.keys(entry.key, { ignoreVary: true })"
+  end
+
+  # Retirement compares the whole key. Stripping the search would take the frame or the format
+  # off a managed entry, leave it looking like a page nobody listed, and delete it on the first
+  # sync after it was fetched.
+  def test_retirement_compares_the_whole_key
+    body = worker[/async function retireUnlisted\(cache, wanted\) \{(.*?)\n\}/m, 1]
+
+    refute_nil body
+    assert_includes body, "wanted.has(key.url)"
+    refute_includes body, "cacheUrl", "the search carries the variant now"
+  end
+
   # Deleting is the one operation with no way back, so a sweep proves the connection first —
   # for the size pass as much as the age pass, which is why trimming is reached from inside
   # runCollection rather than from the message handler.

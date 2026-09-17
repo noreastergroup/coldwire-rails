@@ -17,6 +17,14 @@
   to be produced again when the entry is looked for. A path that already names its format
   keeps a clean key, so `/report.json`, `/app.css` and `/logo.png` are untouched and only
   `/report` is told apart. A request asking for data gets data or nothing, never the page.
+- **The precache manifest can name a frame or a format.** A URL is one field short of naming a
+  body, so a listing may be a Hash: `{ url: feature_path(f), frame: "map_feature_popup" }`
+  fetches with Turbo's own header and stores the frame, and `{ url: report_path(r), format:
+  :json }` resolves the format through Rails' Mime registry, sends it as `Accept`, and stores
+  the JSON. `accept:` takes a media type outright. A bare URL is still the page, and listing one
+  URL twice precaches both. Previously a frame URL was precached as its whole page, which works
+  offline only while that page contains the frame, and stores a document where a fragment would
+  do.
 - **A Turbo Stream is never stored.** It is a list of changes to make to a page rather than a
   page, and replaying a stale one applies yesterday's mutations to today's DOM.
 

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.4.0]
+
+- Updated the offline page to restructure storage and downloads.
+- Updated the storage so when you change storage size it triggers a garbage collection.
+
 ## [0.3.0]
 
 - **`cache_origins` is `cacheable_hosts`**, and takes bare hosts: `"tiles.example.com"` rather
